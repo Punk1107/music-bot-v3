@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  musicbot:
+    build: .
+    container_name: musicbot-v3
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./cookies.txt:/app/cookies.txt:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
