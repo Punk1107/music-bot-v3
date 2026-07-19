@@ -57,6 +57,11 @@ class GuildPlayer:
         # ── Idle tracking ─────────────────────────────────────────────────────
         self.idle_since: Optional[datetime] = None
 
+        # ── Intentional disconnect flag ───────────────────────────────────────
+        # Set to True before calling vc.disconnect() from /stop or /leave so
+        # that _try_reconnect knows NOT to attempt a reconnect.
+        self.intentional_disconnect: bool = False
+
         # ── V3: Auto-playlist ─────────────────────────────────────────────────
         self.auto_playlist_mode: bool = False
 
@@ -184,13 +189,16 @@ class GuildPlayer:
         """Full reset — called on stop or total disconnect."""
         self.cancel_prefetch()
         self._queue.clear()
-        self.now_playing        = None
-        self.play_start_time    = None
-        self.now_playing_msg    = None
-        self.now_playing_msg_id = None
-        self._history_track     = None
-        self.loop_mode          = LoopMode.OFF
-        self.effects            = []
-        self.volume             = 1.0
-        self.idle_since         = datetime.now(timezone.utc)
-        self.auto_playlist_mode = False
+        self.now_playing           = None
+        self.play_start_time       = None
+        self.now_playing_msg       = None
+        self.now_playing_msg_id    = None
+        self._history_track        = None
+        self.loop_mode             = LoopMode.OFF
+        self.effects               = []
+        self.volume                = 1.0
+        self.idle_since            = datetime.now(timezone.utc)
+        self.auto_playlist_mode    = False
+        # Note: intentional_disconnect is NOT reset here on purpose.
+        # It is set True after reset() in /stop and /leave, then cleared
+        # in _ensure_voice() when a new voice connection is established.
