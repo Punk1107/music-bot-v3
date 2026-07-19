@@ -80,11 +80,7 @@ class MusicControlView(discord.ui.View):
             elif cid == "mb_loop":
                 mode = player.loop_mode.value
                 child.label = f"🔁 Loop: {mode.capitalize()}"
-                child.style = (
-                    discord.ButtonStyle.primary
-                    if mode != "off"
-                    else discord.ButtonStyle.primary
-                )
+                child.style = discord.ButtonStyle.primary
 
             elif cid == "mb_vol_down":
                 child.disabled = player.volume <= 0.0
@@ -172,7 +168,7 @@ class MusicControlView(discord.ui.View):
         player.loop_mode = player.loop_mode.next()
         await self._refresh_message(interaction)
 
-    @discord.ui.button(label="✖ Shuffle", style=discord.ButtonStyle.primary, custom_id="mb_shuffle", row=0)
+    @discord.ui.button(label="✖ Shuffle", style=discord.ButtonStyle.secondary, custom_id="mb_shuffle", row=0)
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return

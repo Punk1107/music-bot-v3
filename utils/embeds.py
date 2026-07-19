@@ -81,13 +81,13 @@ def track_added_embed(
       Footer: avatar · Requested by …
     """
     embed = discord.Embed(
-        description = f"**[{truncate(track.title, 80)}]({track.url})**",
+        title       = "🎵  Added to Queue",
+        description = f"{truncate(track.title, 80)}",
         color       = color,
     )
-    embed.set_author(name="🎵  Added to Queue")
 
-    embed.add_field(name="⏱ Duration",  value=f"`{track.duration_str}`",               inline=True)
-    embed.add_field(name="📋 Position", value=f"`#{position}`",                         inline=True)
+    embed.add_field(name="⏱ Duration",  value=f"{track.duration_str}",                  inline=True)
+    embed.add_field(name="📋 Position", value=f"#{position}",                            inline=True)
     embed.add_field(name="👤 Uploader", value=truncate(track.uploader or "Unknown", 35), inline=True)
 
     if requester:
@@ -129,7 +129,7 @@ def now_playing_embed(
       Fields  : 🔁 Loop  |  🔊 Volume  |  📋 Queue
                 (optional 👁 Views — inline field)
 
-      Footer  : Requested by …  ·  ❤️ Favorite
+      Footer  : Requested by …
       Thumbnail: track art
     """
     track = player.now_playing
@@ -145,7 +145,7 @@ def now_playing_embed(
     # ── Description block ────────────────────────────────────────────────────
     description = (
         f"**[{truncate(track.title, 80)}]({track.url})**\n"
-        f"↳ 👤 *{truncate(track.uploader or 'Unknown', 40)}*\n\n"
+        f"↳ 👤 {truncate(track.uploader or 'Unknown', 40)}\n\n"
         f"{bar_line}"
     )
 
@@ -160,23 +160,18 @@ def now_playing_embed(
     loop_val = player.loop_mode.value.capitalize()
     vol_val  = f"{int(player.volume * 100)}%"
     q_size   = len(player)
-    q_val    = f"{q_size} track{'s' if q_size != 1 else ''}"
+    q_val    = f"{q_size} tracks"
 
-    embed.add_field(name="🔁 Loop",   value=f"`{loop_val}`", inline=True)
-    embed.add_field(name="🔊 Volume", value=f"`{vol_val}`",  inline=True)
-    embed.add_field(name="📋 Queue",  value=f"`{q_val}`",    inline=True)
+    embed.add_field(name="🔁 Loop",   value=loop_val, inline=True)
+    embed.add_field(name="🔊 Volume", value=vol_val,  inline=True)
+    embed.add_field(name="📋 Queue",  value=q_val,    inline=True)
 
     if track.view_count:
-        embed.add_field(name="👁 Views", value=f"`{format_views(track.view_count)}`", inline=True)
+        embed.add_field(name="👁 Views", value=format_views(track.view_count), inline=True)
 
     # ── Footer ────────────────────────────────────────────────────────────────
-    footer_parts = []
     if track.requested_by_name:
-        footer_parts.append(f"Requested by {track.requested_by_name}")
-    if track.is_favorite:
-        footer_parts.append("❤️ Favorite")
-    if footer_parts:
-        embed.set_footer(text="  ·  ".join(footer_parts))
+        embed.set_footer(text=f"Requested by {track.requested_by_name}")
 
     if track.thumbnail:
         embed.set_thumbnail(url=track.thumbnail)
