@@ -98,8 +98,9 @@ class MusicCog(commands.Cog, name="Music"):
         try:
             vc = await channel.connect(timeout=10.0, reconnect=True)
             player = self.bot.get_player(interaction.guild_id)
-            player.last_channel_id = channel.id
-            player.text_channel    = interaction.channel
+            player.last_channel_id        = channel.id
+            player.text_channel           = interaction.channel
+            player.intentional_disconnect = False  # new connection — re-enable auto-reconnect
             return vc
         except asyncio.TimeoutError:
             await interaction.followup.send(
@@ -116,6 +117,12 @@ class MusicCog(commands.Cog, name="Music"):
     async def _try_reconnect(self, guild_id: int) -> Optional[discord.VoiceClient]:
         """Self-healing voice reconnect with exponential backoff."""
         player = self.bot.get_player(guild_id)
+
+        # Don't reconnect if the disconnect was intentional (/stop, /leave)
+        if player.intentional_disconnect:
+            logger.debug("guild %d: skipping reconnect — intentional disconnect.", guild_id)
+            return None
+
         guild  = self.bot.get_guild(guild_id)
         if not guild or not player.last_channel_id:
             return None
@@ -362,6 +369,7 @@ class MusicCog(commands.Cog, name="Music"):
             return
         player = self.bot.get_player(interaction.guild_id)
         player.reset()
+        player.intentional_disconnect = True  # must come AFTER reset() so it sticks
         await self.bot.db.clear_queue(interaction.guild_id)
         vc = interaction.guild.voice_client
         if vc:
@@ -558,6 +566,7 @@ class MusicCog(commands.Cog, name="Music"):
             return
         player = self.bot.get_player(interaction.guild_id)
         player.reset()
+        player.intentional_disconnect = True  # must come AFTER reset() so it sticks
         await self.bot.db.clear_queue(interaction.guild_id)
         vc = interaction.guild.voice_client
         if vc:

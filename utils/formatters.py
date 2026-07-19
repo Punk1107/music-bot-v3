@@ -23,21 +23,68 @@ def format_size(n: int) -> str:
     return f"{n:.1f} TB"
 
 
-def make_progress_bar(fraction: float, width: int = 15) -> str:
+def make_progress_bar(fraction: float, url: str = "", width: int = 17) -> str:
     """
-    Create a Unicode block progress bar.
+    Solid two-tone progress bar using block characters (no playhead knob).
+
+    When *url* is supplied the filled segment is wrapped in a Markdown hyperlink —
+    Discord renders it in link/accent colour, giving a clean two-tone look:
+
+        "[▓▓▓▓▓▓▓](url)░░░░░░░░░░"
 
     Args:
         fraction: 0.0 – 1.0 completion.
-        width:    Total bar width in characters.
-
-    Returns:
-        e.g. "████████░░░░░░░"
+        url:      Track URL for the colour trick (empty → plain single-colour bar).
+        width:    Total number of block characters.
     """
-    fraction = max(0.0, min(1.0, fraction))
-    filled   = round(fraction * width)
-    empty    = width - filled
-    return "█" * filled + "░" * empty
+    fraction   = max(0.0, min(1.0, fraction))
+    filled     = round(fraction * width)
+    empty      = width - filled
+    filled_str = "▓" * filled
+    empty_str  = "░" * empty
+
+    if url and filled > 0:
+        # Filled segment wrapped in a hyperlink → Discord accent colour
+        return f"[{filled_str}]({url}){empty_str}"
+    # No URL or nothing played yet — plain single colour
+    return f"{filled_str}{empty_str}"
+
+
+def make_knob_progress_bar(
+    fraction:    float,
+    elapsed_str: str,
+    total_str:   str,
+    paused:      bool = False,
+    width:       int  = 17,
+) -> str:
+    """
+    Spotify/music-player style progress bar with a round knob (●).
+
+    Example output:
+        ▶ ──────●──────────── [1:23/3:31] 🔊
+
+    Args:
+        fraction:    0.0 – 1.0 completion.
+        elapsed_str: Human-readable elapsed time (e.g. "1:23").
+        total_str:   Human-readable total time   (e.g. "3:31").
+        paused:      If True, use ⏸ prefix instead of ▶.
+        width:       Total track width (─ chars + knob).
+    """
+    fraction  = max(0.0, min(1.0, fraction))
+    knob_pos  = round(fraction * (width - 1))
+    before    = "─" * knob_pos
+    after     = "─" * (width - 1 - knob_pos)
+    prefix    = "⏸" if paused else "▶"
+    return f"{prefix} {before}●{after} [{elapsed_str}/{total_str}] 🔊"
+
+
+def format_views(n: int) -> str:
+    """Format a view count as a compact human-readable string (e.g. 1.2M, 200.3K)."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
 
 
 def format_uptime(start_time: datetime) -> str:

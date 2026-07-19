@@ -38,8 +38,8 @@ class MusicControlView(discord.ui.View):
     """
     Persistent playback-control bar shown under the now-playing embed.
 
-    Row 0: ⏸/▶ Pause/Resume | ⏭ Skip | 🔁 Loop | 🔀 Shuffle | ⏹ Stop
-    Row 1: 🔉 Vol-10%        | 🔊 Vol+10% | ❤️ Favorite
+    Row 0: ⏸/▶ Pause/Resume | ⏭⏭ Skip | 🔁 Loop | ✖ Shuffle | ⏹ Stop
+    Row 1: 🔇 Vol-10%        | 🔊 Vol+10% | ❤️ Favorite
     """
 
     def __init__(self, bot: "MusicBot", guild_id: int) -> None:
@@ -59,25 +59,31 @@ class MusicControlView(discord.ui.View):
         queue_size = len(player)
         is_playing = player.now_playing is not None
 
+        # Detect paused state
+        guild = self.bot.get_guild(self.guild_id)
+        vc_client = guild.voice_client if guild else None
+        is_paused = bool(vc_client and vc_client.is_paused())
+
         for child in self.children:
             if not hasattr(child, "custom_id"):
                 continue
             cid = child.custom_id
 
             if cid == "mb_skip":
-                label = f"⏭ Skip" + (f" ({queue_size})" if queue_size else "")
-                child.label    = label
+                skip_label     = f"⏭⏭ Skip" + (f" ({queue_size})" if queue_size else "")
+                child.label    = skip_label
                 child.disabled = not is_playing
 
             elif cid == "mb_shuffle":
                 child.disabled = queue_size < 2
 
             elif cid == "mb_loop":
-                child.label = player.loop_mode.label()
+                mode = player.loop_mode.value
+                child.label = f"🔁 Loop: {mode.capitalize()}"
                 child.style = (
-                    discord.ButtonStyle.success
-                    if player.loop_mode.value != "off"
-                    else discord.ButtonStyle.secondary
+                    discord.ButtonStyle.primary
+                    if mode != "off"
+                    else discord.ButtonStyle.primary
                 )
 
             elif cid == "mb_vol_down":
@@ -87,9 +93,7 @@ class MusicControlView(discord.ui.View):
                 child.disabled = player.volume >= 2.0
 
             elif cid == "mb_pause":
-                vc = self.bot.get_guild(self.guild_id)
-                vc_client = vc.voice_client if vc else None
-                if vc_client and vc_client.is_paused():
+                if is_paused:
                     child.label = "▶ Resume"
                     child.style = discord.ButtonStyle.success
                 else:
@@ -150,7 +154,7 @@ class MusicControlView(discord.ui.View):
             vc.resume()
         await self._refresh_message(interaction)
 
-    @discord.ui.button(label="⏭ Skip", style=discord.ButtonStyle.primary, custom_id="mb_skip", row=0)
+    @discord.ui.button(label="⏭⏭ Skip", style=discord.ButtonStyle.primary, custom_id="mb_skip", row=0)
     async def skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
@@ -160,7 +164,7 @@ class MusicControlView(discord.ui.View):
             vc.stop()
         self._sync_buttons()
 
-    @discord.ui.button(label="🔁 Loop: Off", style=discord.ButtonStyle.secondary, custom_id="mb_loop", row=0)
+    @discord.ui.button(label="🔁 Loop: Off", style=discord.ButtonStyle.primary, custom_id="mb_loop", row=0)
     async def loop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
@@ -168,7 +172,7 @@ class MusicControlView(discord.ui.View):
         player.loop_mode = player.loop_mode.next()
         await self._refresh_message(interaction)
 
-    @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="mb_shuffle", row=0)
+    @discord.ui.button(label="✖ Shuffle", style=discord.ButtonStyle.primary, custom_id="mb_shuffle", row=0)
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
@@ -185,6 +189,7 @@ class MusicControlView(discord.ui.View):
         vc = self._vc(interaction)
         player = self.bot.get_player(self.guild_id)
         player.reset()
+        player.intentional_disconnect = True  # must come AFTER reset() so it sticks
         if vc:
             await vc.disconnect(force=True)
         await interaction.response.send_message(
@@ -193,7 +198,7 @@ class MusicControlView(discord.ui.View):
 
     # ── Row 1: Volume + Favorite ──────────────────────────────────────────────
 
-    @discord.ui.button(label="🔉 -10%", style=discord.ButtonStyle.secondary, custom_id="mb_vol_down", row=1)
+    @discord.ui.button(label="🔇 -10%", style=discord.ButtonStyle.secondary, custom_id="mb_vol_down", row=1)
     async def vol_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
@@ -235,6 +240,7 @@ class MusicControlView(discord.ui.View):
                 ),
                 ephemeral=True,
             )
+
 
 
 # ─────────────────────────── Queue View ──────────────────────────────────────
