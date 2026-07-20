@@ -11,7 +11,7 @@ A professional, production-ready Discord music bot built in Python with a clean 
 | ❤️ **Favorites System** | Save, list, and instantly play your favorite tracks per user (up to 50) |
 | 🎚️ **DJ Role** | Restrict destructive commands to a designated DJ role |
 | 📻 **Request Channel** | Dedicate a text channel where typing a song name triggers playback via NLU |
-| 📊 **Live Progress Bar** | Now-playing embed auto-updates every 7 seconds with a two-tone knob-style bar: `▶️ [──────●](url)─────── [1:23/3:31] 🔉` |
+| 📊 **Live Progress Bar** | Now-playing embed auto-updates every 7 seconds with a two-tone knob-style bar: `▶️ [──────────────●](url)───── [1:23/3:31] 🔉` (width=32) |
 | 🔤 **Regex NLU** | EN + TH intent detection (no OpenAI/Anthropic — zero external API cost) |
 | 📈 **REST API + WebSocket** | `/api/v1/` endpoints + real-time WebSocket dashboard |
 | 🎼 **Auto-Playlist** | Fills queue from play history when it empties — configurable per guild |
@@ -74,7 +74,7 @@ music-bot-v3/
 ├── models/
 │   ├── track.py         # Track dataclass with serialisation + is_favorite flag
 │   ├── server_config.py # Per-guild settings: DJ role, request channel, auto-playlist
-│   └── enums.py         # LoopMode, AudioEffect (×18), AudioQuality, NLUIntent
+│   └── enums.py         # LoopMode, AudioEffect (×18), AudioQuality, NLUIntent (×10)
 │
 └── utils/
     ├── embeds.py        # All Discord embed factories (now-playing, track-added, favorites, …)
@@ -120,7 +120,7 @@ Requested by Username
 [bot avatar]  Music Bot V3  •  Now Playing
 ```
 
-> **Two-tone bar**: The filled segment and knob `●` are wrapped in a Markdown hyperlink `[────●](url)`, so Discord renders them in the accent/link colour. The remaining `─` characters stay grey — giving a Spotify-like two-tone look.
+> **Two-tone bar** (width=32): The filled segment and knob `●` are wrapped in a Markdown hyperlink `[────●](url)`, so Discord renders them in the accent/link colour. The remaining `─` characters stay grey — giving a Spotify-like two-tone look. The bar refreshes automatically every 7 seconds.
 
 ### 🎮 Control Buttons
 
@@ -187,9 +187,11 @@ docker-compose up -d
 | `YTDL_AUDIO_FORMAT` | `bestaudio[ext=webm]/bestaudio/best` | yt-dlp format selector |
 | `YTDL_RETRIES` | `3` | yt-dlp retry count |
 | `YTDL_TIMEOUT` | `30.0` | yt-dlp extraction timeout (seconds) |
+| `YTDL_STREAM_TIMEOUT` | `20.0` | yt-dlp stream connection timeout (seconds) |
 | `YTDL_CACHE_TIMEOUT` | `1800.0` | Stream URL cache TTL (30 min) |
 | `YTDL_CACHE_MAX_SIZE` | `512` | Max stream URL cache entries |
 | `SEARCH_CACHE_TTL` | `600.0` | Search result cache TTL (10 min) |
+| `SEARCH_CACHE_MAX_SIZE` | `256` | Max search cache entries |
 | `STREAM_URL_TTL` | `14400.0` | Prefetched stream URL TTL (4 hours) |
 | `EXTRACT_CONCURRENCY` | `3` | Max concurrent yt-dlp extractions |
 | `MAX_TRACK_LENGTH` | `7200` | Max track duration in seconds (2 hours) |
@@ -312,7 +314,7 @@ Set `API_SECRET=yourtoken` in `.env` and pass `Authorization: Bearer yourtoken` 
 | Database | aiosqlite + WAL | + favorites table, analytics, server config, immediate write-ahead saves |
 | Webserver | `/health /status /ready` | + full REST API v1 + WebSocket + HTML dashboard |
 | Now-playing layout | Single description block | Gen-2 field layout: Title → Uploader → Duration/Views/Queue → Requested by/Loop/Volume → Progress bar |
-| Now-playing progress bar | Plain text bar | Two-tone knob bar `▶️ [──────●](url)─────── [0:58/3:31] 🔉`, updates every 7 s |
+| Now-playing progress bar | Plain text bar | Two-tone knob bar (width=32) `▶️ [──────────────●](url)─── [0:58/3:31] 🔉`, updates every 7 s |
 | Loop button | `🔁 Loop` (no state shown) | Shows current state: `🔁 Loop: Off` / `🔂 Loop: Track` / `🔁 Loop: Queue` |
 | `/stop` behavior | Stop + disconnect bot | Stop + clear queue, **bot stays in voice channel** (`/leave` to disconnect) |
 | Track-added embed | Inline description text | Discord Fields: Duration \| Position \| Uploader (3-column card) |
@@ -336,11 +338,15 @@ Set `API_SECRET=yourtoken` in `.env` and pass `Authorization: Bearer yourtoken` 
 | `PyNaCl >= 1.5.0` | Voice encryption |
 | `yt-dlp >= 2026.6.9` | YouTube audio extraction and search |
 | `aiohttp >= 3.14.1` | Async HTTP client (thumbnails, Spotify) + web server |
+| `aiohappyeyeballs >= 2.7.1` | Happy Eyeballs async connection algorithm (aiohttp dep) |
+| `yarl >= 1.24.2` | URL parsing (aiohttp dep) |
+| `idna >= 3.18` | Internationalized domain names (aiohttp dep) |
 | `aiosqlite >= 0.21.0` | Async SQLite for queue, history, favorites, analytics |
 | `python-dotenv >= 1.1.1` | `.env` file loading |
 | `greenlet >= 3.2.3` | Async concurrency helper |
+| `psutil` *(optional)* | Memory usage in `/botstats` — gracefully skipped if absent |
 
-> **No Pillow, no OpenAI, no Lavalink.** All features run on the above minimal set.
+> **No Pillow, no OpenAI, no Lavalink.** All core features run on the above minimal set.
 
 ---
 
@@ -354,4 +360,23 @@ Three log targets configured automatically:
 | `logs/bot.log` | DEBUG | Rotating, 10 MB × 5 backups |
 | `logs/errors.log` | ERROR | Rotating, 5 MB × 3 backups |
 
-Noisy third-party loggers (`discord`, `aiohttp.access`) are silenced to WARNING.
+Noisy third-party loggers (`discord`, `discord.http`, `discord.gateway`, `aiohttp.access`) are silenced to WARNING.
+
+---
+
+## 🔤 NLU Intents (Request Channel)
+
+The built-in Regex NLU engine supports **10 intents** in both English and Thai:
+
+| Intent | EN Triggers | TH Triggers |
+|--------|------------|------------|
+| `PLAY` | `play <query>` | `เล่น`, `เปิดเพลง`, `ขอฟัง` |
+| `PAUSE` | `pause`, `stop playing` | `หยุด`, `พัก` |
+| `RESUME` | `resume`, `unpause` | `เล่นต่อ`, `ต่อ` |
+| `SKIP` | `skip`, `next` | `ข้าม`, `ต่อไป`, `เพลงต่อไป` |
+| `STOP` | `stop`, `disconnect` | `หยุดเลย`, `ออก`, `ปิดบอท` |
+| `VOLUME` | `volume`, `louder`, `quieter` | `เสียง`, `ดังขึ้น`, `เบาลง` |
+| `QUEUE` | `queue`, `list` | `คิว`, `รายการเพลง` |
+| `LOOP` | `loop`, `repeat` | `วนซ้ำ`, `ซ้ำ` |
+| `SHUFFLE` | `shuffle`, `random` | `สุ่ม`, `สุ่มเพลง` |
+| `UNKNOWN` | *(fallback — treated as search query if it looks like a song name)* | |
