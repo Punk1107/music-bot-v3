@@ -81,13 +81,13 @@ def track_added_embed(
       Footer: avatar · Requested by …
     """
     embed = discord.Embed(
-        description = f"**[{truncate(track.title, 80)}]({track.url})**",
+        title       = "🎵  Added to Queue",
+        description = f"{truncate(track.title, 80)}",
         color       = color,
     )
-    embed.set_author(name="🎵  Added to Queue")
 
-    embed.add_field(name="⏱ Duration",  value=f"`{track.duration_str}`",               inline=True)
-    embed.add_field(name="📋 Position", value=f"`#{position}`",                         inline=True)
+    embed.add_field(name="⏱ Duration",  value=f"{track.duration_str}",                  inline=True)
+    embed.add_field(name="📋 Position", value=f"#{position}",                            inline=True)
     embed.add_field(name="👤 Uploader", value=truncate(track.uploader or "Unknown", 35), inline=True)
 
     if requester:
@@ -118,18 +118,16 @@ def now_playing_embed(
     paused:   bool = False,
 ) -> discord.Embed:
     """
-    Premium now-playing embed matching the screenshot layout:
+    Gen-2 style now-playing embed with V3 data:
 
-      Author  : ▶ Now Playing  (bot avatar icon)
-      Desc    : **[Title](url)**
-                ↳ 👤 uploader
+      Title   : 🎵 Track Title  (embed.url makes it clickable)
+      Desc    : 🔵 Uploader
 
-                ▶ ─────●──────── [0:58/3:31] 🔊   ← knob progress bar
+      Fields  : ⏱ Duration  |  👁 Views    |  📋 In Queue
+                👤 Requested by  |  🔁 Loop  |  🔊 Volume
+                ▶️ Progress  ← full-width knob progress bar
 
-      Fields  : 🔁 Loop  |  🔊 Volume  |  📋 Queue
-                (optional 👁 Views — inline field)
-
-      Footer  : Requested by …  ·  ❤️ Favorite
+      Footer  : bot avatar · Music Bot V3 • Now Playing
       Thumbnail: track art
     """
     track = player.now_playing
@@ -140,52 +138,55 @@ def now_playing_embed(
     fraction = player.progress_fraction()
     elapsed  = format_duration(player.elapsed_seconds)
     total    = format_duration(track.duration) if track.duration else "?"
-    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused)
+    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=track.url or "")
 
-    # ── Description block ────────────────────────────────────────────────────
-    description = (
-        f"**[{truncate(track.title, 80)}]({track.url})**\n"
-        f"↳ 👤 *{truncate(track.uploader or 'Unknown', 40)}*\n\n"
-        f"{bar_line}"
+    # ── Main embed ────────────────────────────────────────────────────────────
+    embed = discord.Embed(
+        title       = f"🎵  {truncate(track.title, 80)}",
+        url         = track.url or None,
+        description = f"🔵  {truncate(track.uploader or 'Unknown', 40)}",
+        color       = color,
     )
 
-    # Optional effects line
-    if player.effects:
-        eff_str = " · ".join(e.display_name() for e in player.effects[:4])
-        description += f"\n🎛  {eff_str}"
-
-    embed = discord.Embed(description=description, color=color)
-
-    # ── Inline fields: Loop | Volume | Queue ─────────────────────────────────
-    loop_val = player.loop_mode.value.capitalize()
-    vol_val  = f"{int(player.volume * 100)}%"
+    # ── Row 1: Duration | Views | In Queue ───────────────────────────────────
+    dur_val  = format_duration(track.duration) if track.duration else "?"
+    view_val = format_views(track.view_count)  if track.view_count else "—"
     q_size   = len(player)
     q_val    = f"{q_size} track{'s' if q_size != 1 else ''}"
 
-    embed.add_field(name="🔁 Loop",   value=f"`{loop_val}`", inline=True)
-    embed.add_field(name="🔊 Volume", value=f"`{vol_val}`",  inline=True)
-    embed.add_field(name="📋 Queue",  value=f"`{q_val}`",    inline=True)
+    embed.add_field(name="⏱ Duration",  value=dur_val,  inline=True)
+    embed.add_field(name="👁 Views",    value=view_val, inline=True)
+    embed.add_field(name="📋 In Queue", value=q_val,    inline=True)
 
-    if track.view_count:
-        embed.add_field(name="👁 Views", value=f"`{format_views(track.view_count)}`", inline=True)
+    # ── Row 2: Requested by | Loop | Volume ──────────────────────────────────
+    req_val  = f"@{track.requested_by_name}" if track.requested_by_name else "—"
+    loop_val = player.loop_mode.value.capitalize()
+    vol_val  = f"{int(player.volume * 100)}%"
+
+    embed.add_field(name="👤 Requested by", value=req_val,  inline=True)
+    embed.add_field(name="🔁 Loop",         value=loop_val, inline=True)
+    embed.add_field(name="🔊 Volume",       value=vol_val,  inline=True)
+
+    # ── Progress bar (full width) ─────────────────────────────────────────────
+    embed.add_field(name="▶️ Progress", value=bar_line, inline=False)
+
+    # Optional effects
+    if player.effects:
+        eff_str = " · ".join(e.display_name() for e in player.effects[:4])
+        embed.add_field(name="🎛 Effects", value=eff_str, inline=False)
 
     # ── Footer ────────────────────────────────────────────────────────────────
-    footer_parts = []
-    if track.requested_by_name:
-        footer_parts.append(f"Requested by {track.requested_by_name}")
-    if track.is_favorite:
-        footer_parts.append("❤️ Favorite")
-    if footer_parts:
-        embed.set_footer(text="  ·  ".join(footer_parts))
+    footer_icon = bot_user.display_avatar.url if bot_user else None
+    embed.set_footer(
+        text     = "Music Bot V3  •  Now Playing",
+        icon_url = footer_icon,
+    )
 
     if track.thumbnail:
         embed.set_thumbnail(url=track.thumbnail)
 
-    embed.set_author(
-        name     = "▶  Now Playing",
-        icon_url = bot_user.display_avatar.url if bot_user else None,
-    )
     return embed
+
 
 
 # ── Search results ────────────────────────────────────────────────────────────

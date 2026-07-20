@@ -126,7 +126,7 @@ class InfoCog(commands.Cog, name="Info"):
                 "`/search <query>` — Search and choose from results",
                 "`/pause` / `/resume` — Pause/resume playback",
                 "`/skip`  — Skip current track",
-                "`/stop`  — Stop and disconnect",
+                "`/stop`  — Stop playback and clear queue (bot stays in channel)",
                 "`/nowplaying` — Show now-playing with progress bar",
             ],
             "📋 Queue": [
