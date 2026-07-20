@@ -138,7 +138,7 @@ def now_playing_embed(
     fraction = player.progress_fraction()
     elapsed  = format_duration(player.elapsed_seconds)
     total    = format_duration(track.duration) if track.duration else "?"
-    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=track.url or "")
+    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=track.url or "", width=35)
 
     # ── Main embed ────────────────────────────────────────────────────────────
     embed = discord.Embed(
