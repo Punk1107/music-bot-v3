@@ -93,25 +93,25 @@ music-bot-v3/
 
 ```
 🎵  Added to Queue
-ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …        [thumbnail]
+Awesome Song Title - Example Artist Official MV …        [thumbnail]
 
 ⏱ Duration    📋 Position    👤 Uploader
-3:31           #1              marr team official
+3:31           #1              Example Channel
 
-Requested by Sleepless
+Requested by Username
 ```
 
 ### ▶️ Now Playing
 
 ```
-🎵  ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …   [thumbnail]
-🔵  marr team official
+🎵  Awesome Song Title - Example Artist Official MV …   [thumbnail]
+🔵  Example Channel
 
 ⏱ Duration    👁 Views    📋 In Queue
 3:31           1.3M        0 tracks
 
 👤 Requested by    🔁 Loop    🔊 Volume
-@Sleepless         Off        100%
+@Username          Off        100%
 
 ▶️ Progress
 ▶️ [──────●](url)────────────── [0:58/3:31] 🔉
