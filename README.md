@@ -11,7 +11,7 @@ A professional, production-ready Discord music bot built in Python with a clean 
 | ❤️ **Favorites System** | Save, list, and instantly play your favorite tracks per user (up to 50) |
 | 🎚️ **DJ Role** | Restrict destructive commands to a designated DJ role |
 | 📻 **Request Channel** | Dedicate a text channel where typing a song name triggers playback via NLU |
-| 📊 **Live Progress Bar** | Now-playing embed auto-updates every 7 seconds with a knob-style bar: `▶ ────●──── [1:23/3:31] 🔊` |
+| 📊 **Live Progress Bar** | Now-playing embed auto-updates every 7 seconds with a two-tone knob-style bar: `▶️ [──────●](url)─────── [1:23/3:31] 🔉` |
 | 🔤 **Regex NLU** | EN + TH intent detection (no OpenAI/Anthropic — zero external API cost) |
 | 📈 **REST API + WebSocket** | `/api/v1/` endpoints + real-time WebSocket dashboard |
 | 🎼 **Auto-Playlist** | Fills queue from play history when it empties — configurable per guild |
@@ -28,7 +28,7 @@ A professional, production-ready Discord music bot built in Python with a clean 
 | 🔁 **Loop Modes** | Off → Track → Queue, cycled via button or `/loop` command |
 | 🎛 **18 Audio Effects** | Bass Boost, Nightcore, Vaporwave, Treble Boost, Vocal Boost, Karaoke, Vibrato, Tremolo, Chorus, Reverb, Echo, Distortion, Mono, Stereo Enhance, Compressor, Limiter, Noise Gate, 8D Audio |
 | 🔊 **Volume Control** | 0–200% via `/volume` or ±10% buttons on now-playing embed |
-| 🎮 **Interactive UI** | Dynamic skip counts, disabled states, ❤️ Favorite button on now-playing |
+| 🎮 **Interactive UI** | Dynamic skip counts, disabled states, ❤️ Favorite button on now-playing, Loop button shows current state |
 | 🎨 **Dynamic Colors** | Dominant accent color extracted from track thumbnails (pure Python, no Pillow) |
 | 📊 **Analytics** | Per-guild play history, per-user stats, REST API analytics endpoint |
 | 🛡 **Content Filter** | 7-stage pipeline — blocks NSFW/gambling/piracy (EN + TH keywords) |
@@ -93,7 +93,7 @@ music-bot-v3/
 
 ```
 🎵  Added to Queue
-ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …
+ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …        [thumbnail]
 
 ⏱ Duration    📋 Position    👤 Uploader
 3:31           #1              marr team official
@@ -101,28 +101,37 @@ music-bot-v3/
 Requested by Sleepless
 ```
 
-### ▶ Now Playing
+### ▶️ Now Playing
 
 ```
-▶  Now Playing
-ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …
-↳ 👤 marr team official
+🎵  ความรู้สึกเราไม่เท่ากัน (uneven) - FAYE PERAYA …   [thumbnail]
+🔵  marr team official
 
-▶ ──────────●────────── [0:58/3:31] 🔊
+⏱ Duration    👁 Views    📋 In Queue
+3:31           1.3M        0 tracks
 
-🔁 Loop    🔊 Volume    📋 Queue
-Off         100%         0 tracks
+👤 Requested by    🔁 Loop    🔊 Volume
+@Sleepless         Off        100%
 
-👁 Views
-1.3M
+▶️ Progress
+▶️ [──────●](url)────────────── [0:58/3:31] 🔉
 
-Requested by Sleepless
+─────────────────────────────────────────────
+[bot avatar]  Music Bot V3  •  Now Playing
 ```
+
+> **Two-tone bar**: The filled segment and knob `●` are wrapped in a Markdown hyperlink `[────●](url)`, so Discord renders them in the accent/link colour. The remaining `─` characters stay grey — giving a Spotify-like two-tone look.
 
 ### 🎮 Control Buttons
 
-**Row 0:** `⏸ Pause` · `⏭⏭ Skip` · `🔁 Loop: Off` · `✖ Shuffle` · `⏹ Stop`  
+**Row 0:** `⏸ Pause` · `⏭ Skip (n)` · `🔁 Loop: Off` · `🔀 Shuffle` · `⏹ Stop`
 **Row 1:** `🔇 -10%` · `🔊 +10%` · `❤️ Favorite`
+
+**Loop button** cycles and shows its current state:
+- `🔁 Loop: Off` (grey) → `🔂 Loop: Track` (blue) → `🔁 Loop: Queue` (blue)
+
+**Stop button** stops playback and clears the queue — **bot stays in the voice channel**.  
+Use `/leave` to disconnect the bot.
 
 ---
 
@@ -202,13 +211,13 @@ docker-compose up -d
 | Command | Description |
 |---------|-------------|
 | `/join` | Join your current voice channel |
-| `/leave` | Disconnect and clear the queue |
+| `/leave` | Disconnect the bot and clear the queue |
 | `/play <query>` | YouTube URL, Spotify URL, playlist URL, or search terms |
 | `/search <query>` | Search YouTube and choose from a dropdown of results |
 | `/pause` | Pause playback |
 | `/resume` | Resume paused playback |
 | `/skip` | Skip the current track |
-| `/stop` | Stop playback, clear queue, and disconnect |
+| `/stop` | Stop playback and clear queue — **bot stays in the voice channel** |
 | `/nowplaying` | Show the now-playing embed with live progress bar |
 
 ### 📋 Queue
@@ -302,8 +311,10 @@ Set `API_SECRET=yourtoken` in `.env` and pass `Authorization: Bearer yourtoken` 
 | Audio Backend | FFmpeg + Lavalink stub | FFmpeg only — clean and minimal |
 | Database | aiosqlite + WAL | + favorites table, analytics, server config, immediate write-ahead saves |
 | Webserver | `/health /status /ready` | + full REST API v1 + WebSocket + HTML dashboard |
-| Now-playing embed | Static text progress bar | Live knob-style bar `▶ ────●──── [0:58/3:31] 🔊`, updates every 7 s |
-| Now-playing embed layout | Inline status row text | Discord Fields: Loop \| Volume \| Queue \| Views (3-column cards) |
+| Now-playing layout | Single description block | Gen-2 field layout: Title → Uploader → Duration/Views/Queue → Requested by/Loop/Volume → Progress bar |
+| Now-playing progress bar | Plain text bar | Two-tone knob bar `▶️ [──────●](url)─────── [0:58/3:31] 🔉`, updates every 7 s |
+| Loop button | `🔁 Loop` (no state shown) | Shows current state: `🔁 Loop: Off` / `🔂 Loop: Track` / `🔁 Loop: Queue` |
+| `/stop` behavior | Stop + disconnect bot | Stop + clear queue, **bot stays in voice channel** (`/leave` to disconnect) |
 | Track-added embed | Inline description text | Discord Fields: Duration \| Position \| Uploader (3-column card) |
 | Buttons | Row 0: Pause/Skip/Loop \| Row 1+: Vol/Favorite | Row 0: Pause/Skip/Loop/Shuffle/Stop \| Row 1: Vol−/Vol+/Favorite |
 | Queue Save | Every 5 min | Write-ahead on enqueue + periodic every 5 min |
