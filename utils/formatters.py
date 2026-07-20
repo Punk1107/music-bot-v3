@@ -56,12 +56,16 @@ def make_knob_progress_bar(
     total_str:   str,
     paused:      bool = False,
     width:       int  = 17,
+    url:         str  = "",
 ) -> str:
     """
     Spotify/music-player style progress bar with a round knob (●).
 
-    Example output:
-        ▶ ──────●──────────── [1:23/3:31] 🔊
+    Example output (with url):
+        ▶ [──────●](url)──────────── [1:23/3:31] 🔊
+
+    The filled segment + knob are wrapped in a Markdown hyperlink so
+    Discord renders them in the accent/link colour — giving a two-tone look.
 
     Args:
         fraction:    0.0 – 1.0 completion.
@@ -69,13 +73,24 @@ def make_knob_progress_bar(
         total_str:   Human-readable total time   (e.g. "3:31").
         paused:      If True, use ⏸ prefix instead of ▶.
         width:       Total track width (─ chars + knob).
+        url:         Track URL for the colour trick (empty → plain single-colour bar).
     """
     fraction  = max(0.0, min(1.0, fraction))
     knob_pos  = round(fraction * (width - 1))
     before    = "─" * knob_pos
     after     = "─" * (width - 1 - knob_pos)
-    prefix    = "⏸" if paused else "▶"
-    return f"{prefix} {before}●{after} [{elapsed_str}/{total_str}] 🔊"
+    prefix    = "⏸️" if paused else "▶️"
+
+    if url and knob_pos > 0:
+        # Filled segment + knob wrapped in hyperlink → Discord accent/link colour
+        filled_part = f"[{before}●]({url})"
+    elif url:
+        # Nothing played yet — knob at start, no filled segment to linkify
+        filled_part = "●"
+    else:
+        filled_part = f"{before}●"
+
+    return f"{prefix} {filled_part}{after} [{elapsed_str}/{total_str}] 🔉"
 
 
 def format_views(n: int) -> str:

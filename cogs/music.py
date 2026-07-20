@@ -559,19 +559,18 @@ class MusicCog(commands.Cog, name="Music"):
         else:
             await interaction.followup.send(embed=error_embed("Nothing to Skip"), ephemeral=True)
 
-    @app_commands.command(name="stop", description="Stop playback, clear queue, and disconnect")
+    @app_commands.command(name="stop", description="Stop playback and clear the queue (bot stays in channel)")
     async def stop(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
         if not await self._check_dj(interaction, "stop"):
             return
         player = self.bot.get_player(interaction.guild_id)
-        player.reset()
-        player.intentional_disconnect = True  # must come AFTER reset() so it sticks
-        await self.bot.db.clear_queue(interaction.guild_id)
         vc = interaction.guild.voice_client
-        if vc:
-            await vc.disconnect(force=True)
-        await interaction.followup.send(embed=success_embed("Stopped ⏹", "Queue cleared and disconnected."))
+        if vc and vc.is_playing():
+            vc.stop()
+        player.reset()
+        await self.bot.db.clear_queue(interaction.guild_id)
+        await interaction.followup.send(embed=success_embed("Stopped ⏹", "Playback stopped and queue cleared."))
 
     @app_commands.command(name="nowplaying", description="Show the current track with progress bar")
     async def nowplaying(self, interaction: discord.Interaction) -> None:
