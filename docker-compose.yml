@@ -9,7 +9,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-      - ./cookies.txt:/app/cookies.txt:ro
     ports:
       - "8080:8080"
     healthcheck:
