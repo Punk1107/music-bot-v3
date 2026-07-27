@@ -23,7 +23,9 @@ MusicBot class:
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import os
 import traceback
 from datetime import datetime, timezone
 from typing import Optional
@@ -44,6 +46,27 @@ from core.nlu            import NLUPipeline
 from core.player         import GuildPlayer
 from webserver           import WebServer
 
+
+def _decode_cookies() -> None:
+    """
+    If COOKIES_BASE64 env var is set, decode it and write to cookies.txt.
+    This allows Render (and other platforms) to supply cookies without
+    committing sensitive files to the repository.
+    """
+    b64 = os.getenv("COOKIES_BASE64", "").strip()
+    if not b64:
+        return
+    try:
+        data = base64.b64decode(b64)
+        with open("cookies.txt", "wb") as f:
+            f.write(data)
+        # Use print here — logger not yet configured
+        print("[startup] cookies.txt decoded from COOKIES_BASE64")
+    except Exception as exc:
+        print(f"[startup] WARNING: Failed to decode COOKIES_BASE64: {exc}")
+
+
+_decode_cookies()   # Must run before yt-dlp options are built
 setup_logging()
 logger = logging.getLogger(__name__)
 
