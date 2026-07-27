@@ -87,10 +87,6 @@ _PLAYLIST_OPTS: dict = {
     "skip_download":      True,
 }
 
-import pathlib
-if pathlib.Path("cookies.txt").exists():
-    for _opts in (_META_OPTS, _STREAM_OPTS, _PLAYLIST_OPTS):
-        _opts["cookiefile"] = "cookies.txt"
 
 
 class YouTubeExtractor:
