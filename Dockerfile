@@ -1,8 +1,15 @@
 FROM python:3.12-slim
 
-# Install FFmpeg
+# Install system dependencies:
+#   ffmpeg        — audio transcoding
+#   libsodium-dev — required by PyNaCl (Discord voice)
+#   build-essential — C compiler for native Python packages
+#   curl          — healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    libsodium-dev \
+    build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
