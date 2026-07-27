@@ -49,7 +49,7 @@ music-bot-v3/
 ├── config.py            # All settings loaded from .env
 ├── webserver.py         # aiohttp REST API + WebSocket dashboard
 ├── requirements.txt     # Python dependencies
-├── Dockerfile           # Container build
+├── Dockerfile           # Container build (Python 3.12-slim)
 ├── docker-compose.yml   # Docker Compose config
 │
 ├── cogs/
@@ -138,7 +138,7 @@ Use `/leave` to disconnect the bot.
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python **3.10+**
+- Python **3.12+**
 - [FFmpeg](https://ffmpeg.org/download.html) available on your `PATH`
 
 ### Install & Run
@@ -360,7 +360,7 @@ Three log targets configured automatically:
 | `logs/bot.log` | DEBUG | Rotating, 10 MB × 5 backups |
 | `logs/errors.log` | ERROR | Rotating, 5 MB × 3 backups |
 
-Noisy third-party loggers (`discord`, `discord.http`, `discord.gateway`, `aiohttp.access`) are silenced to WARNING.
+Noisy third-party loggers (`discord`, `discord.http`, `discord.gateway`, `aiohttp.access`) are silenced to Warning.
 
 ---
 
