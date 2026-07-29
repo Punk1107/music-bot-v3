@@ -7,6 +7,11 @@ V3 Changes:
   - favorites_cache: lightweight set of user_id → set of track URLs for quick lookup
   - text_channel stored as Optional[discord.TextChannel] for messages
   - idle_since tracked for auto-disconnect logic
+
+Tier-S additions:
+  - skip_votes: in-memory set of user_ids that voted to skip (Feature 1)
+  - jump_to: skip directly to a queue position (Feature 8)
+  - eta_seconds: ETA before a track at a given position plays (Feature 9)
 """
 
 from __future__ import annotations
@@ -70,6 +75,11 @@ class GuildPlayer:
 
         # ── History (last played, for loop:track) ─────────────────────────────
         self._history_track: Optional[Track] = None
+
+        # ── Tier-S: Vote Skip (Feature 1) ─────────────────────────────────────
+        # Set of user_ids that have voted to skip the current track.
+        # Reset automatically when the track finishes or is skipped.
+        self.skip_votes: set[int] = set()
 
     # ── Queue helpers ─────────────────────────────────────────────────────────
 
@@ -154,6 +164,8 @@ class GuildPlayer:
         """Mark current track finished (stores to history for LOOP:TRACK)."""
         if self.now_playing:
             self._history_track = self.now_playing
+        # Reset vote-skip state for the next track
+        self.skip_votes.clear()
 
     # ── Progress ──────────────────────────────────────────────────────────────
 
@@ -175,6 +187,49 @@ class GuildPlayer:
         if not self.now_playing or not self.now_playing.duration:
             return 0.0
         return min(1.0, self.elapsed_seconds / self.now_playing.duration)
+
+    # ── Tier-S: ETA (Feature 9) ───────────────────────────────────────────────
+
+    def eta_seconds(self, position: int) -> int:
+        """
+        Calculate estimated seconds until the track at `position` (1-based)
+        in the queue starts playing.
+
+        position=1  → next up after current track finishes
+        position=N  → after (N-1) tracks before it complete
+        """
+        eta = self.remaining_seconds
+        queue = self.queue
+        for i, track in enumerate(queue):
+            if i + 1 >= position:  # reached or passed target position
+                break
+            eta += (track.duration or 0)
+        return max(0, eta)
+
+    def skip_vote_threshold(self, voice_member_count: int) -> int:
+        """Minimum votes needed to skip (ceil of 50% of voice members)."""
+        import math
+        return max(1, math.ceil(voice_member_count * 0.5))
+
+    # ── Tier-S: Queue Jump (Feature 8) ───────────────────────────────────────
+
+    async def jump_to(self, index: int) -> Optional[Track]:
+        """
+        Remove all tracks before `index` (0-based) so the track at that
+        index becomes the next to play. Returns the target Track or None
+        if out of range.
+
+        Caller is responsible for stopping the current playback to trigger
+        _play_next(), which will dequeue the now-first track.
+        """
+        async with self.queue_lock:
+            lst = list(self._queue)
+            if not 0 <= index < len(lst):
+                return None
+            target = lst[index]
+            # Drop everything before the target
+            self._queue = deque(lst[index:])
+            return target
 
     # ── Prefetch ──────────────────────────────────────────────────────────────
 
@@ -199,6 +254,7 @@ class GuildPlayer:
         self.volume                = 1.0
         self.idle_since            = datetime.now(timezone.utc)
         self.auto_playlist_mode    = False
+        self.skip_votes            = set()
         # Note: intentional_disconnect is NOT reset here on purpose.
         # It is set True after reset() in /stop and /leave, then cleared
         # in _ensure_voice() when a new voice connection is established.

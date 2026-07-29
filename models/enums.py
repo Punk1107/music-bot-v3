@@ -76,6 +76,30 @@ class AudioQuality(str, Enum):
         return {"options": f"-vn -ab {bitrates[self.value]}"}
 
 
+class DuplicateMode(str, Enum):
+    """How to handle duplicate URLs in the queue."""
+    ALLOW = "allow"    # default — add as normal
+    WARN  = "warn"     # notify requester but still add
+    BLOCK = "block"    # reject the duplicate
+    FRONT = "front"    # move existing duplicate to front of queue
+
+
+class QueuePermission(str, Enum):
+    """Who is allowed to add tracks to the queue."""
+    EVERYONE = "everyone"  # any member
+    VERIFIED = "verified"  # any member with at least one role (not @everyone)
+    DJ       = "dj"        # DJ role or higher
+    ADMIN    = "admin"     # administrators only
+
+    def display(self) -> str:
+        return {
+            "everyone": "🌐 Everyone",
+            "verified": "✅ Verified (has any role)",
+            "dj":       "🎚️ DJ only",
+            "admin":    "🔒 Admin only",
+        }[self.value]
+
+
 class NLUIntent(str, Enum):
     """Intents recognized by the Regex NLU engine (V3)."""
     PLAY    = "play"

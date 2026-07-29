@@ -27,12 +27,13 @@ import config
 from core.circuit_breaker import CircuitBreakerOpen
 from core.validator import validate_url, validate_search_query
 from models.track import Track
+from models.enums import QueuePermission, DuplicateMode
 from utils.embeds import (
-    error_embed, success_embed, info_embed,
+    error_embed, success_embed, info_embed, warning_embed,
     now_playing_embed, track_added_embed, playlist_added_embed,
-    search_results_embed, auto_playlist_embed,
+    search_results_embed, auto_playlist_embed, vote_skip_embed,
 )
-from utils.views import MusicControlView, SearchSelectView
+from utils.views import MusicControlView, SearchSelectView, VoteSkipView
 from utils.rate_limiter import RateLimiter
 from utils.error_handler import (
     notify_playback_error, voice_connection_error_embed, dj_required_embed
@@ -78,6 +79,154 @@ class MusicCog(commands.Cog, name="Music"):
 
         await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
         return False
+
+    def _is_dj_or_admin(self, interaction: discord.Interaction, cfg) -> bool:
+        """Quick synchronous check: True if user is admin or has DJ role."""
+        member = interaction.user
+        if member.guild_permissions.administrator:
+            return True
+        if cfg.dj_role_id and any(r.id == cfg.dj_role_id for r in member.roles):
+            return True
+        return False
+
+    async def _check_queue_permission(
+        self, interaction: discord.Interaction
+    ) -> bool:
+        """
+        Feature 3: Check whether the user is allowed to add tracks.
+        Returns True if allowed, sends an ephemeral error and returns False otherwise.
+        """
+        cfg  = await self.bot.db.get_server_config(interaction.guild_id)
+        perm = cfg.queue_add_permission
+        member = interaction.user
+
+        # Admins always bypass
+        if member.guild_permissions.administrator:
+            return True
+
+        if perm == QueuePermission.ADMIN:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Permission Denied",
+                    "Only **Admins** can add tracks to the queue.",
+                ),
+                ephemeral=True,
+            )
+            return False
+
+        # DJ check
+        if perm in (QueuePermission.DJ,):
+            if cfg.dj_role_id and any(r.id == cfg.dj_role_id for r in member.roles):
+                return True
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Permission Denied",
+                    "Only **DJ** role members can add tracks to the queue.",
+                ),
+                ephemeral=True,
+            )
+            return False
+
+        # Verified: at least one non-@everyone role
+        if perm == QueuePermission.VERIFIED:
+            has_role = any(r.id != interaction.guild.id for r in member.roles)
+            if not has_role:
+                await interaction.followup.send(
+                    embed=error_embed(
+                        "Permission Denied",
+                        "You need at least one server role to add tracks.",
+                    ),
+                    ephemeral=True,
+                )
+                return False
+
+        return True  # EVERYONE or verified passed
+
+    async def _check_queue_lock(
+        self, interaction: discord.Interaction
+    ) -> bool:
+        """
+        Feature 2: Check whether queue is locked.
+        DJ/Admin bypass the lock. Returns True if allowed to add.
+        """
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if not cfg.queue_locked:
+            return True
+        if self._is_dj_or_admin(interaction, cfg):
+            return True
+        await interaction.followup.send(
+            embed=error_embed(
+                "🔒 Queue Locked",
+                "The queue is locked. Only **DJ** and **Admin** can add tracks.",
+            ),
+            ephemeral=True,
+        )
+        return False
+
+    async def _handle_duplicate(
+        self,
+        interaction: discord.Interaction,
+        track:       Track,
+    ) -> str:
+        """
+        Feature 6: Handle duplicate URL detection.
+        Returns action taken: 'ok', 'blocked', 'warned', 'moved_front'.
+        """
+        cfg    = await self.bot.db.get_server_config(interaction.guild_id)
+        mode   = cfg.duplicate_mode
+        player = self.bot.get_player(interaction.guild_id)
+
+        if mode == DuplicateMode.ALLOW:
+            return "ok"
+
+        # Check for existing URL in queue
+        queue = player.queue
+        dup_index = next(
+            (i for i, t in enumerate(queue) if t.url == track.url), None
+        )
+
+        if dup_index is None:
+            return "ok"  # Not a duplicate
+
+        if mode == DuplicateMode.BLOCK:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "🚫 Duplicate Rejected",
+                    f"**{track.short_title}** is already in the queue (position #{dup_index + 1}).",
+                ),
+                ephemeral=True,
+            )
+            return "blocked"
+
+        if mode == DuplicateMode.WARN:
+            await interaction.followup.send(
+                embed=warning_embed(
+                    "⚠️ Duplicate Track",
+                    f"**{track.short_title}** is already in the queue at position #{dup_index + 1}.",
+                ),
+                ephemeral=True,
+            )
+            return "warned"
+
+        if mode == DuplicateMode.FRONT:
+            # Move existing duplicate to front
+            async with player.queue_lock:
+                lst = list(player._queue)
+                if 0 <= dup_index < len(lst):
+                    dup = lst.pop(dup_index)
+                    lst.insert(0, dup)
+                    from collections import deque
+                    player._queue = deque(lst)
+            await interaction.followup.send(
+                embed=info_embed(
+                    "⏫ Moved to Front",
+                    f"**{track.short_title}** was already in queue — moved to position #1.",
+                ),
+                ephemeral=True,
+            )
+            return "moved_front"
+
+        return "ok"
 
     async def _ensure_voice(self, interaction: discord.Interaction) -> Optional[discord.VoiceClient]:
         """Join or return existing voice client."""
@@ -314,10 +463,29 @@ class MusicCog(commands.Cog, name="Music"):
     ) -> None:
         """
         Enqueue a single track and start playback if not already playing.
-        Called from music, search, favorites, and request-channel handler.
+        Includes: queue lock check (F2), permission check (F3), duplicate detection (F6), ETA (F9).
         """
+        # Feature 2: Queue lock check
+        if not await self._check_queue_lock(interaction):
+            return
+
+        # Feature 3: Queue permission check
+        if not await self._check_queue_permission(interaction):
+            return
+
         vc = await self._ensure_voice(interaction)
         if not vc:
+            return
+
+        # Feature 6: Duplicate detection
+        dup_result = await self._handle_duplicate(interaction, track)
+        if dup_result == "blocked":
+            return
+        if dup_result == "moved_front":
+            # Already moved, trigger playback if not playing
+            player = self.bot.get_player(interaction.guild_id)
+            if not vc.is_playing() and not vc.is_paused():
+                await self._play_next(interaction.guild_id)
             return
 
         player = self.bot.get_player(interaction.guild_id)
@@ -326,6 +494,9 @@ class MusicCog(commands.Cog, name="Music"):
         track.requested_by_name = interaction.user.display_name
 
         pos = await player.enqueue(track)
+
+        # Feature 9: ETA
+        eta = player.eta_seconds(pos) if pos > 1 else 0
 
         # Save queue to DB immediately (write-ahead)
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
@@ -343,11 +514,11 @@ class MusicCog(commands.Cog, name="Music"):
         color = await get_dominant_color(track.thumbnail, self.bot.http_session)
         if vc.is_playing() or vc.is_paused():
             await interaction.followup.send(
-                embed=track_added_embed(track, pos, color, interaction.user)
+                embed=track_added_embed(track, pos, color, interaction.user, eta_secs=eta)
             )
         else:
             await interaction.followup.send(
-                embed=track_added_embed(track, pos, color, interaction.user)
+                embed=track_added_embed(track, pos, color, interaction.user, eta_secs=0)
             )
             await self._play_next(interaction.guild_id)
 
@@ -547,17 +718,87 @@ class MusicCog(commands.Cog, name="Music"):
         else:
             await interaction.followup.send(embed=error_embed("Not Paused"), ephemeral=True)
 
-    @app_commands.command(name="skip", description="Skip the current track")
+    @app_commands.command(name="skip", description="Vote to skip the current track (DJ/Admin skips instantly)")
     async def skip(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        if not await self._check_dj(interaction, "skip"):
-            return
-        vc = interaction.guild.voice_client
-        if vc and (vc.is_playing() or vc.is_paused()):
-            vc.stop()
-            await interaction.followup.send(embed=success_embed("Skipped ⏭"), ephemeral=True)
-        else:
+        player = self.bot.get_player(interaction.guild_id)
+        vc     = interaction.guild.voice_client
+
+        if not player.now_playing or not (vc and (vc.is_playing() or vc.is_paused())):
             await interaction.followup.send(embed=error_embed("Nothing to Skip"), ephemeral=True)
+            return
+
+        cfg    = await self.bot.db.get_server_config(interaction.guild_id)
+        member = interaction.user
+
+        # DJ / Admin / Queue Owner → instant skip
+        is_dj    = self._is_dj_or_admin(interaction, cfg)
+        is_owner = (
+            player.now_playing
+            and player.now_playing.requested_by_id == member.id
+        )
+
+        if is_dj or is_owner:
+            vc.stop()
+            label = "DJ Skip ⏭" if is_dj else "Skipped (Your Track) ⏭"
+            await interaction.followup.send(
+                embed=success_embed(label, f"Skipped **{player.now_playing.short_title if player.now_playing else ''}**."),
+                ephemeral=True,
+            )
+            return
+
+        # Vote skip flow
+        voice_members = [
+            m for m in (vc.channel.members if vc else [])
+            if not m.bot
+        ]
+        threshold = player.skip_vote_threshold(len(voice_members))
+
+        # Check if already voted
+        if member.id in player.skip_votes:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Already Voted",
+                    f"You already voted. `{len(player.skip_votes)}/{threshold}` votes so far.",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player.skip_votes.add(member.id)
+
+        # Already enough? Skip immediately
+        if len(player.skip_votes) >= threshold:
+            vc.stop()
+            await interaction.followup.send(
+                embed=success_embed(
+                    "Skipped! ⏭",
+                    f"Vote threshold reached ({len(player.skip_votes)}/{threshold}).",
+                )
+            )
+            return
+
+        # Not enough yet — show vote panel
+        voter_names = []
+        guild = self.bot.get_guild(interaction.guild_id)
+        for uid in player.skip_votes:
+            m = guild.get_member(uid) if guild else None
+            voter_names.append(m.display_name if m else f"User#{uid}")
+
+        view  = VoteSkipView(
+            bot         = self.bot,
+            guild_id    = interaction.guild_id,
+            threshold   = threshold,
+            track_title = player.now_playing.title if player.now_playing else "",
+        )
+        embed = vote_skip_embed(
+            track_title = player.now_playing.title if player.now_playing else "",
+            votes       = player.skip_votes,
+            threshold   = threshold,
+            voters      = voter_names,
+        )
+        msg = await interaction.followup.send(embed=embed, view=view)
+        view.set_message(msg)
 
     @app_commands.command(name="stop", description="Stop playback and clear the queue (bot stays in channel)")
     async def stop(self, interaction: discord.Interaction) -> None:

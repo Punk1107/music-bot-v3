@@ -109,6 +109,17 @@ CREATE TABLE IF NOT EXISTS favorites (
     UNIQUE(user_id, guild_id, name)
 );
 
+-- Tier-S NEW: queue_bookmarks (Feature 5)
+CREATE TABLE IF NOT EXISTS queue_bookmarks (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    guild_id    INTEGER NOT NULL,
+    name        TEXT    NOT NULL,
+    tracks_json TEXT    NOT NULL,  -- JSON array of serialised Track objects
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, guild_id, name)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_queue_guild_pos       ON queue(guild_id, position);
 CREATE INDEX IF NOT EXISTS idx_history_guild_user    ON history(guild_id, user_id);
@@ -119,6 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_search_history_guild  ON search_history(guild_id,
 CREATE INDEX IF NOT EXISTS idx_analytics_guild_ts    ON analytics(guild_id, ts);
 CREATE INDEX IF NOT EXISTS idx_analytics_event       ON analytics(event_type);
 CREATE INDEX IF NOT EXISTS idx_favorites_user_guild  ON favorites(user_id, guild_id);
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user_guild  ON queue_bookmarks(user_id, guild_id);
 """
 
 
@@ -587,3 +599,109 @@ class DatabaseManager:
             )
             row = await cursor.fetchone()
         return row["cnt"] if row else 0
+
+    # ── Queue Bookmarks (Tier-S Feature 5) ────────────────────────────────────
+
+    MAX_BOOKMARKS_PER_USER = 20
+
+    async def save_bookmark(
+        self,
+        user_id:  int,
+        guild_id: int,
+        name:     str,
+        tracks:   list[Track],
+    ) -> bool:
+        """
+        Save a queue snapshot as a named bookmark.
+        Returns True on success, False if the name already exists or limit reached.
+        """
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                "SELECT COUNT(*) as cnt FROM queue_bookmarks WHERE user_id = ? AND guild_id = ?",
+                (user_id, guild_id),
+            )
+            row = await cursor.fetchone()
+            if row and row["cnt"] >= self.MAX_BOOKMARKS_PER_USER:
+                return False
+
+            tracks_json = json.dumps(
+                [t.to_dict() for t in tracks], ensure_ascii=False
+            )
+            try:
+                await conn.execute(
+                    """
+                    INSERT INTO queue_bookmarks (user_id, guild_id, name, tracks_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (user_id, guild_id, name.strip()[:50], tracks_json),
+                )
+                await conn.commit()
+                return True
+            except aiosqlite.IntegrityError:
+                return False  # name collision
+
+    async def load_bookmark(
+        self,
+        user_id:  int,
+        guild_id: int,
+        name:     str,
+    ) -> Optional[list[Track]]:
+        """Load a bookmark by name. Returns list of Tracks or None if not found."""
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                "SELECT tracks_json FROM queue_bookmarks WHERE user_id = ? AND guild_id = ? AND name = ?",
+                (user_id, guild_id, name),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            data = json.loads(row["tracks_json"])
+            return [Track.from_dict(d) for d in data]
+        except Exception:
+            return None
+
+    async def list_bookmarks(
+        self,
+        user_id:  int,
+        guild_id: int,
+    ) -> list[dict]:
+        """List all bookmarks for a user. Returns list of {name, count, created_at}."""
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT name, tracks_json, created_at
+                FROM queue_bookmarks
+                WHERE user_id = ? AND guild_id = ?
+                ORDER BY created_at DESC
+                """,
+                (user_id, guild_id),
+            )
+            rows = await cursor.fetchall()
+        result = []
+        for row in rows:
+            try:
+                count = len(json.loads(row["tracks_json"]))
+            except Exception:
+                count = 0
+            result.append({
+                "name":       row["name"],
+                "count":      count,
+                "created_at": row["created_at"],
+            })
+        return result
+
+    async def delete_bookmark(
+        self,
+        user_id:  int,
+        guild_id: int,
+        name:     str,
+    ) -> bool:
+        """Delete a bookmark by name. Returns True if it existed."""
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                "DELETE FROM queue_bookmarks WHERE user_id = ? AND guild_id = ? AND name = ?",
+                (user_id, guild_id, name),
+            )
+            await conn.commit()
+            return cursor.rowcount > 0

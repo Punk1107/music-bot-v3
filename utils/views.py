@@ -7,6 +7,11 @@ V3 additions:
   - QueueManageSelect: dropdown in queue view to remove/move tracks
   - MusicControlView: updated with ❤️ favorite button
   - All buttons fully typed and state-synced
+
+Tier-S additions:
+  - VoteSkipView: live voting UI with progress bar (Feature 1)
+  - HistoryView: paginated history with Replay buttons (Feature 4)
+  - QueueSearchResultView: Jump/Remove/Move buttons on search results (Feature 7)
 """
 
 from __future__ import annotations
@@ -21,8 +26,9 @@ import discord
 from utils.embeds import (
     error_embed, success_embed, info_embed, queue_embed,
     now_playing_embed, favorite_added_embed,
+    vote_skip_embed, history_embed, queue_search_embed,
 )
-from utils.formatters import truncate
+from utils.formatters import truncate, format_duration
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -400,7 +406,7 @@ class FavoritesView(discord.ui.View):
             elif child.custom_id == "fav_next":
                 child.disabled = self.page >= total
 
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, custom_id="fav_prev")
+    @discord.ui.button(label="◄", style=discord.ButtonStyle.secondary, custom_id="fav_prev")
     async def prev(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         from utils.embeds import favorites_list_embed
         self.page = max(1, self.page - 1)
@@ -408,10 +414,266 @@ class FavoritesView(discord.ui.View):
         embed = favorites_list_embed(self.favorites, self.user, self.page)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, custom_id="fav_next")
+    @discord.ui.button(label="►", style=discord.ButtonStyle.secondary, custom_id="fav_next")
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         from utils.embeds import favorites_list_embed
         self.page = min(self._total_pages(), self.page + 1)
         self._sync()
         embed = favorites_list_embed(self.favorites, self.user, self.page)
         await interaction.response.edit_message(embed=embed, view=self)
+
+
+# ─────────────────────────── Vote Skip View (Tier-S #1) ────────────────────────────
+
+class VoteSkipView(discord.ui.View):
+    """
+    Interactive vote-skip panel.
+    - Shows real-time vote count + ASCII progress bar.
+    - Auto-expires after 60 seconds.
+    - DJ/Admin bypass triggers immediate skip.
+    """
+
+    def __init__(
+        self,
+        bot:       "MusicBot",
+        guild_id:  int,
+        threshold: int,
+        track_title: str,
+    ) -> None:
+        super().__init__(timeout=60)
+        self.bot         = bot
+        self.guild_id    = guild_id
+        self.threshold   = threshold
+        self.track_title = track_title
+        self._message: Optional[discord.Message] = None
+
+    def set_message(self, msg: discord.Message) -> None:
+        self._message = msg
+
+    def _voter_names(self, guild: discord.Guild) -> list[str]:
+        player = self.bot.get_player(self.guild_id)
+        names = []
+        for uid in player.skip_votes:
+            member = guild.get_member(uid)
+            names.append(member.display_name if member else f"User#{uid}")
+        return names
+
+    async def _refresh(self, interaction: discord.Interaction) -> None:
+        player = self.bot.get_player(self.guild_id)
+        guild  = self.bot.get_guild(self.guild_id)
+        embed  = vote_skip_embed(
+            track_title = self.track_title,
+            votes       = player.skip_votes,
+            threshold   = self.threshold,
+            voters      = self._voter_names(guild) if guild else [],
+        )
+        try:
+            await interaction.response.edit_message(embed=embed, view=self)
+        except discord.InteractionResponded:
+            if self._message:
+                await self._message.edit(embed=embed, view=self)
+
+    @discord.ui.button(label="⏭️ Vote Skip", style=discord.ButtonStyle.danger, custom_id="vs_vote")
+    async def vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+        guild   = self.bot.get_guild(self.guild_id)
+        vc      = guild.voice_client if guild else None
+
+        # Must be in the same voice channel
+        if not interaction.user.voice or (vc and interaction.user.voice.channel != vc.channel):
+            await interaction.response.send_message(
+                embed=error_embed("Not in Voice", "Join the voice channel to vote."), ephemeral=True
+            )
+            return
+
+        if user_id in player.skip_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Already Voted", "You already voted to skip this track."), ephemeral=True
+            )
+            return
+
+        player.skip_votes.add(user_id)
+        await self._refresh(interaction)
+
+        # Check threshold
+        if len(player.skip_votes) >= self.threshold:
+            self.stop()
+            if vc and (vc.is_playing() or vc.is_paused()):
+                vc.stop()
+            if self._message:
+                await self._message.edit(
+                    embed=success_embed("Skipped! ⏭", f"Vote threshold reached ({self.threshold}/{self.threshold})."),
+                    view=None,
+                )
+
+    @discord.ui.button(label="❌ Cancel Vote", style=discord.ButtonStyle.secondary, custom_id="vs_cancel")
+    async def cancel_vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+
+        if user_id not in player.skip_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Not Voted", "You haven't voted to skip."), ephemeral=True
+            )
+            return
+
+        player.skip_votes.discard(user_id)
+        await self._refresh(interaction)
+
+    async def on_timeout(self) -> None:
+        if self._message:
+            try:
+                await self._message.edit(
+                    embed=info_embed("Vote Expired", "The vote-skip poll expired without enough votes."),
+                    view=None,
+                )
+            except Exception:
+                pass
+
+
+# ─────────────────────────── History View (Tier-S #4) ─────────────────────────────
+
+class HistoryView(discord.ui.View):
+    """Paginated play-history view with Replay buttons."""
+
+    def __init__(
+        self,
+        bot:      "MusicBot",
+        guild_id: int,
+        rows:     list[dict],
+        play_cb,              # async callable(interaction, Track)
+        page:     int = 1,
+    ) -> None:
+        super().__init__(timeout=120)
+        self.bot      = bot
+        self.guild_id = guild_id
+        self.rows     = rows
+        self._cb      = play_cb
+        self.page     = page
+        self._rebuild()
+
+    ITEMS_PER_PAGE = 5
+
+    def _total_pages(self) -> int:
+        return max(1, math.ceil(len(self.rows) / self.ITEMS_PER_PAGE))
+
+    def _rebuild(self) -> None:
+        """Rebuild buttons: nav + replay buttons for current page items."""
+        self.clear_items()
+        from models.track import Track as T
+
+        total = self._total_pages()
+        start = (self.page - 1) * self.ITEMS_PER_PAGE
+        items = self.rows[start:start + self.ITEMS_PER_PAGE]
+
+        # Replay buttons (row 0-2)
+        for idx, row in enumerate(items):
+            try:
+                track = T.from_json(row["track_data"])
+            except Exception:
+                continue
+            btn = discord.ui.Button(
+                label    = f"🔄 {truncate(track.title, 40)}",
+                style    = discord.ButtonStyle.primary,
+                custom_id= f"hist_replay_{start + idx}",
+                row      = idx % 4,
+            )
+            # Capture loop variable
+            def make_callback(t: T):
+                async def _cb(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                    await inter.response.defer()
+                    await self._cb(inter, t)
+                return _cb
+            btn.callback = make_callback(track)
+            self.add_item(btn)
+
+        # Nav buttons (last row)
+        prev_btn = discord.ui.Button(
+            label    = "◄",
+            style    = discord.ButtonStyle.secondary,
+            custom_id= "hist_prev",
+            disabled = self.page <= 1,
+            row      = 4,
+        )
+        prev_btn.callback = self._prev
+        self.add_item(prev_btn)
+
+        next_btn = discord.ui.Button(
+            label    = "►",
+            style    = discord.ButtonStyle.secondary,
+            custom_id= "hist_next",
+            disabled = self.page >= total,
+            row      = 4,
+        )
+        next_btn.callback = self._next
+        self.add_item(next_btn)
+
+    async def _prev(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.page = max(1, self.page - 1)
+        self._rebuild()
+        embed = history_embed(self.rows, self.guild_id, self.page, self.ITEMS_PER_PAGE)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    async def _next(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        self.page = min(self._total_pages(), self.page + 1)
+        self._rebuild()
+        embed = history_embed(self.rows, self.guild_id, self.page, self.ITEMS_PER_PAGE)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+
+# ─────────────────────────── Queue Search Result View (Tier-S #7) ────────────────────
+
+class QueueSearchResultView(discord.ui.View):
+    """
+    Shows up to 5 queue-search results with Jump / Remove buttons per track.
+    """
+
+    def __init__(
+        self,
+        bot:      "MusicBot",
+        guild_id: int,
+        results:  list[tuple[int, object]],  # (1-based position, Track)
+        jump_cb,                             # async callable(interaction, 1-based pos)
+        remove_cb,                           # async callable(interaction, 1-based pos)
+    ) -> None:
+        super().__init__(timeout=60)
+        self.bot       = bot
+        self.guild_id  = guild_id
+        self.results   = results
+        self._jump_cb  = jump_cb
+        self._rm_cb    = remove_cb
+        self._build()
+
+    def _build(self) -> None:
+        self.clear_items()
+        for row_idx, (pos, track) in enumerate(self.results[:4]):
+            jump_btn = discord.ui.Button(
+                label    = f"↪ #{pos}",
+                style    = discord.ButtonStyle.primary,
+                custom_id= f"qs_jump_{pos}",
+                row      = row_idx,
+            )
+            rm_btn = discord.ui.Button(
+                label    = f"🗑 Remove",
+                style    = discord.ButtonStyle.danger,
+                custom_id= f"qs_rm_{pos}",
+                row      = row_idx,
+            )
+
+            def make_jump(p: int):
+                async def _j(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                    await inter.response.defer()
+                    await self._jump_cb(inter, p)
+                return _j
+
+            def make_rm(p: int):
+                async def _r(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                    await inter.response.defer()
+                    await self._rm_cb(inter, p)
+                return _r
+
+            jump_btn.callback = make_jump(pos)
+            rm_btn.callback   = make_rm(pos)
+            self.add_item(jump_btn)
+            self.add_item(rm_btn)

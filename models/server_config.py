@@ -5,6 +5,11 @@ V3 additions:
   - dj_role_id: optional DJ role — only DJ+ can run destructive commands
   - request_channel_id: text channel that accepts bare queries as /play
   - auto_playlist: per-guild toggle for auto-fill from history
+
+Tier-S additions:
+  - queue_locked: prevents non-DJ/Admin from adding to queue (Feature 2)
+  - queue_add_permission: granular permission level for adding tracks (Feature 3)
+  - duplicate_mode: how duplicate URLs are handled (Feature 6)
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Optional
 
-from models.enums import AudioQuality
+from models.enums import AudioQuality, QueuePermission, DuplicateMode
 
 
 @dataclass
@@ -42,6 +47,15 @@ class ServerConfig:
     # Playlist import limit
     max_playlist_tracks: int = 100
 
+    # Tier-S: Queue Lock (Feature 2)
+    queue_locked: bool = False
+
+    # Tier-S: Queue Permission Level (Feature 3)
+    queue_add_permission: QueuePermission = QueuePermission.EVERYONE
+
+    # Tier-S: Duplicate Detection Mode (Feature 6)
+    duplicate_mode: DuplicateMode = DuplicateMode.ALLOW
+
     # ── Serialisation ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -56,7 +70,10 @@ class ServerConfig:
             "request_channel_id":  self.request_channel_id,
             "auto_playlist":       self.auto_playlist,
             "auto_playlist_size":  self.auto_playlist_size,
-            "max_playlist_tracks": self.max_playlist_tracks,
+            "max_playlist_tracks":    self.max_playlist_tracks,
+            "queue_locked":           self.queue_locked,
+            "queue_add_permission":   self.queue_add_permission.value,
+            "duplicate_mode":         self.duplicate_mode.value,
         }
 
     def to_json(self) -> str:
@@ -73,9 +90,12 @@ class ServerConfig:
             dj_only            = bool(data.get("dj_only", False)),
             dj_role_id         = data.get("dj_role_id"),
             request_channel_id = data.get("request_channel_id"),
-            auto_playlist      = bool(data.get("auto_playlist", False)),
-            auto_playlist_size = int(data.get("auto_playlist_size", 5)),
-            max_playlist_tracks= int(data.get("max_playlist_tracks", 100)),
+            auto_playlist         = bool(data.get("auto_playlist", False)),
+            auto_playlist_size    = int(data.get("auto_playlist_size", 5)),
+            max_playlist_tracks   = int(data.get("max_playlist_tracks", 100)),
+            queue_locked          = bool(data.get("queue_locked", False)),
+            queue_add_permission  = QueuePermission(data.get("queue_add_permission", "everyone")),
+            duplicate_mode        = DuplicateMode(data.get("duplicate_mode", "allow")),
         )
 
     @classmethod

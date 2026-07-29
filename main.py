@@ -58,6 +58,7 @@ _COGS = [
     "cogs.info",
     "cogs.favorites",
     "cogs.admin",
+    "cogs.bookmark_cog",   # Tier-S Feature 5: Queue Bookmarks
 ]
 
 
