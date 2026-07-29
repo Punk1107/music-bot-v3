@@ -57,12 +57,14 @@ class MusicControlView(discord.ui.View):
     def _sync_buttons(self) -> None:
         player     = self.bot.get_player(self.guild_id)
         queue_size = len(player)
-        is_playing = player.now_playing is not None
 
-        # Detect paused state
+        # Detect actual voice client state
         guild = self.bot.get_guild(self.guild_id)
         vc_client = guild.voice_client if guild else None
-        is_paused = bool(vc_client and vc_client.is_paused())
+        is_paused  = bool(vc_client and vc_client.is_paused())
+        vc_active  = bool(vc_client and (vc_client.is_playing() or vc_client.is_paused()))
+        # Fallback: treat as active if player thinks something is playing
+        is_playing = vc_active or (player.now_playing is not None)
 
         for child in self.children:
             if not hasattr(child, "custom_id"):
@@ -151,10 +153,20 @@ class MusicControlView(discord.ui.View):
         if not await self._check(interaction):
             return
         vc = self._vc(interaction)
-        if vc and vc.is_playing():
+        if not vc:
+            await interaction.response.send_message(
+                embed=error_embed("Not Connected", "Not in a voice channel."), ephemeral=True
+            )
+            return
+        if vc.is_playing():
             vc.pause()
-        elif vc and vc.is_paused():
+        elif vc.is_paused():
             vc.resume()
+        else:
+            await interaction.response.send_message(
+                embed=error_embed("Nothing Playing", "There is nothing to pause or resume."), ephemeral=True
+            )
+            return
         await self._refresh_message(interaction)
 
     @discord.ui.button(label="⏭ Skip", style=discord.ButtonStyle.primary, custom_id="mb_skip", row=0)
@@ -163,7 +175,7 @@ class MusicControlView(discord.ui.View):
             return
         await interaction.response.defer()
         vc = self._vc(interaction)
-        if vc and vc.is_playing():
+        if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
         self._sync_buttons()
 
