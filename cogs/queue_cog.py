@@ -202,9 +202,9 @@ class QueueCog(commands.Cog, name="Queue"):
 
     # ── Feature 4: Queue History ──────────────────────────────────────────────
 
-    @app_commands.command(name="history", description="Show recently played tracks with replay buttons")
+    @app_commands.command(name="qhistory", description="Show recently played tracks with replay buttons")
     @app_commands.describe(limit="Number of tracks to show (default: 20, max: 50)")
-    async def history(self, interaction: discord.Interaction, limit: int = 20) -> None:
+    async def qhistory(self, interaction: discord.Interaction, limit: int = 20) -> None:
         await interaction.response.defer()
         limit = max(1, min(limit, 50))
         rows  = await self.bot.db.get_history(interaction.guild_id, limit=limit)
