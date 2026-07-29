@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS queue_bookmarks (
     UNIQUE(user_id, guild_id, name)
 );
 
+-- Tier-S+ NEW: session_state (Feature 11 — Resume Position)
+-- Stores full playback state on crash/graceful shutdown for restoration.
+CREATE TABLE IF NOT EXISTS session_state (
+    guild_id        INTEGER PRIMARY KEY,
+    channel_id      INTEGER NOT NULL DEFAULT 0,  -- voice channel to rejoin
+    text_channel_id INTEGER NOT NULL DEFAULT 0,  -- text channel for messages
+    now_playing     TEXT,                         -- JSON Track or NULL
+    elapsed_secs    INTEGER NOT NULL DEFAULT 0,   -- seconds into current track
+    queue_json      TEXT    NOT NULL DEFAULT '[]',-- JSON array of queued Tracks
+    loop_mode       TEXT    NOT NULL DEFAULT 'off',
+    volume          REAL    NOT NULL DEFAULT 1.0,
+    effects_json    TEXT    NOT NULL DEFAULT '[]',-- JSON list of AudioEffect values
+    saved_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_queue_guild_pos       ON queue(guild_id, position);
 CREATE INDEX IF NOT EXISTS idx_history_guild_user    ON history(guild_id, user_id);
@@ -705,3 +720,90 @@ class DatabaseManager:
             )
             await conn.commit()
             return cursor.rowcount > 0
+
+    # ── Session State (Tier-S+ Feature 11: Resume Position) ───────────────────
+
+    async def save_session_state(
+        self,
+        guild_id:        int,
+        channel_id:      int,
+        text_channel_id: int,
+        now_playing:     Optional[Track],
+        elapsed_secs:    int,
+        queue:           list[Track],
+        loop_mode:       str,
+        volume:          float,
+        effects:         list[str],
+    ) -> None:
+        """
+        Upsert full playback state for a guild.
+        Called on graceful shutdown AND every 60s as a heartbeat.
+        """
+        now_json    = json.dumps(now_playing.to_dict(), ensure_ascii=False) if now_playing else None
+        queue_json  = json.dumps([t.to_dict() for t in queue], ensure_ascii=False)
+        effect_json = json.dumps(effects, ensure_ascii=False)
+
+        async with self._connect() as conn:
+            await conn.execute(
+                """
+                INSERT INTO session_state
+                    (guild_id, channel_id, text_channel_id, now_playing, elapsed_secs,
+                     queue_json, loop_mode, volume, effects_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                    channel_id      = excluded.channel_id,
+                    text_channel_id = excluded.text_channel_id,
+                    now_playing     = excluded.now_playing,
+                    elapsed_secs    = excluded.elapsed_secs,
+                    queue_json      = excluded.queue_json,
+                    loop_mode       = excluded.loop_mode,
+                    volume          = excluded.volume,
+                    effects_json    = excluded.effects_json,
+                    saved_at        = CURRENT_TIMESTAMP
+                """,
+                (guild_id, channel_id, text_channel_id, now_json, elapsed_secs,
+                 queue_json, loop_mode, volume, effect_json),
+            )
+            await conn.commit()
+
+    async def load_session_state(self, guild_id: int) -> Optional[dict]:
+        """
+        Load saved session state for a guild.
+        Returns dict with keys:
+            channel_id, text_channel_id, now_playing (Track|None),
+            elapsed_secs, queue (list[Track]), loop_mode (str),
+            volume (float), effects (list[str])
+        Returns None if no state is saved.
+        """
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                "SELECT * FROM session_state WHERE guild_id = ?",
+                (guild_id,),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            now_playing = Track.from_json(row["now_playing"]) if row["now_playing"] else None
+            queue_data  = json.loads(row["queue_json"] or "[]")
+            queue       = [Track.from_dict(d) for d in queue_data]
+            effects     = json.loads(row["effects_json"] or "[]")
+            return {
+                "channel_id":      int(row["channel_id"]),
+                "text_channel_id": int(row["text_channel_id"]),
+                "now_playing":     now_playing,
+                "elapsed_secs":    int(row["elapsed_secs"]),
+                "queue":           queue,
+                "loop_mode":       row["loop_mode"],
+                "volume":          float(row["volume"]),
+                "effects":         effects,
+            }
+        except Exception as exc:
+            logger.warning("Session state load error guild %d: %s", guild_id, exc)
+            return None
+
+    async def clear_session_state(self, guild_id: int) -> None:
+        """Remove saved session state after successful restore."""
+        async with self._connect() as conn:
+            await conn.execute("DELETE FROM session_state WHERE guild_id = ?", (guild_id,))
+            await conn.commit()

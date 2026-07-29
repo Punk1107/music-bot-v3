@@ -28,6 +28,9 @@ from core.circuit_breaker import CircuitBreakerOpen
 from core.validator import validate_url, validate_search_query
 from models.track import Track
 from models.enums import QueuePermission, DuplicateMode
+from core.media_cache import (          # Tier-S+ F14 F15
+    prewarm_queue_thumbnails, bg_refresh_metadata,
+)
 from utils.embeds import (
     error_embed, success_embed, info_embed, warning_embed,
     now_playing_embed, track_added_embed, playlist_added_embed,
@@ -388,13 +391,20 @@ class MusicCog(commands.Cog, name="Music"):
 
         # ── Build FFmpeg options ───────────────────────────────────────────────
         cfg_server = await self.bot.db.get_server_config(guild_id)
+
+        # Feature 11: Resume offset — if track has a stored position, seek to it
+        resume_offset = getattr(next_track, "_resume_offset", 0) or 0
+        if resume_offset:
+            next_track._resume_offset = 0  # clear after use
+
         ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
-            effects = player.effects,
-            volume  = player.volume,
-            quality = cfg_server.audio_quality,
+            effects       = player.effects,
+            volume        = player.volume,
+            quality       = cfg_server.audio_quality,
+            seek_seconds  = resume_offset,   # seek to saved position
         )
 
-        # ── Start playback ────────────────────────────────────────────────────
+        # ── Start playback (Feature 13: use warm pool) ────────────────────────
         def after_play(error: Optional[Exception]) -> None:
             if error:
                 logger.error("Playback error in guild %d: %s", guild_id, error)
@@ -403,7 +413,12 @@ class MusicCog(commands.Cog, name="Music"):
             )
 
         try:
-            await self.bot.audio_backend.play(vc, stream_url, ffmpeg_opts, after_play)
+            # Feature 13: acquire pre-warmed source from pool
+            source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
+            vc.play(source, after=after_play)
+            # Replenish the pool in the background
+            asyncio.create_task(self.bot.ffmpeg_pool.replenish())
+            logger.debug("FFmpegWarmPool: playing %s…", stream_url[:80])
         except Exception as exc:
             logger.error("FFmpeg start failed: %s", exc)
             if skip_depth < config.SKIP_ERROR_LIMIT:
@@ -419,6 +434,16 @@ class MusicCog(commands.Cog, name="Music"):
         # ── Record analytics ───────────────────────────────────────────────────
         asyncio.create_task(
             self.bot.db.log_event(guild_id, "track_play", {"title": next_track.title, "url": next_track.url})
+        )
+
+        # ── Feature 15: Background metadata refresh ───────────────────────────
+        asyncio.create_task(
+            bg_refresh_metadata(next_track, self.bot.youtube)
+        )
+
+        # ── Feature 14: Predictive thumbnail pre-warm for next N tracks ────────
+        asyncio.create_task(
+            prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=5)
         )
 
         # ── Send now-playing embed ────────────────────────────────────────────

@@ -39,11 +39,15 @@ class AudioEffectsProcessor:
 
     def build_ffmpeg_options(
         self,
-        effects:  list[AudioEffect] = (),
-        volume:   float             = 1.0,
-        quality:  AudioQuality      = AudioQuality.HIGH,
-        seek_sec: int               = 0,
+        effects:      list[AudioEffect] = (),
+        volume:       float             = 1.0,
+        quality:      AudioQuality      = AudioQuality.HIGH,
+        seek_sec:     int               = 0,
+        seek_seconds: int               = 0,   # alias for seek_sec (Feature 11)
     ) -> dict:
+        # Merge both aliases
+        seek_sec = seek_sec or seek_seconds
+
         """
         Return a dict with keys `before_options` and `options` suitable for
         discord.py's FFmpegPCMAudio constructor.

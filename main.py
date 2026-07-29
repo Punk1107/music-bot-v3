@@ -43,6 +43,11 @@ from core.audio_backend  import create_backend
 from core.circuit_breaker import CircuitBreaker
 from core.nlu            import NLUPipeline
 from core.player         import GuildPlayer
+from core.ffmpeg_pool    import FFmpegWarmPool       # Tier-S+ F13
+from core.media_cache    import (                    # Tier-S+ F14 F15
+    prewarm_queue_thumbnails, bg_refresh_metadata, prune_caches as prune_media_caches,
+    cache_stats as media_cache_stats,
+)
 from webserver           import WebServer
 
 
@@ -90,6 +95,7 @@ class MusicBot(commands.Bot):
         self.audio_backend                       = create_backend()
         self.nlu:            NLUPipeline         = NLUPipeline()
         self.webserver:      WebServer           = WebServer(self)
+        self.ffmpeg_pool:    FFmpegWarmPool      = FFmpegWarmPool()  # Tier-S+ F13
 
         # ── Circuit breakers ──────────────────────────────────────────────────
         self.yt_breaker = CircuitBreaker(
@@ -162,6 +168,10 @@ class MusicBot(commands.Bot):
         self._np_refresh.start()
         self._cache_prune.start()
         self._analytics_prune.start()
+        self._session_heartbeat.start()  # Tier-S+ F11: session state heartbeat
+
+        # Tier-S+ F13: Warm FFmpeg pool
+        asyncio.create_task(self.ffmpeg_pool.initialise())
 
         logger.info("✅ Setup complete. Bot is starting…")
 
@@ -171,10 +181,32 @@ class MusicBot(commands.Bot):
 
         # Stop background tasks
         for t in [self._idle_check, self._queue_save, self._np_refresh,
-                  self._cache_prune, self._analytics_prune]:
+                  self._cache_prune, self._analytics_prune, self._session_heartbeat]:
             t.cancel()
 
-        # Persist all active queues
+        # Tier-S+ F11: Persist FULL session state (including now_playing position)
+        for guild_id, player in self._players.items():
+            if player.now_playing or player.queue:
+                guild = self.get_guild(guild_id)
+                vc    = guild.voice_client if guild else None
+                channel_id      = vc.channel.id if vc else (player.last_channel_id or 0)
+                text_channel_id = player.text_channel.id if player.text_channel else 0
+                try:
+                    await self.db.save_session_state(
+                        guild_id        = guild_id,
+                        channel_id      = channel_id,
+                        text_channel_id = text_channel_id,
+                        now_playing     = player.now_playing,
+                        elapsed_secs    = player.elapsed_seconds,
+                        queue           = player.queue,
+                        loop_mode       = player.loop_mode.value,
+                        volume          = player.volume,
+                        effects         = [e.value for e in player.effects],
+                    )
+                except Exception as exc:
+                    logger.warning("Session state save on shutdown guild %d: %s", guild_id, exc)
+
+        # Also save queue for legacy restore path
         for guild_id, player in self._players.items():
             if player.queue or player.now_playing:
                 guild = self.get_guild(guild_id)
@@ -194,6 +226,9 @@ class MusicBot(commands.Bot):
                     await vc.disconnect(force=True)
                 except Exception:
                     pass
+
+        # Tier-S+ F13: Close FFmpeg warm pool
+        await self.ffmpeg_pool.close()
 
         # Stop webserver
         await self.webserver.stop()
@@ -227,15 +262,62 @@ class MusicBot(commands.Bot):
             await self._restore_queues()
 
     async def _restore_queues(self) -> None:
+        """
+        Tier-S+ Feature 11: Full session state restore on bot start.
+        Restores: queue, loop mode, volume, effects, and the now-playing track
+        (which is re-added to front of queue so it plays first after resume).
+        """
+        from models.enums import LoopMode, AudioEffect
         for guild in self.guilds:
             try:
+                # Try full session state first (Tier-S+)
+                state = await self.db.load_session_state(guild.id)
+                if state:
+                    player = self.get_player(guild.id)
+                    player.loop_mode = LoopMode(state["loop_mode"])
+                    player.volume    = state["volume"]
+                    player.effects   = [
+                        AudioEffect(e) for e in state["effects"]
+                        if e in [ae.value for ae in AudioEffect]
+                    ]
+
+                    # Restore text channel
+                    if state["text_channel_id"]:
+                        tc = guild.get_channel(state["text_channel_id"])
+                        if tc:
+                            player.text_channel = tc
+
+                    # Rebuild queue: now_playing goes to front
+                    restored_tracks = []
+                    if state["now_playing"]:
+                        # Put now_playing at front with elapsed position info attached
+                        t = state["now_playing"]
+                        t._resume_offset = state["elapsed_secs"]  # carry offset for Feature 12
+                        restored_tracks.append(t)
+                    restored_tracks.extend(state["queue"])
+
+                    if restored_tracks:
+                        await player.extend(restored_tracks)
+                        logger.info(
+                            "Full session restored for guild %d: %d tracks, loop=%s, vol=%.0f%%, effects=%s",
+                            guild.id, len(restored_tracks),
+                            player.loop_mode.value, player.volume * 100,
+                            [e.value for e in player.effects],
+                        )
+
+                    # Clear state after successful restore (don't replay on next start)
+                    await self.db.clear_session_state(guild.id)
+                    continue
+
+                # Fallback: legacy queue-only restore
                 tracks = await self.db.load_queue(guild.id)
                 if tracks:
                     player = self.get_player(guild.id)
                     await player.extend(tracks)
-                    logger.info("Restored %d track(s) for guild %d", len(tracks), guild.id)
+                    logger.info("Legacy queue restored for guild %d: %d tracks", guild.id, len(tracks))
+
             except Exception as exc:
-                logger.warning("Queue restore error for guild %d: %s", guild.id, exc)
+                logger.warning("Session restore error for guild %d: %s", guild.id, exc)
 
     async def on_guild_join(self, guild: discord.Guild) -> None:
         logger.info("Joined guild: %s (ID: %d)", guild.name, guild.id)
@@ -252,13 +334,35 @@ class MusicBot(commands.Bot):
         before: discord.VoiceState,
         after:  discord.VoiceState,
     ) -> None:
-        """Track idle state: if bot is alone in voice, start idle timer."""
-        if member.bot:
-            return
-
+        """Track idle state and handle bot's own voice disconnects (Feature 12)."""
         guild  = member.guild
         player = self.get_player(guild.id)
         vc     = guild.voice_client
+
+        # Feature 12: Detect when the BOT itself gets disconnected unexpectedly
+        if member.id == self.user.id:
+            was_connected = before.channel is not None
+            now_connected = after.channel  is not None
+            if was_connected and not now_connected:
+                # Bot was kicked from voice / Discord dropped the connection
+                if not player.intentional_disconnect and player.now_playing:
+                    logger.info(
+                        "guild %d: Bot voice disconnected unexpectedly — scheduling reconnect",
+                        guild.id,
+                    )
+                    # Delegate reconnect + resume to MusicCog._try_reconnect
+                    # by triggering _play_next after a short delay
+                    music_cog = self.cogs.get("Music")
+                    if music_cog:
+                        async def _delayed_resume(gid: int) -> None:
+                            await asyncio.sleep(2)
+                            await music_cog._play_next(gid)
+                        asyncio.create_task(_delayed_resume(guild.id))
+            return
+
+        # Idle tracking: if no human members left in voice channel
+        if member.bot:
+            return
 
         if not vc or not vc.channel:
             return
@@ -545,10 +649,14 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(minutes=30)
     async def _cache_prune(self) -> None:
-        """Prune expired yt-dlp cache entries every 30 minutes."""
+        """Prune expired yt-dlp cache entries and media cache every 30 minutes."""
         raw_n, search_n = await self.youtube.prune_cache()
-        if raw_n or search_n:
-            logger.debug("Cache prune: removed %d raw, %d search entries.", raw_n, search_n)
+        thumb_n, meta_n = prune_media_caches()  # Tier-S+ F14
+        if raw_n or search_n or thumb_n or meta_n:
+            logger.debug(
+                "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
+                raw_n, search_n, thumb_n, meta_n,
+            )
 
     @_cache_prune.before_loop
     async def _before_cache_prune(self) -> None:
@@ -565,6 +673,40 @@ class MusicBot(commands.Bot):
 
     @_analytics_prune.before_loop
     async def _before_analytics_prune(self) -> None:
+        await self.wait_until_ready()
+
+    # Tier-S+ Feature 11: Session State Heartbeat ─────────────────────────────
+
+    @tasks.loop(seconds=60)
+    async def _session_heartbeat(self) -> None:
+        """
+        Save full playback state every 60 seconds for each active guild.
+        This means a crash loses at most 60s of position data.
+        """
+        for guild_id, player in list(self._players.items()):
+            if not player.now_playing:
+                continue
+            guild = self.get_guild(guild_id)
+            vc    = guild.voice_client if guild else None
+            if not vc:
+                continue
+            try:
+                await self.db.save_session_state(
+                    guild_id        = guild_id,
+                    channel_id      = vc.channel.id,
+                    text_channel_id = player.text_channel.id if player.text_channel else 0,
+                    now_playing     = player.now_playing,
+                    elapsed_secs    = player.elapsed_seconds,
+                    queue           = player.queue,
+                    loop_mode       = player.loop_mode.value,
+                    volume          = player.volume,
+                    effects         = [e.value for e in player.effects],
+                )
+            except Exception as exc:
+                logger.debug("Session heartbeat error guild %d: %s", guild_id, exc)
+
+    @_session_heartbeat.before_loop
+    async def _before_session_heartbeat(self) -> None:
         await self.wait_until_ready()
 
     # ── Error handlers ────────────────────────────────────────────────────────
