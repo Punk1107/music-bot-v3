@@ -210,22 +210,33 @@ class YouTubeExtractor:
     def _extract_stream_url(entry: dict) -> str | None:
         formats = entry.get("formats") or []
         if formats:
+            # audio-only: vcodec must be explicitly "none" (not None/missing)
             audio_only = [
                 f for f in formats
-                if f.get("vcodec") in ("none", None, "") and f.get("url")
+                if f.get("vcodec") == "none" and f.get("url")
             ]
-            candidates = audio_only or [f for f in formats if f.get("url")]
+            candidates = audio_only or [
+                f for f in formats
+                if f.get("url") and f.get("acodec") not in (None, "none", "")
+            ] or [f for f in formats if f.get("url")]
             if candidates:
                 best = max(candidates, key=lambda f: (f.get("abr") or f.get("tbr") or 0))
                 stream = best.get("url")
                 if stream:
                     return stream
+        # Fallback: use the top-level URL from yt-dlp
+        # Only reject actual YouTube watch/short page URLs — CDN (googlevideo.com) is fine
         stream = entry.get("url")
-        if (
-            stream
-            and not stream.startswith("http://www.youtube")
-            and not stream.startswith("https://www.youtube")
-            and "youtu" not in stream
+        if stream and not any(
+            stream.startswith(prefix)
+            for prefix in (
+                "http://www.youtube.com/watch",
+                "https://www.youtube.com/watch",
+                "http://youtu.be/",
+                "https://youtu.be/",
+                "http://www.youtube.com/shorts",
+                "https://www.youtube.com/shorts",
+            )
         ):
             return stream
         return None
