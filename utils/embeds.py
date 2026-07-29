@@ -68,6 +68,7 @@ def track_added_embed(
     position:   int,
     color:      int = 0x5865F2,
     requester:  Optional[discord.User] = None,
+    eta_secs:   Optional[int] = None,
 ) -> discord.Embed:
     """
     Track-added card with 3-column inline fields matching the screenshot layout:
@@ -77,6 +78,7 @@ def track_added_embed(
 
       ⏱ Duration  |  📋 Position  |  👤 Uploader
       3:31              #1            marr team official
+      🕐 Starts in: 5m 20s
 
       Footer: avatar · Requested by …
     """
@@ -89,6 +91,13 @@ def track_added_embed(
     embed.add_field(name="⏱ Duration",  value=f"{track.duration_str}",                  inline=True)
     embed.add_field(name="📋 Position", value=f"#{position}",                            inline=True)
     embed.add_field(name="👤 Uploader", value=truncate(track.uploader or "Unknown", 35), inline=True)
+
+    if eta_secs is not None and eta_secs > 0:
+        embed.add_field(
+            name="🕐 Starts in",
+            value=format_duration(eta_secs),
+            inline=False,
+        )
 
     if requester:
         embed.set_footer(
@@ -396,3 +405,188 @@ def stats_embed(
 
     embed.set_thumbnail(url=user.display_avatar.url)
     return embed
+
+
+# ── Vote Skip embed (Tier-S Feature 1) ────────────────────────────────────────────────
+
+def vote_skip_embed(
+    track_title: str,
+    votes:       set[int],
+    threshold:   int,
+    voters:      list[str],   # display names of voters
+    color:       int = 0xF39C12,
+) -> discord.Embed:
+    """Live vote-skip progress embed with ASCII progress bar."""
+    filled   = round((len(votes) / max(1, threshold)) * 10)
+    filled   = min(filled, 10)
+    bar      = "█" * filled + "░" * (10 - filled)
+    pct      = int(len(votes) / max(1, threshold) * 100)
+
+    lines = [
+        f"**Track:** {truncate(track_title, 60)}",
+        "",
+        f"**Skip Votes**  `{len(votes)}/{threshold}`",
+        f"`{bar}` {pct}%",
+        "",
+    ]
+    if voters:
+        voter_lines = [f"✅ {name}" for name in voters[:10]]
+        remaining   = threshold - len(voters)
+        for _ in range(min(remaining, 5)):
+            voter_lines.append("⬜ *Waiting...*")
+        lines.append("**Votes:**\n" + "\n".join(voter_lines))
+
+    embed = discord.Embed(
+        title       = "⏭️  Vote Skip",
+        description = "\n".join(lines),
+        color       = color,
+    )
+    embed.set_footer(text=f"React to vote • Expires in 60s")
+    return embed
+
+
+# ── Queue History embed (Tier-S Feature 4) ────────────────────────────────────────────
+
+def history_embed(
+    rows:    list[dict],
+    guild_id: int,
+    page:    int = 1,
+    per_page: int = 10,
+    color:   int = 0x9B59B6,
+) -> discord.Embed:
+    """Paginated play-history embed."""
+    from models.track import Track as T
+    total       = len(rows)
+    total_pages = max(1, math.ceil(total / per_page))
+    page        = max(1, min(page, total_pages))
+    start       = (page - 1) * per_page
+    items       = rows[start:start + per_page]
+
+    lines = []
+    for i, row in enumerate(items, start + 1):
+        try:
+            t    = T.from_json(row["track_data"])
+            when = row.get("played_at", "")[:16]  # trim to YYYY-MM-DD HH:MM
+            flag = "⏭" if row.get("skipped") else ("✅" if row.get("completed") else "▶️")
+            lines.append(
+                f"`{i:>2}.` {flag} [{truncate(t.title, 48)}]({t.url}) `{t.duration_str}`\n"
+                f"      └ `{when}`"
+            )
+        except Exception:
+            pass
+
+    embed = discord.Embed(
+        title       = "🕐  Play History",
+        description = "\n".join(lines) if lines else "*No history yet.*",
+        color       = color,
+    )
+    embed.set_footer(text=f"Page {page}/{total_pages} · Total {total} tracks")
+    return embed
+
+
+# ── Queue Bookmark embeds (Tier-S Feature 5) ────────────────────────────────────────
+
+def bookmark_list_embed(
+    bookmarks: list[dict],
+    user:      discord.User,
+    color:     int = 0x1ABC9C,
+) -> discord.Embed:
+    embed = discord.Embed(
+        title = f"📋  {user.display_name}'s Bookmarks ({len(bookmarks)})",
+        color = color,
+    )
+    if bookmarks:
+        lines = []
+        for bm in bookmarks[:20]:
+            when = str(bm.get("created_at", ""))[:10]
+            lines.append(
+                f"🔖 **{truncate(bm['name'], 40)}** — {bm['count']} tracks  `{when}`"
+            )
+        embed.description = "\n".join(lines)
+    else:
+        embed.description = "*No bookmarks yet. Use `/bookmark save <name>` to snapshot the queue!*"
+    embed.set_footer(text="Max 20 bookmarks per user")
+    return embed
+
+
+def bookmark_saved_embed(name: str, count: int, color: int = 0x1ABC9C) -> discord.Embed:
+    return discord.Embed(
+        title       = "📋  Bookmark Saved",
+        description = f"Snapshot **`{name}`** saved with **{count}** tracks.",
+        color       = color,
+    )
+
+
+def bookmark_loaded_embed(name: str, count: int, mode: str, color: int = 0x1ABC9C) -> discord.Embed:
+    action = "replaced" if mode == "replace" else "appended to"
+    return discord.Embed(
+        title       = "📋  Bookmark Loaded",
+        description = f"**{count}** tracks from **`{name}`** {action} the queue.",
+        color       = color,
+    )
+
+
+# ── Queue search embed (Tier-S Feature 7) ───────────────────────────────────────────
+
+def queue_search_embed(
+    query:   str,
+    results: list[tuple[int, "Track"]],  # (1-based position, Track)
+    color:   int = 0x5865F2,
+) -> discord.Embed:
+    """Embed showing queue search results with position numbers."""
+    lines = []
+    for pos, track in results[:15]:
+        lines.append(
+            f"`#{pos:>3}` [{truncate(track.title, 50)}]({track.url}) `{track.duration_str}`"
+        )
+    embed = discord.Embed(
+        title       = f"🔍  Queue Search: `{truncate(query, 40)}`",
+        description = "\n".join(lines) if lines else "*No matching tracks found in queue.*",
+        color       = color,
+    )
+    embed.set_footer(text=f"{len(results)} result(s) found")
+    return embed
+
+
+# ── Queue Admin embeds (Features 2, 3, 6) ──────────────────────────────────────────────
+
+def queue_lock_embed(locked: bool) -> discord.Embed:
+    if locked:
+        return discord.Embed(
+            title       = "🔒  Queue Locked",
+            description = "Only **DJ** and **Admin** can add tracks to the queue.",
+            color       = 0xFF4757,
+        )
+    return discord.Embed(
+        title       = "🔓  Queue Unlocked",
+        description = "All users can now add tracks to the queue.",
+        color       = 0x2ED573,
+    )
+
+
+def queue_permission_embed(level: str) -> discord.Embed:
+    labels = {
+        "everyone": "🌐 Everyone",
+        "verified": "✅ Verified members",
+        "dj":       "🎧 DJ role only",
+        "admin":    "🔒 Admins only",
+    }
+    return discord.Embed(
+        title       = "📝  Queue Permission Updated",
+        description = f"Who can add tracks: **{labels.get(level, level)}**",
+        color       = 0x5865F2,
+    )
+
+
+def duplicate_mode_embed(mode: str) -> discord.Embed:
+    labels = {
+        "allow": "✅ Allow — duplicates are added normally",
+        "warn":  "⚠️ Warn — notified, but still added",
+        "block": "🚫 Block — duplicates are rejected",
+        "front": "⏫ Front — existing duplicate moved to front",
+    }
+    return discord.Embed(
+        title       = "🔄  Duplicate Mode Updated",
+        description = f"Mode: **{labels.get(mode, mode)}**",
+        color       = 0x5865F2,
+    )
