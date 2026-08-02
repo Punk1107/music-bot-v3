@@ -348,6 +348,28 @@ class GuildPlayer:
             self._prefetch_task.cancel()
             self._prefetch_task = None
 
+    def adaptive_prefetch_limit(self) -> int:
+        """
+        F33: Adaptive Prefetch — return how many upcoming tracks to pre-warm.
+
+        Strategy:
+          Queue ≥ 20 tracks  → 8  (long queue: get far ahead)
+          Queue ≥ 10 tracks  → 6
+          Queue ≥  5 tracks  → 4
+          Queue ≥  2 tracks  → 3
+          Queue  < 2 tracks  → 2  (minimum: always pre-warm at least next track)
+        """
+        q = len(self._queue)
+        if q >= 20:
+            return 8
+        if q >= 10:
+            return 6
+        if q >= 5:
+            return 4
+        if q >= 2:
+            return 3
+        return 2
+
     # ── Reset ─────────────────────────────────────────────────────────────────
 
     def reset(self) -> None:

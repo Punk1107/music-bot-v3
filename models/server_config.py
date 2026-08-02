@@ -15,6 +15,9 @@ Tier A/A+/B additions:
   - auto_leave_alone, auto_pause_empty: voice channel behaviour (F17, F18)
   - embed_theme: visual theme for embeds (F27)
   - guild_presets: saved preset bundles (F26)
+
+Tier Performance additions:
+  - language: UI locale for this guild ("en" / "th") — F30 Localization
 """
 
 from __future__ import annotations
@@ -74,6 +77,9 @@ class ServerConfig:
     # Stored as {preset_name: {effects, volume, quality, loop, speed, pitch, crossfade}}
     guild_presets: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Tier Performance: Localization (F30) ──────────────────────────────────
+    language: str = "en"  # "en" or "th"
+
     # ── Serialisation ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -97,6 +103,8 @@ class ServerConfig:
             "auto_pause_empty":       self.auto_pause_empty,
             "embed_theme":            self.embed_theme.value,
             "guild_presets":          self.guild_presets,
+            # Tier Performance
+            "language":               self.language,
         }
 
     def to_json(self) -> str:
@@ -124,6 +132,8 @@ class ServerConfig:
             auto_pause_empty      = bool(data.get("auto_pause_empty", True)),
             embed_theme           = EmbedTheme(data.get("embed_theme", "classic")),
             guild_presets         = data.get("guild_presets", {}),
+            # Tier Performance
+            language              = data.get("language", "en"),
         )
 
     @classmethod

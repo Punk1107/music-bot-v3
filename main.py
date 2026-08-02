@@ -48,6 +48,8 @@ from core.media_cache    import (                    # Tier-S+ F14 F15
     prewarm_queue_thumbnails, bg_refresh_metadata, prune_caches as prune_media_caches,
     cache_stats as media_cache_stats,
 )
+from core.lru_cache      import check_memory_pressure, combined_stats as lru_stats  # F31 F32
+from core.self_test      import run_self_test, SelfTestReport                        # F34
 from webserver           import WebServer
 
 
@@ -63,11 +65,13 @@ _COGS = [
     "cogs.info",
     "cogs.favorites",
     "cogs.admin",
-    "cogs.bookmark_cog",   # Tier-S Feature 5: Queue Bookmarks
+    "cogs.bookmark_cog",     # Tier-S  Feature 5: Queue Bookmarks
     "cogs.sleep_timer_cog",  # Tier A  Feature 16: Sleep Timer
     "cogs.playback_cog",     # Tier A+ Features 21-25: Speed/Pitch/Crossfade/Trim/Gain
     "cogs.presets_cog",      # Tier B  Feature 26: Guild Presets
     "cogs.theme_cog",        # Tier B  Feature 27: Theme System
+    "cogs.language_cog",     # Perf    Feature 30: Localization (/language)
+    "cogs.health_cog",       # Perf    Feature 35: Health Report (/health)
 ]
 
 
@@ -122,6 +126,9 @@ class MusicBot(commands.Bot):
         # ── Timing ────────────────────────────────────────────────────────────
         self.start_time: datetime = datetime.now(timezone.utc)
 
+        # ── Tier Performance: Self-test report (F34) ──────────────────────────
+        self.self_test_report: Optional[SelfTestReport] = None
+
     # ── Player registry ───────────────────────────────────────────────────────
 
     def get_player(self, guild_id: int) -> GuildPlayer:
@@ -173,9 +180,13 @@ class MusicBot(commands.Bot):
         self._cache_prune.start()
         self._analytics_prune.start()
         self._session_heartbeat.start()  # Tier-S+ F11: session state heartbeat
+        self._memory_pressure.start()    # Tier Performance F32: memory pressure handler
 
         # Tier-S+ F13: Warm FFmpeg pool
         asyncio.create_task(self.ffmpeg_pool.initialise())
+
+        # Tier Performance F34: Startup self-test (runs concurrently, non-blocking)
+        asyncio.create_task(self._run_startup_self_test())
 
         logger.info("✅ Setup complete. Bot is starting…")
 
@@ -185,7 +196,8 @@ class MusicBot(commands.Bot):
 
         # Stop background tasks
         for t in [self._idle_check, self._queue_save, self._np_refresh,
-                  self._cache_prune, self._analytics_prune, self._session_heartbeat]:
+                  self._cache_prune, self._analytics_prune, self._session_heartbeat,
+                  self._memory_pressure]:
             t.cancel()
 
         # Tier-S+ F11: Persist FULL session state (including now_playing position)
@@ -246,6 +258,14 @@ class MusicBot(commands.Bot):
 
         await super().close()
         logger.info("✅ Shutdown complete.")
+
+    async def _run_startup_self_test(self) -> None:
+        """Run self-test after bot is ready (F34)."""
+        try:
+            await self.wait_until_ready()
+            self.self_test_report = await run_self_test(self)
+        except Exception as exc:
+            logger.error("Self-test runner error: %s", exc)
 
     # ── Events ────────────────────────────────────────────────────────────────
 
@@ -783,6 +803,23 @@ class MusicBot(commands.Bot):
 
     @_session_heartbeat.before_loop
     async def _before_session_heartbeat(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(seconds=60)
+    async def _memory_pressure(self) -> None:
+        """Check RAM usage and evict caches if pressure thresholds exceeded (F32)."""
+        try:
+            result = await check_memory_pressure()
+            if result["level"] >= 2:
+                logger.warning(
+                    "Memory pressure action: %s | %.1f%% RAM | freed %d entries",
+                    result["action"], result["ram_pct"], result["freed"],
+                )
+        except Exception as exc:
+            logger.debug("Memory pressure check error: %s", exc)
+
+    @_memory_pressure.before_loop
+    async def _before_memory_pressure(self) -> None:
         await self.wait_until_ready()
 
     # ── Error handlers ────────────────────────────────────────────────────────
