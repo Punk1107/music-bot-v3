@@ -626,6 +626,4 @@ class QueueCog(commands.Cog, name="Queue"):
 
 
 async def setup(bot: "MusicBot") -> None:
-    cog = QueueCog(bot)
-    bot.tree.add_command(cog._transaction_group)
-    await bot.add_cog(cog)
+    await bot.add_cog(QueueCog(bot))
