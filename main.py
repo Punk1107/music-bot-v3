@@ -72,6 +72,7 @@ _COGS = [
     "cogs.theme_cog",        # Tier B  Feature 27: Theme System
     "cogs.language_cog",     # Perf    Feature 30: Localization (/language)
     "cogs.health_cog",       # Perf    Feature 35: Health Report (/health)
+    "cogs.analytics_cog",    # Tier    Analytics Dashboard (/analytics)
 ]
 
 

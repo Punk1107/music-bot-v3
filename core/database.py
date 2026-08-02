@@ -807,3 +807,279 @@ class DatabaseManager:
         async with self._connect() as conn:
             await conn.execute("DELETE FROM session_state WHERE guild_id = ?", (guild_id,))
             await conn.commit()
+
+    # ── Tier Analytics (analytics_cog) ────────────────────────────────────────
+
+    async def get_analytics_heatmap(
+        self, guild_id: int, days: int = 30
+    ) -> dict[str, list[int]]:
+        """
+        Return a day-of-week × hour heatmap for a guild over the last N days.
+
+        Returns:
+            dict keyed by short day name (Mon…Sun), each value is a list of
+            24 integers (play counts per hour, 0–23).
+        """
+        day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        heatmap: dict[str, list[int]] = {d: [0] * 24 for d in day_names}
+
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT
+                    CAST(strftime('%w', played_at) AS INTEGER) AS dow,
+                    CAST(strftime('%H', played_at) AS INTEGER) AS hour,
+                    COUNT(*) AS plays
+                FROM history
+                WHERE guild_id = ?
+                  AND played_at > datetime('now', ?)
+                GROUP BY dow, hour
+                """,
+                (guild_id, f"-{days} days"),
+            )
+            rows = await cursor.fetchall()
+
+        # SQLite %w: 0=Sunday…6=Saturday → remap to Mon=0…Sun=6
+        dow_remap = {0: 6, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5}
+        for row in rows:
+            idx = dow_remap.get(int(row["dow"]), 0)
+            hour = int(row["hour"])
+            heatmap[day_names[idx]][hour] += int(row["plays"])
+
+        return heatmap
+
+    async def get_analytics_genre(
+        self, guild_id: int, days: int = 30
+    ) -> list[dict]:
+        """
+        Infer genre distribution from track metadata (no AI).
+
+        Uses simple keyword matching on track title + uploader.
+        Returns list of {"genre": str, "count": int} sorted desc.
+        """
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT track_data
+                FROM history
+                WHERE guild_id = ?
+                  AND played_at > datetime('now', ?)
+                """,
+                (guild_id, f"-{days} days"),
+            )
+            rows = await cursor.fetchall()
+
+        # Keyword → genre mapping (order matters — first match wins)
+        _GENRE_RULES: list[tuple[str, list[str]]] = [
+            ("Lo-fi",    ["lofi", "lo-fi", "lo fi", "chillhop", "chill hop"]),
+            ("Hip-Hop",  ["hip hop", "hiphop", "rap", "trap", "drill", "freestyle"]),
+            ("Pop",      ["pop", "idol", "k-pop", "kpop", "j-pop", "jpop"]),
+            ("Rock",     ["rock", "metal", "punk", "grunge", "hardcore", "alt rock"]),
+            ("EDM",      ["edm", "techno", "house", "trance", "dubstep", "dnb",
+                          "drum and bass", "electro", "rave", "progressive"]),
+            ("Jazz",     ["jazz", "blues", "soul", "swing", "bebop"]),
+            ("Classical",["classical", "orchestra", "symphony", "piano", "violin",
+                          "beethoven", "mozart", "bach"]),
+            ("R&B",      ["r&b", "rnb", "rhythm", "funk", "neo soul"]),
+            ("Country",  ["country", "bluegrass", "folk", "americana"]),
+            ("Anime",    ["anime", "ost", "opening", "ending", "insert song",
+                          "jp", "vocaloid", "touhou"]),
+            ("Gaming",   ["game", "gaming", "ost", "soundtrack", "8bit", "chiptune"]),
+        ]
+
+        counts: dict[str, int] = {}
+        for row in rows:
+            try:
+                t = Track.from_json(row["track_data"])
+                haystack = (t.title + " " + t.uploader).lower()
+            except Exception:
+                continue
+
+            matched = False
+            for genre, keywords in _GENRE_RULES:
+                if any(kw in haystack for kw in keywords):
+                    counts[genre] = counts.get(genre, 0) + 1
+                    matched = True
+                    break
+            if not matched:
+                counts["Other"] = counts.get("Other", 0) + 1
+
+        return sorted(
+            [{"genre": g, "count": c} for g, c in counts.items()],
+            key=lambda x: x["count"],
+            reverse=True,
+        )
+
+    async def get_analytics_peak_hours(
+        self, guild_id: int, days: int = 30
+    ) -> list[dict]:
+        """
+        Return hourly play counts sorted descending (top peak hours).
+        Each item: {"hour": int (0-23), "plays": int}.
+        """
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT
+                    CAST(strftime('%H', played_at) AS INTEGER) AS hour,
+                    COUNT(*) AS plays
+                FROM history
+                WHERE guild_id = ?
+                  AND played_at > datetime('now', ?)
+                GROUP BY hour
+                ORDER BY plays DESC
+                """,
+                (guild_id, f"-{days} days"),
+            )
+            rows = await cursor.fetchall()
+        return [{"hour": int(r["hour"]), "plays": int(r["plays"])} for r in rows]
+
+    async def get_analytics_top_entities(
+        self, guild_id: int, days: int = 30, limit: int = 10
+    ) -> dict:
+        """
+        Return top artists (uploaders) and top channels from history metadata.
+
+        Returns:
+            {
+                "artists":  [{"name": str, "plays": int, "minutes": int}, ...],
+                "channels": [{"name": str, "plays": int}, ...],
+            }
+        """
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT track_data, duration_played
+                FROM history
+                WHERE guild_id = ?
+                  AND played_at > datetime('now', ?)
+                """,
+                (guild_id, f"-{days} days"),
+            )
+            rows = await cursor.fetchall()
+
+        artist_plays:   dict[str, int] = {}
+        artist_minutes: dict[str, int] = {}
+        channel_plays:  dict[str, int] = {}
+
+        for row in rows:
+            try:
+                t = Track.from_json(row["track_data"])
+            except Exception:
+                continue
+            uploader = t.uploader or "Unknown"
+            artist_plays[uploader]   = artist_plays.get(uploader, 0) + 1
+            artist_minutes[uploader] = (
+                artist_minutes.get(uploader, 0)
+                + int(row["duration_played"] or 0) // 60
+            )
+            # Channel = uploader for YouTube tracks (same metadata)
+            channel_plays[uploader] = channel_plays.get(uploader, 0) + 1
+
+        artists = sorted(
+            [
+                {
+                    "name":    name,
+                    "plays":   plays,
+                    "minutes": artist_minutes.get(name, 0),
+                }
+                for name, plays in artist_plays.items()
+            ],
+            key=lambda x: x["plays"],
+            reverse=True,
+        )[:limit]
+
+        channels = sorted(
+            [{"name": name, "plays": plays} for name, plays in channel_plays.items()],
+            key=lambda x: x["plays"],
+            reverse=True,
+        )[:limit]
+
+        return {"artists": artists, "channels": channels}
+
+    async def get_analytics_streak(
+        self, guild_id: int, user_id: int | None = None
+    ) -> dict:
+        """
+        Compute listening streak (consecutive active days).
+
+        Returns:
+            {
+                "current_streak":  int,   # consecutive days up to today
+                "longest_streak":  int,   # all-time longest
+                "total_days":      int,   # distinct active days
+                "active_dates":    list[str],  # ISO dates (last 30 active)
+            }
+        """
+        if user_id:
+            sql = """
+                SELECT DISTINCT date(played_at) AS day
+                FROM history
+                WHERE guild_id = ? AND user_id = ?
+                ORDER BY day DESC
+            """
+            params = (guild_id, user_id)
+        else:
+            sql = """
+                SELECT DISTINCT date(played_at) AS day
+                FROM history
+                WHERE guild_id = ?
+                ORDER BY day DESC
+            """
+            params = (guild_id,)
+
+        async with self._connect() as conn:
+            cursor = await conn.execute(sql, params)
+            rows = await cursor.fetchall()
+
+        from datetime import date, timedelta
+
+        active_dates: list[date] = []
+        for row in rows:
+            try:
+                active_dates.append(date.fromisoformat(row["day"]))
+            except Exception:
+                pass
+
+        if not active_dates:
+            return {
+                "current_streak": 0,
+                "longest_streak": 0,
+                "total_days":     0,
+                "active_dates":   [],
+            }
+
+        # Current streak — count backwards from today
+        today = date.today()
+        current = 0
+        check = today
+        active_set = set(active_dates)
+        while check in active_set:
+            current += 1
+            check -= timedelta(days=1)
+
+        # If not active today, check from yesterday
+        if current == 0:
+            check = today - timedelta(days=1)
+            while check in active_set:
+                current += 1
+                check -= timedelta(days=1)
+
+        # Longest streak
+        longest = 1
+        run     = 1
+        sorted_dates = sorted(active_dates)
+        for i in range(1, len(sorted_dates)):
+            if (sorted_dates[i] - sorted_dates[i - 1]).days == 1:
+                run += 1
+                longest = max(longest, run)
+            else:
+                run = 1
+
+        return {
+            "current_streak": current,
+            "longest_streak": longest,
+            "total_days":     len(active_dates),
+            "active_dates":   [d.isoformat() for d in active_dates[:30]],
+        }
+
