@@ -125,76 +125,140 @@ def now_playing_embed(
     color:    int = 0x5865F2,
     bot_user: Optional[discord.ClientUser] = None,
     paused:   bool = False,
+    theme:    str  = "classic",
 ) -> discord.Embed:
     """
-    Gen-2 style now-playing embed with V3 data:
+    Themed now-playing embed (F27).
 
-      Title   : 🎵 Track Title  (embed.url makes it clickable)
-      Desc    : 🔵 Uploader
-
-      Fields  : ⏱ Duration  |  👁 Views    |  📋 In Queue
-                👤 Requested by  |  🔁 Loop  |  🔊 Volume
-                ▶️ Progress  ← full-width knob progress bar
-
-      Footer  : bot avatar · Music Bot V3 • Now Playing
-      Thumbnail: track art
+    theme options:
+      classic — Dynamic colour from thumbnail. Full field layout. (default)
+      spotify — Spotify green. Large artwork. Minimal text.
+      minimal — Dark background. No fields. Ultra-clean.
+      glass   — Frosted pastel. Slightly different typography.
     """
     track = player.now_playing
     if not track:
         return info_embed("Nothing Playing", "The queue is empty.")
 
-    # ── Progress bar ─────────────────────────────────────────────────────────
+    # ── Shared data ───────────────────────────────────────────────────────────
     fraction = player.progress_fraction()
     elapsed  = format_duration(player.elapsed_seconds)
     total    = format_duration(track.duration) if track.duration else "?"
     bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=track.url or "", width=32)
-
-    # ── Main embed ────────────────────────────────────────────────────────────
-    embed = discord.Embed(
-        title       = f"🎵  {truncate(track.title, 80)}",
-        url         = track.url or None,
-        description = f"🔵  {truncate(track.uploader or 'Unknown', 40)}",
-        color       = color,
-    )
-
-    # ── Row 1: Duration | Views | In Queue ───────────────────────────────────
     dur_val  = format_duration(track.duration) if track.duration else "?"
     view_val = format_views(track.view_count)  if track.view_count else "—"
     q_size   = len(player)
     q_val    = f"{q_size} track{'s' if q_size != 1 else ''}"
-
-    embed.add_field(name="⏱ Duration",  value=dur_val,  inline=True)
-    embed.add_field(name="👁 Views",    value=view_val, inline=True)
-    embed.add_field(name="📋 In Queue", value=q_val,    inline=True)
-
-    # ── Row 2: Requested by | Loop | Volume ──────────────────────────────────
     req_val  = f"@{track.requested_by_name}" if track.requested_by_name else "—"
     loop_val = player.loop_mode.value.capitalize()
     vol_val  = f"{int(player.volume * 100)}%"
-
-    embed.add_field(name="👤 Requested by", value=req_val,  inline=True)
-    embed.add_field(name="🔁 Loop",         value=loop_val, inline=True)
-    embed.add_field(name="🔊 Volume",       value=vol_val,  inline=True)
-
-    # ── Progress bar (full width) ─────────────────────────────────────────────
-    embed.add_field(name="▶️ Progress", value=bar_line, inline=False)
-
-    # Optional effects
-    if player.effects:
-        eff_str = " · ".join(e.display_name() for e in player.effects[:4])
-        embed.add_field(name="🎛 Effects", value=eff_str, inline=False)
-
-    # ── Footer ────────────────────────────────────────────────────────────────
     footer_icon = bot_user.display_avatar.url if bot_user else None
-    embed.set_footer(
-        text     = "Music Bot V3  •  Now Playing",
-        icon_url = footer_icon,
-    )
 
-    if track.thumbnail:
-        embed.set_thumbnail(url=track.thumbnail)
+    # ── Speed / Pitch indicators (A+ features) ────────────────────────────────
+    extras = []
+    if hasattr(player, "playback_speed") and abs(player.playback_speed - 1.0) > 0.01:
+        extras.append(f"⚡ {player.playback_speed}x")
+    if hasattr(player, "pitch_semitones") and player.pitch_semitones != 0:
+        sign = "+" if player.pitch_semitones > 0 else ""
+        extras.append(f"🎵 {sign}{player.pitch_semitones}st")
+
+    # ── CLASSIC ───────────────────────────────────────────────────────────────
+    if theme == "classic":
+        embed = discord.Embed(
+            title       = f"🎵  {truncate(track.title, 80)}",
+            url         = track.url or None,
+            description = f"🔵  {truncate(track.uploader or 'Unknown', 40)}",
+            color       = color,
+        )
+        embed.add_field(name="⏱ Duration",      value=dur_val,  inline=True)
+        embed.add_field(name="👁 Views",         value=view_val, inline=True)
+        embed.add_field(name="📋 In Queue",      value=q_val,    inline=True)
+        embed.add_field(name="👤 Requested by",  value=req_val,  inline=True)
+        embed.add_field(name="🔁 Loop",          value=loop_val, inline=True)
+        embed.add_field(name="🔊 Volume",        value=vol_val,  inline=True)
+        embed.add_field(name="▶️ Progress",      value=bar_line, inline=False)
+        if player.effects:
+            eff_str = " · ".join(e.display_name() for e in player.effects[:4])
+            embed.add_field(name="🎛 Effects", value=eff_str, inline=False)
+        if extras:
+            embed.add_field(name="🎚 Enhancements", value="  ".join(extras), inline=False)
+        embed.set_footer(text="Music Bot V3  •  Now Playing", icon_url=footer_icon)
+        if track.thumbnail:
+            embed.set_thumbnail(url=track.thumbnail)
+
+    # ── SPOTIFY ───────────────────────────────────────────────────────────────
+    elif theme == "spotify":
+        from models.enums import EmbedTheme
+        sp_color = EmbedTheme.SPOTIFY.accent_color()
+        status   = "⏸ Paused" if paused else "▶ Now Playing"
+        embed = discord.Embed(
+            title       = truncate(track.title, 80),
+            url         = track.url or None,
+            description = (
+                f"**{truncate(track.uploader or 'Unknown', 40)}**\n\n"
+                f"```{bar_line}```\n"
+                f"{status}  •  {dur_val}  •  {vol_val} vol"
+            ),
+            color       = sp_color,
+        )
+        embed.add_field(name="🔁", value=loop_val, inline=True)
+        embed.add_field(name="📋", value=q_val,    inline=True)
+        if extras:
+            embed.add_field(name="🎚", value="  ".join(extras), inline=True)
+        embed.set_footer(text=f"Requested by {req_val}  •  Music Bot V3", icon_url=footer_icon)
+        if track.thumbnail:
+            embed.set_image(url=track.thumbnail)  # large artwork for Spotify feel
+
+    # ── MINIMAL ───────────────────────────────────────────────────────────────
+    elif theme == "minimal":
+        from models.enums import EmbedTheme
+        mn_color = EmbedTheme.MINIMAL.accent_color()
+        status   = "⏸" if paused else "▶"
+        extra_str = f"  {' '.join(extras)}" if extras else ""
+        embed = discord.Embed(
+            description = (
+                f"{status}  **{truncate(track.title, 70)}**\n"
+                f"*{truncate(track.uploader or 'Unknown', 40)}*\n\n"
+                f"`{bar_line}`{extra_str}"
+            ),
+            color       = mn_color,
+        )
+        embed.set_footer(text=f"{req_val}  •  {loop_val}  •  {vol_val}", icon_url=footer_icon)
+
+    # ── GLASS ─────────────────────────────────────────────────────────────────
+    elif theme == "glass":
+        from models.enums import EmbedTheme
+        gl_color = EmbedTheme.GLASS.accent_color()
+        status   = "⏸ Paused" if paused else "♪  Now Playing"
+        embed = discord.Embed(
+            title       = f"♪  {truncate(track.title, 75)}",
+            url         = track.url or None,
+            description = (
+                f"*{truncate(track.uploader or 'Unknown', 40)}*\n\n"
+                f"```{bar_line}```"
+            ),
+            color       = gl_color,
+        )
+        embed.add_field(name="⏱",  value=dur_val,  inline=True)
+        embed.add_field(name="🔁", value=loop_val, inline=True)
+        embed.add_field(name="🔊", value=vol_val,  inline=True)
+        if extras:
+            embed.add_field(name="🎚 Enhanced", value="  ".join(extras), inline=False)
+        embed.set_footer(
+            text     = f"{status}  •  Req: {req_val}",
+            icon_url = footer_icon,
+        )
+        if track.thumbnail:
+            embed.set_thumbnail(url=track.thumbnail)
+
+    else:
+        # Fallback to classic
+        return now_playing_embed(player, color, bot_user, paused, theme="classic")
 
     return embed
+
+
+
 
 
 

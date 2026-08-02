@@ -398,10 +398,15 @@ class MusicCog(commands.Cog, name="Music"):
             next_track._resume_offset = 0  # clear after use
 
         ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
-            effects       = player.effects,
-            volume        = player.volume,
-            quality       = cfg_server.audio_quality,
-            seek_seconds  = resume_offset,   # seek to saved position
+            effects         = player.effects,
+            volume          = player.volume,
+            quality         = cfg_server.audio_quality,
+            seek_seconds    = resume_offset,      # seek to saved position
+            speed           = player.playback_speed,        # F21
+            pitch_semitones = player.pitch_semitones,       # F22
+            crossfade_secs  = player.crossfade_seconds,     # F23
+            silence_trim    = player.silence_trim,           # F24
+            replay_gain     = player.replay_gain,            # F25
         )
 
         # ── Start playback (Feature 13: use warm pool) ────────────────────────
@@ -450,7 +455,7 @@ class MusicCog(commands.Cog, name="Music"):
         if player.text_channel:
             try:
                 color = await get_dominant_color(next_track.thumbnail, self.bot.http_session)
-                embed = now_playing_embed(player, color, self.bot.user)
+                embed = now_playing_embed(player, color, self.bot.user, theme=player.embed_theme)
                 view  = MusicControlView(self.bot, guild_id)
                 msg   = await player.text_channel.send(embed=embed, view=view)
                 player.now_playing_msg    = msg

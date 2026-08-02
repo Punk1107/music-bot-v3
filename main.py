@@ -64,6 +64,10 @@ _COGS = [
     "cogs.favorites",
     "cogs.admin",
     "cogs.bookmark_cog",   # Tier-S Feature 5: Queue Bookmarks
+    "cogs.sleep_timer_cog",  # Tier A  Feature 16: Sleep Timer
+    "cogs.playback_cog",     # Tier A+ Features 21-25: Speed/Pitch/Crossfade/Trim/Gain
+    "cogs.presets_cog",      # Tier B  Feature 26: Guild Presets
+    "cogs.theme_cog",        # Tier B  Feature 27: Theme System
 ]
 
 
@@ -334,7 +338,12 @@ class MusicBot(commands.Bot):
         before: discord.VoiceState,
         after:  discord.VoiceState,
     ) -> None:
-        """Track idle state and handle bot's own voice disconnects (Feature 12)."""
+        """Track idle state and handle bot's own voice disconnects (Feature 12).
+
+        Also handles:
+          F17: Auto-leave when bot is alone for 90+ seconds
+          F18: Auto-pause when channel empties; resume on rejoin
+        """
         guild  = member.guild
         player = self.get_player(guild.id)
         vc     = guild.voice_client
@@ -360,7 +369,7 @@ class MusicBot(commands.Bot):
                         asyncio.create_task(_delayed_resume(guild.id))
             return
 
-        # Idle tracking: if no human members left in voice channel
+        # Ignore other bots
         if member.bot:
             return
 
@@ -368,7 +377,74 @@ class MusicBot(commands.Bot):
             return
 
         non_bot_members = [m for m in vc.channel.members if not m.bot]
-        if len(non_bot_members) == 0:
+        human_count = len(non_bot_members)
+
+        # ── F18: Auto Pause / Resume ──────────────────────────────────────────
+        try:
+            cfg = await self.db.get_server_config(guild.id)
+        except Exception:
+            cfg = None
+
+        if cfg and cfg.auto_pause_empty:
+            if human_count == 0 and vc.is_playing():
+                vc.pause()
+                player.auto_paused = True
+                logger.debug("guild %d: Auto-paused (channel empty)", guild.id)
+            elif human_count > 0 and player.auto_paused and vc.is_paused():
+                vc.resume()
+                player.auto_paused = False
+                logger.debug("guild %d: Auto-resumed (member rejoined)", guild.id)
+
+        # ── F17: Auto Leave When Alone ────────────────────────────────────────
+        if cfg and cfg.auto_leave_alone:
+            if human_count == 0:
+                # Start the 90-second countdown if not already running
+                if player.alone_since is None:
+                    player.alone_since = datetime.now(timezone.utc)
+
+                    async def _leave_if_still_alone(gid: int, _vc: discord.VoiceClient) -> None:
+                        await asyncio.sleep(90)
+                        _player = self.get_player(gid)
+                        _guild  = self.get_guild(gid)
+                        if not _guild:
+                            return
+                        _vc2 = _guild.voice_client
+                        if not _vc2 or not _vc2.is_connected():
+                            return
+                        # Check still alone
+                        still_alone = all(m.bot for m in _vc2.channel.members)
+                        if still_alone:
+                            logger.info("guild %d: Auto-leaving — alone for 90s", gid)
+                            if _player.text_channel:
+                                try:
+                                    await _player.text_channel.send(
+                                        "👋 ออกจากห้องเนื่องจากไม่มีคนอยู่ด้วย",
+                                        delete_after=20,
+                                    )
+                                except Exception:
+                                    pass
+                            _player.reset()
+                            _player.intentional_disconnect = True
+                            try:
+                                await _vc2.disconnect(force=True)
+                            except Exception:
+                                pass
+                        _player.alone_since     = None
+                        _player.alone_leave_task = None
+
+                    player.alone_leave_task = asyncio.create_task(
+                        _leave_if_still_alone(guild.id, vc)
+                    )
+            else:
+                # Human rejoined — cancel the alone timer
+                player.alone_since = None
+                if player.alone_leave_task and not player.alone_leave_task.done():
+                    player.alone_leave_task.cancel()
+                    player.alone_leave_task = None
+            return  # done with F17/F18 for non-bot member events
+
+        # ── Legacy idle tracking (when F17 disabled) ──────────────────────────
+        if human_count == 0:
             if player.idle_since is None:
                 player.idle_since = datetime.now(timezone.utc)
         else:
@@ -634,7 +710,7 @@ class MusicBot(commands.Bot):
                     player.now_playing.thumbnail, self.http_session
                 )
                 color = animated_embed_color(base_color, player.elapsed_seconds)
-                embed = now_playing_embed(player, color, self.user)
+                embed = now_playing_embed(player, color, self.user, theme=getattr(player, "embed_theme", "classic"))
                 msg   = player.now_playing_msg
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)

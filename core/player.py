@@ -12,6 +12,16 @@ Tier-S additions:
   - skip_votes: in-memory set of user_ids that voted to skip (Feature 1)
   - jump_to: skip directly to a queue position (Feature 8)
   - eta_seconds: ETA before a track at a given position plays (Feature 9)
+
+Tier A/A+/B additions:
+  - sleep_timer_task / sleep_timer_end: F16 Sleep Timer
+  - alone_since / alone_leave_task: F17 Auto Leave
+  - auto_paused: F18 Auto Pause
+  - undo_stack: F19 Queue Undo
+  - _transaction: F20 Queue Transaction
+  - playback_speed / pitch_semitones / crossfade_seconds: F21/F22/F23
+  - silence_trim / replay_gain: F24/F25
+  - embed_theme: F27 Theme System
 """
 
 from __future__ import annotations
@@ -19,14 +29,24 @@ from __future__ import annotations
 import asyncio
 import random
 from collections import deque
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from models.enums import AudioEffect, LoopMode
 from models.track import Track
 
 if TYPE_CHECKING:
     import discord
+
+
+# ── Undo Entry (F19) ────────────────────────────────────────────────────
+
+@dataclass
+class UndoEntry:
+    operation: str           # 'remove', 'clear', 'shuffle', 'move'
+    snapshot:  list[Track]   # deep-copy of queue before the op
+    extra:     Any = None    # optional extra info (e.g. removed track, position)
 
 
 class GuildPlayer:
@@ -76,10 +96,37 @@ class GuildPlayer:
         # ── History (last played, for loop:track) ─────────────────────────────
         self._history_track: Optional[Track] = None
 
-        # ── Tier-S: Vote Skip (Feature 1) ─────────────────────────────────────
+        # ── Tier-S: Vote Skip (Feature 1) ─────────────────────────────────
         # Set of user_ids that have voted to skip the current track.
         # Reset automatically when the track finishes or is skipped.
         self.skip_votes: set[int] = set()
+
+        # ── Tier A: Sleep Timer (F16) ───────────────────────────────────
+        self.sleep_timer_task: Optional[asyncio.Task] = None
+        self.sleep_timer_end:  Optional[datetime]     = None
+
+        # ── Tier A: Auto Leave Alone (F17) ──────────────────────────────
+        self.alone_since:      Optional[datetime]     = None
+        self.alone_leave_task: Optional[asyncio.Task] = None
+
+        # ── Tier A: Auto Pause (F18) ──────────────────────────────────
+        self.auto_paused: bool = False  # True when bot paused due to empty channel
+
+        # ── Tier A: Queue Undo Stack (F19) ────────────────────────────
+        self.undo_stack: deque[UndoEntry] = deque(maxlen=5)
+
+        # ── Tier A: Queue Transaction (F20) ───────────────────────────
+        self._transaction: Optional[list[Track]] = None  # snapshot for rollback
+
+        # ── Tier A+: Playback Controls (F21–F25) ───────────────────────
+        self.playback_speed:    float = 1.0   # F21: 0.5–2.0
+        self.pitch_semitones:   int   = 0     # F22: -6 to +6
+        self.crossfade_seconds: int   = 0     # F23: 0 (off), 3, 5, 8
+        self.silence_trim:      bool  = False # F24
+        self.replay_gain:       bool  = False # F25
+
+        # ── Tier B: Embed Theme (F27) ─────────────────────────────────
+        self.embed_theme: str = "classic"  # matches EmbedTheme values
 
     # ── Queue helpers ─────────────────────────────────────────────────────────
 
@@ -167,6 +214,69 @@ class GuildPlayer:
         # Reset vote-skip state for the next track
         self.skip_votes.clear()
 
+    # ── Tier A: Undo (F19) ─────────────────────────────────────────
+
+    def undo_push(self, operation: str, extra: Any = None) -> None:
+        """Snapshot the current queue and push to the undo stack."""
+        self.undo_stack.append(
+            UndoEntry(operation=operation, snapshot=list(self._queue), extra=extra)
+        )
+
+    def undo_pop(self) -> Optional[UndoEntry]:
+        """Pop the most recent undo entry (or None if stack is empty)."""
+        return self.undo_stack.pop() if self.undo_stack else None
+
+    async def apply_undo(self, entry: UndoEntry) -> None:
+        """Restore the queue from an UndoEntry snapshot."""
+        async with self.queue_lock:
+            self._queue = deque(entry.snapshot)
+
+    # ── Tier A: Transaction (F20) ─────────────────────────────────────
+
+    def begin_transaction(self) -> bool:
+        """Snapshot queue to transaction buffer. Returns False if already open."""
+        if self._transaction is not None:
+            return False
+        self._transaction = list(self._queue)
+        return True
+
+    def commit_transaction(self) -> bool:
+        """Finalise transaction (discard snapshot). Returns False if none open."""
+        if self._transaction is None:
+            return False
+        self._transaction = None
+        return True
+
+    async def rollback_transaction(self) -> bool:
+        """Restore queue from transaction snapshot. Returns False if none open."""
+        if self._transaction is None:
+            return False
+        async with self.queue_lock:
+            self._queue = deque(self._transaction)
+        self._transaction = None
+        return True
+
+    # ── Tier A: Sleep Timer helpers (F16) ──────────────────────────────
+
+    def cancel_sleep_timer(self) -> bool:
+        """Cancel any running sleep timer. Returns True if one was cancelled."""
+        if self.sleep_timer_task and not self.sleep_timer_task.done():
+            self.sleep_timer_task.cancel()
+            self.sleep_timer_task = None
+            self.sleep_timer_end  = None
+            return True
+        self.sleep_timer_task = None
+        self.sleep_timer_end  = None
+        return False
+
+    def sleep_remaining_seconds(self) -> int:
+        """Seconds remaining until sleep timer fires (0 if not active)."""
+        if not self.sleep_timer_end:
+            return 0
+        from datetime import datetime, timezone
+        delta = (self.sleep_timer_end - datetime.now(timezone.utc)).total_seconds()
+        return max(0, int(delta))
+
     # ── Progress ──────────────────────────────────────────────────────────────
 
     @property
@@ -243,6 +353,14 @@ class GuildPlayer:
     def reset(self) -> None:
         """Full reset — called on stop or total disconnect."""
         self.cancel_prefetch()
+        self.cancel_sleep_timer()
+
+        # Cancel auto-leave task
+        if self.alone_leave_task and not self.alone_leave_task.done():
+            self.alone_leave_task.cancel()
+        self.alone_leave_task = None
+        self.alone_since       = None
+
         self._queue.clear()
         self.now_playing           = None
         self.play_start_time       = None
@@ -255,6 +373,15 @@ class GuildPlayer:
         self.idle_since            = datetime.now(timezone.utc)
         self.auto_playlist_mode    = False
         self.skip_votes            = set()
+        self.auto_paused           = False
+        self.undo_stack.clear()
+        self._transaction          = None
+        # A+: reset audio controls to defaults
+        self.playback_speed        = 1.0
+        self.pitch_semitones       = 0
+        self.crossfade_seconds     = 0
+        self.silence_trim          = False
+        self.replay_gain           = False
         # Note: intentional_disconnect is NOT reset here on purpose.
         # It is set True after reset() in /stop and /leave, then cleared
         # in _ensure_voice() when a new voice connection is established.

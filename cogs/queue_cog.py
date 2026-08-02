@@ -89,6 +89,7 @@ class QueueCog(commands.Cog, name="Queue"):
                 embed=error_embed("Not Enough Tracks", "Need at least 2 tracks to shuffle."), ephemeral=True
             )
             return
+        player.undo_push("shuffle")    # F19: snapshot before mutation
         await player.shuffle()
         await interaction.followup.send(embed=success_embed("Shuffled 🔀", f"Shuffled {len(player)} tracks."))
 
@@ -98,6 +99,7 @@ class QueueCog(commands.Cog, name="Queue"):
         if not await self._check_dj(interaction):
             return
         player = self.bot.get_player(interaction.guild_id)
+        player.undo_push("clear")       # F19: snapshot before mutation
         count  = await player.clear()
         await self.bot.db.clear_queue(interaction.guild_id)
         await interaction.followup.send(embed=success_embed("Queue Cleared", f"Removed {count} tracks."))
@@ -118,6 +120,7 @@ class QueueCog(commands.Cog, name="Queue"):
         if not await self._check_dj(interaction):
             return
         player  = self.bot.get_player(interaction.guild_id)
+        player.undo_push("remove", extra=position)  # F19: snapshot before mutation
         removed = await player.remove(position - 1)
         if removed:
             await interaction.followup.send(
@@ -130,6 +133,8 @@ class QueueCog(commands.Cog, name="Queue"):
                     self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
                 )
         else:
+            # Pop the undo entry since nothing was removed
+            player.undo_pop()
             await interaction.followup.send(
                 embed=error_embed("Invalid Position", f"No track at position {position}."), ephemeral=True
             )
@@ -144,13 +149,15 @@ class QueueCog(commands.Cog, name="Queue"):
         if not await self._check_dj(interaction):
             return
         player  = self.bot.get_player(interaction.guild_id)
-        success = await player.move(from_pos - 1, to_pos - 1)
-        if success:
+        player.undo_push("move", extra=(from_pos, to_pos))  # F19: snapshot before mutation
+        ok = await player.move(from_pos - 1, to_pos - 1)
+        if ok:
             await interaction.followup.send(
                 embed=success_embed("Moved", f"Track moved from position {from_pos} → {to_pos}."),
                 ephemeral=True,
             )
         else:
+            player.undo_pop()  # nothing moved — discard snapshot
             await interaction.followup.send(
                 embed=error_embed("Invalid Position", "Check both positions are within queue range."), ephemeral=True
             )
@@ -487,5 +494,138 @@ class QueueCog(commands.Cog, name="Queue"):
                 await music_cog._play_next(interaction.guild_id)
 
 
+    # ── Feature 19: Queue Undo ────────────────────────────────────────────────
+
+    @app_commands.command(name="undo", description="Undo the last queue operation (shuffle/clear/remove/move)")
+    async def undo(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+
+        player = self.bot.get_player(interaction.guild_id)
+        entry  = player.undo_pop()
+
+        if not entry:
+            await interaction.followup.send(
+                embed=error_embed("Nothing to Undo", "The undo stack is empty."),
+                ephemeral=True,
+            )
+            return
+
+        await player.apply_undo(entry)
+
+        # Restore DB queue
+        vc = interaction.guild.voice_client
+        if vc:
+            asyncio.create_task(
+                self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+            )
+
+        # Build friendly description
+        op_labels = {
+            "shuffle": "🔀 Shuffle",
+            "clear":   "🗑️ Clear Queue",
+            "remove":  "✖ Remove",
+            "move":    "↕ Move",
+        }
+        label = op_labels.get(entry.operation, entry.operation.title())
+        desc  = (
+            f"Undid **{label}** — restored **{len(entry.snapshot)}** track(s).\n"
+            f"*(Undo stack: {len(player.undo_stack)} entries remaining)*"
+        )
+        embed = discord.Embed(
+            title       = "↩️  Undo Successful",
+            description = desc,
+            color       = 0x2ED573,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # ── Feature 20: Queue Transaction ─────────────────────────────────────────
+
+    _transaction_group = app_commands.Group(
+        name        = "qtransaction",
+        description = "Atomic queue transactions — begin / commit / rollback",
+    )
+
+    @_transaction_group.command(name="begin", description="Start a queue transaction (snapshot current state)")
+    async def qtx_begin(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+        player = self.bot.get_player(interaction.guild_id)
+        ok = player.begin_transaction()
+        if not ok:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Transaction Already Open",
+                    "Call `/qtransaction rollback` or `/qtransaction commit` first.",
+                ),
+                ephemeral=True,
+            )
+            return
+        n = len(player.queue)
+        embed = discord.Embed(
+            title       = "🔒  Transaction Begun",
+            description = (
+                f"Snapshotted **{n}** track(s).\n"
+                "You can now run queue operations safely.\n"
+                "Use `/qtransaction commit` to finalise or `/qtransaction rollback` to undo all."
+            ),
+            color       = 0x70A1FF,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_transaction_group.command(name="commit", description="Commit the current transaction (keep all changes)")
+    async def qtx_commit(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+        player = self.bot.get_player(interaction.guild_id)
+        ok = player.commit_transaction()
+        if not ok:
+            await interaction.followup.send(
+                embed=error_embed("No Transaction Open", "Start one with `/qtransaction begin`."),
+                ephemeral=True,
+            )
+            return
+        embed = discord.Embed(
+            title       = "✅  Transaction Committed",
+            description = f"Changes finalised. Queue now has **{len(player.queue)}** track(s).",
+            color       = 0x2ED573,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @_transaction_group.command(name="rollback", description="Rollback the current transaction (revert all changes)")
+    async def qtx_rollback(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+        player = self.bot.get_player(interaction.guild_id)
+        ok = await player.rollback_transaction()
+        if not ok:
+            await interaction.followup.send(
+                embed=error_embed("No Transaction Open", "Start one with `/qtransaction begin`."),
+                ephemeral=True,
+            )
+            return
+        # Restore DB
+        vc = interaction.guild.voice_client
+        if vc:
+            asyncio.create_task(
+                self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+            )
+        embed = discord.Embed(
+            title       = "♻️  Transaction Rolled Back",
+            description = (
+                f"All changes since `begin` were reverted.\n"
+                f"Queue restored to **{len(player.queue)}** track(s)."
+            ),
+            color       = 0xFF4757,
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
 async def setup(bot: "MusicBot") -> None:
-    await bot.add_cog(QueueCog(bot))
+    cog = QueueCog(bot)
+    bot.tree.add_command(cog._transaction_group)
+    await bot.add_cog(cog)
