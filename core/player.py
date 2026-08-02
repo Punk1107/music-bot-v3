@@ -64,6 +64,19 @@ class GuildPlayer:
         self._queue: deque[Track] = deque()
         self.queue_lock: asyncio.Lock = asyncio.Lock()
 
+        # ── Playback concurrency guard (Bug 1 + 3) ────────────────────────────
+        # Prevents two coroutines from entering _play_next simultaneously.
+        # A new Lock is created on reset() so it is never in a locked state
+        # after a full stop.
+        self._playing_lock: asyncio.Lock = asyncio.Lock()
+
+        # ── Playback sequence counter (Bug 3) ─────────────────────────────────
+        # Incremented on finish_track() and reset(). The after_play FFmpeg
+        # callback captures the seq at creation time; if it has changed by the
+        # time the callback fires, the callback is stale (skip/stop raced) and
+        # must not trigger _play_next.
+        self._play_seq: int = 0
+
         # ── Now-playing ───────────────────────────────────────────────────────
         self.now_playing:        Optional[Track]    = None
         self.play_start_time:    Optional[datetime] = None
@@ -211,6 +224,8 @@ class GuildPlayer:
         """Mark current track finished (stores to history for LOOP:TRACK)."""
         if self.now_playing:
             self._history_track = self.now_playing
+        # Advance sequence so stale after_play callbacks are rejected (Bug 3)
+        self._play_seq += 1
         # Reset vote-skip state for the next track
         self.skip_votes.clear()
 
@@ -404,6 +419,10 @@ class GuildPlayer:
         self.crossfade_seconds     = 0
         self.silence_trim          = False
         self.replay_gain           = False
+        # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
+        # and replace the playing lock (may be locked from a concurrent call).
+        self._play_seq    += 1
+        self._playing_lock = asyncio.Lock()
         # Note: intentional_disconnect is NOT reset here on purpose.
         # It is set True after reset() in /stop and /leave, then cleared
         # in _ensure_voice() when a new voice connection is established.

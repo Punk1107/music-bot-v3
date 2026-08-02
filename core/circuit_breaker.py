@@ -130,6 +130,9 @@ class CircuitBreaker:
             logger.info("CircuitBreaker '%s' → CLOSED (recovered).", self.name)
         self._state         = BreakerState.CLOSED
         self._failure_count = 0
+        # Bug 8: also reset _last_failure timestamp so the recovery window
+        # calculation is correct if the breaker opens again later.
+        self._last_failure  = 0.0
 
     def _on_failure(self, exc: Exception) -> None:
         self.total_failures += 1

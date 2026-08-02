@@ -209,9 +209,14 @@ class MusicControlView(discord.ui.View):
             return
         vc = self._vc(interaction)
         player = self.bot.get_player(self.guild_id)
+        # Bug 1: cancel prefetch before stopping
+        player.cancel_prefetch()
         if vc and vc.is_playing():
             vc.stop()
         player.reset()
+        # Bug 9: also clear the persisted DB queue (the slash /stop already does
+        # this; the button was missing the call, causing restored queue on restart)
+        asyncio.create_task(self.bot.db.clear_queue(self.guild_id))
         await interaction.response.send_message(
             embed=success_embed("Stopped", "Playback stopped and queue cleared."), ephemeral=True
         )
@@ -324,6 +329,12 @@ class QueueView(discord.ui.View):
             embed=success_embed("Queue Cleared", f"Removed {count} tracks."), view=None
         )
 
+    async def on_timeout(self) -> None:
+        """Bug 5: disable all buttons and clear bot reference to prevent memory leak."""
+        for child in self.children:
+            child.disabled = True
+        self.bot = None  # type: ignore[assignment]
+
 
 # ─────────────────────────── Search Select View ───────────────────────────────
 
@@ -421,6 +432,13 @@ class FavoritesView(discord.ui.View):
         self._sync()
         embed = favorites_list_embed(self.favorites, self.user, self.page)
         await interaction.response.edit_message(embed=embed, view=self)
+
+    async def on_timeout(self) -> None:
+        """Bug 5: disable buttons and clear references."""
+        for child in self.children:
+            child.disabled = True
+        self.bot  = None  # type: ignore[assignment]
+        self.user = None  # type: ignore[assignment]
 
 
 # ─────────────────────────── Vote Skip View (Tier-S #1) ────────────────────────────
@@ -522,6 +540,9 @@ class VoteSkipView(discord.ui.View):
         await self._refresh(interaction)
 
     async def on_timeout(self) -> None:
+        """Bug 5: disable buttons, edit message, clear references."""
+        for child in self.children:
+            child.disabled = True
         if self._message:
             try:
                 await self._message.edit(
@@ -530,6 +551,9 @@ class VoteSkipView(discord.ui.View):
                 )
             except Exception:
                 pass
+        # Clear references to prevent memory leak
+        self._message = None
+        self.bot      = None  # type: ignore[assignment]
 
 
 # ─────────────────────────── History View (Tier-S #4) ─────────────────────────────
@@ -621,6 +645,13 @@ class HistoryView(discord.ui.View):
         embed = history_embed(self.rows, self.guild_id, self.page, self.ITEMS_PER_PAGE)
         await interaction.response.edit_message(embed=embed, view=self)
 
+    async def on_timeout(self) -> None:
+        """Bug 5: disable all buttons and clear heavy references."""
+        self.clear_items()  # removes all button children
+        self._cb  = None  # type: ignore[assignment]
+        self.bot  = None  # type: ignore[assignment]
+        self.rows = []
+
 
 # ─────────────────────────── Queue Search Result View (Tier-S #7) ────────────────────
 
@@ -677,3 +708,11 @@ class QueueSearchResultView(discord.ui.View):
             rm_btn.callback   = make_rm(pos)
             self.add_item(jump_btn)
             self.add_item(rm_btn)
+
+    async def on_timeout(self) -> None:
+        """Bug 5: disable all buttons and clear callback references."""
+        for child in self.children:
+            child.disabled = True
+        self._jump_cb = None  # type: ignore[assignment]
+        self._rm_cb   = None  # type: ignore[assignment]
+        self.bot      = None  # type: ignore[assignment]

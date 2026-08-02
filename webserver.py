@@ -442,21 +442,25 @@ class WebServer:
 
     async def _ws_push_loop(self) -> None:
         """Push stats to all connected WebSocket clients every 5 seconds."""
-        while True:
-            await asyncio.sleep(5)
-            if not self._ws_clients:
-                continue
-            try:
-                stats = await self._build_stats()
-                dead  = set()
-                for ws in list(self._ws_clients):
-                    try:
-                        await ws.send_json(stats)
-                    except Exception:
-                        dead.add(ws)
-                self._ws_clients -= dead
-            except Exception as exc:
-                logger.debug("WS push error: %s", exc)
+        try:
+            while True:
+                await asyncio.sleep(5)
+                if not self._ws_clients:
+                    continue
+                try:
+                    stats = await self._build_stats()
+                    dead  = set()
+                    for ws in list(self._ws_clients):
+                        try:
+                            await ws.send_json(stats)
+                        except Exception:
+                            dead.add(ws)
+                    self._ws_clients -= dead
+                except Exception as exc:
+                    logger.debug("WS push error: %s", exc)
+        except asyncio.CancelledError:
+            # Bug 7: normal shutdown — suppress the CancelledError noise
+            return
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
