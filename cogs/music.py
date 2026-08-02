@@ -448,7 +448,7 @@ class MusicCog(commands.Cog, name="Music"):
 
         # ── Feature 14: Predictive thumbnail pre-warm for next N tracks ────────
         asyncio.create_task(
-            prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=5)
+            prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=player.adaptive_prefetch_limit())
         )
 
         # ── Send now-playing embed ────────────────────────────────────────────
