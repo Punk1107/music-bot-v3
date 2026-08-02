@@ -195,11 +195,20 @@ class MusicBot(commands.Bot):
         """Graceful shutdown: save queues, stop services, close connections."""
         logger.info("Shutting down Music Bot V3…")
 
-        # Stop background tasks
-        for t in [self._idle_check, self._queue_save, self._np_refresh,
-                  self._cache_prune, self._analytics_prune, self._session_heartbeat,
-                  self._memory_pressure]:
+        # Bug 6: cancel all background tasks then gather so they drain cleanly
+        # before we proceed with DB saves and service teardown.
+        _tasks_to_cancel = [
+            t for t in [
+                self._idle_check, self._queue_save, self._np_refresh,
+                self._cache_prune, self._analytics_prune,
+                self._session_heartbeat, self._memory_pressure,
+            ]
+            if t is not None
+        ]
+        for t in _tasks_to_cancel:
             t.cancel()
+        await asyncio.gather(*[t.get_task() for t in _tasks_to_cancel if t.get_task() is not None],
+                             return_exceptions=True)
 
         # Tier-S+ F11: Persist FULL session state (including now_playing position)
         for guild_id, player in self._players.items():
@@ -223,17 +232,10 @@ class MusicBot(commands.Bot):
                 except Exception as exc:
                     logger.warning("Session state save on shutdown guild %d: %s", guild_id, exc)
 
-        # Also save queue for legacy restore path
-        for guild_id, player in self._players.items():
-            if player.queue or player.now_playing:
-                guild = self.get_guild(guild_id)
-                vc    = guild.voice_client if guild else None
-                channel_id = vc.channel.id if vc else (player.last_channel_id or 0)
-                try:
-                    all_tracks = ([player.now_playing] if player.now_playing else []) + player.queue
-                    await self.db.save_queue(guild_id, channel_id, all_tracks)
-                except Exception as exc:
-                    logger.warning("Queue save on shutdown for guild %d: %s", guild_id, exc)
+        # Bug 4: Remove redundant legacy save_queue loop.
+        # save_session_state() above already saves queue + loop + volume + effects
+        # atomically in a single DB transaction per guild.
+        # Having two separate save loops creates a partial-write window.
 
         # Disconnect all voice clients
         for guild in self.guilds:
@@ -373,6 +375,16 @@ class MusicBot(commands.Bot):
         if member.id == self.user.id:
             was_connected = before.channel is not None
             now_connected = after.channel  is not None
+
+            # Bug 2: Bot was MOVED to a different channel — update last_channel_id
+            # so that future reconnect attempts target the correct channel.
+            if before.channel and after.channel and before.channel != after.channel:
+                player.last_channel_id = after.channel.id
+                logger.debug(
+                    "guild %d: Bot moved %s → %s — updated last_channel_id",
+                    guild.id, before.channel.name, after.channel.name,
+                )
+
             if was_connected and not now_connected:
                 # Bot was kicked from voice / Discord dropped the connection
                 if not player.intentional_disconnect and player.now_playing:
@@ -736,9 +748,13 @@ class MusicBot(commands.Bot):
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)
             except discord.NotFound:
-                player.now_playing_msg = None
+                # Bug 10: message was deleted — clear ref to stop repeated 404s
+                player.now_playing_msg    = None
+                player.now_playing_msg_id = None
             except Exception:
-                pass
+                # Bug 10: on any unexpected error, clear the msg ref too so the
+                # next tick doesn't retry a potentially broken message object.
+                player.now_playing_msg = None
 
     @_np_refresh.before_loop
     async def _before_np_refresh(self) -> None:

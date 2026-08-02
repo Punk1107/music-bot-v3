@@ -290,6 +290,8 @@ class MusicCog(commands.Cog, name="Music"):
             await asyncio.sleep(delay)
             try:
                 vc = await channel.connect(timeout=10.0, reconnect=True)
+                # Bug 2: update last_channel_id so future reconnects use correct channel
+                player.last_channel_id = channel.id
                 logger.info("✅ Voice reconnected for guild %d on attempt %d", guild_id, attempt)
                 return vc
             except Exception as exc:
@@ -312,159 +314,185 @@ class MusicCog(commands.Cog, name="Music"):
         Pop the next track from the player queue and start playback.
         Handles: auto-skip broken tracks, circuit breaker, prefetch,
                  auto-playlist when queue empties.
+
+        Bug 1: Protected by _playing_lock so concurrent calls (e.g. skip +
+        remove at the same time, or voice reconnect + after_play callback)
+        serialise safely. Only one coroutine can be inside this function per
+        guild at a time.
         """
         player = self.bot.get_player(guild_id)
-        guild  = self.bot.get_guild(guild_id)
-        if not guild:
+
+        # Bug 1: acquire per-guild lock — non-blocking attempt first
+        if player._playing_lock.locked():
+            logger.debug("guild %d: _play_next already running — skipping duplicate call.", guild_id)
             return
 
-        vc: Optional[discord.VoiceClient] = guild.voice_client
-        if not vc or not vc.is_connected():
-            vc = await self._try_reconnect(guild_id)
-            if not vc:
+        async with player._playing_lock:
+            guild  = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+
+            vc: Optional[discord.VoiceClient] = guild.voice_client
+            if not vc or not vc.is_connected():
+                vc = await self._try_reconnect(guild_id)
+                if not vc:
+                    player.reset()
+                    return
+
+            if vc.is_playing():
+                logger.debug("guild %d: _play_next while already playing — ignoring.", guild_id)
+                return
+
+            await player.finish_track()
+
+            next_track = await player.dequeue()
+
+            if not next_track:
+                # ── Auto-playlist: fill from history when queue empty ──────────────
+                cfg = await self.bot.db.get_server_config(guild_id)
+                if cfg.auto_playlist or player.auto_playlist_mode:
+                    recent = await self.bot.db.get_recent_tracks_for_autoplaylist(
+                        guild_id, limit=cfg.auto_playlist_size * 3
+                    )
+                    seeds = recent[:cfg.auto_playlist_size]
+                    if seeds:
+                        await player.extend(seeds)
+                        if player.text_channel:
+                            try:
+                                await player.text_channel.send(
+                                    embed=auto_playlist_embed(len(seeds)), delete_after=30
+                                )
+                            except Exception:
+                                pass
+                        next_track = await player.dequeue()
+
+            if not next_track:
+                player.idle_since = discord.utils.utcnow()
+                return
+
+            # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
+            try:
+                stream_url = await self.bot.yt_breaker.call(
+                    self.bot.youtube.get_stream_url,
+                    next_track.url,
+                    next_track,
+                )
+            except CircuitBreakerOpen:
+                if player.text_channel:
+                    try:
+                        await player.text_channel.send(
+                            embed=error_embed("Service Busy", "YouTube API circuit breaker is OPEN. Try again later."),
+                            delete_after=30,
+                        )
+                    except Exception:
+                        pass
+                player.reset()
+                return
+            except Exception as exc:
+                logger.warning("Stream URL resolve failed for '%s': %s", next_track.title[:50], exc)
+                if skip_depth < config.SKIP_ERROR_LIMIT:
+                    await notify_playback_error(self.bot, guild_id, next_track.title, exc)
+                    return await self._play_next(guild_id, skip_depth=skip_depth + 1)
                 player.reset()
                 return
 
-        if vc.is_playing():
-            logger.debug("guild %d: _play_next while already playing — ignoring.", guild_id)
-            return
+            if not stream_url:
+                logger.warning("No stream URL for '%s'", next_track.title[:50])
+                if skip_depth < config.SKIP_ERROR_LIMIT:
+                    return await self._play_next(guild_id, skip_depth=skip_depth + 1)
+                player.reset()
+                return
 
-        await player.finish_track()
+            # ── Build FFmpeg options ───────────────────────────────────────────────
+            cfg_server = await self.bot.db.get_server_config(guild_id)
 
-        next_track = await player.dequeue()
+            # Feature 11: Resume offset — if track has a stored position, seek to it
+            resume_offset = getattr(next_track, "_resume_offset", 0) or 0
+            if resume_offset:
+                next_track._resume_offset = 0  # clear after use
 
-        if not next_track:
-            # ── Auto-playlist: fill from history when queue empty ──────────────
-            cfg = await self.bot.db.get_server_config(guild_id)
-            if cfg.auto_playlist or player.auto_playlist_mode:
-                recent = await self.bot.db.get_recent_tracks_for_autoplaylist(
-                    guild_id, limit=cfg.auto_playlist_size * 3
-                )
-                seeds = recent[:cfg.auto_playlist_size]
-                if seeds:
-                    await player.extend(seeds)
-                    if player.text_channel:
-                        try:
-                            await player.text_channel.send(
-                                embed=auto_playlist_embed(len(seeds)), delete_after=30
-                            )
-                        except Exception:
-                            pass
-                    next_track = await player.dequeue()
-
-        if not next_track:
-            player.idle_since = discord.utils.utcnow()
-            return
-
-        # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
-        try:
-            stream_url = await self.bot.yt_breaker.call(
-                self.bot.youtube.get_stream_url,
-                next_track.url,
-                next_track,
+            ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
+                effects         = player.effects,
+                volume          = player.volume,
+                quality         = cfg_server.audio_quality,
+                seek_seconds    = resume_offset,      # seek to saved position
+                speed           = player.playback_speed,        # F21
+                pitch_semitones = player.pitch_semitones,       # F22
+                crossfade_secs  = player.crossfade_seconds,     # F23
+                silence_trim    = player.silence_trim,           # F24
+                replay_gain     = player.replay_gain,            # F25
             )
-        except CircuitBreakerOpen:
+
+            # ── Start playback ────────────────────────────────────────────────────
+            # Bug 3: capture play_seq before creating the after_play closure.
+            # If the seq changes (skip/stop/reset happened) by the time the
+            # callback fires, the callback is stale and must not trigger _play_next.
+            captured_seq = player._play_seq
+
+            def after_play(error: Optional[Exception]) -> None:
+                if error:
+                    logger.error("Playback error in guild %d: %s", guild_id, error)
+                # Bug 3: reject stale callbacks
+                current_player = self.bot.get_player(guild_id)
+                if current_player._play_seq != captured_seq:
+                    logger.debug(
+                        "guild %d: after_play is stale (seq %d != %d) — ignoring.",
+                        guild_id, captured_seq, current_player._play_seq,
+                    )
+                    return
+                asyncio.run_coroutine_threadsafe(
+                    self._play_next(guild_id), self.bot.loop
+                )
+
+            try:
+                # Feature 13: acquire pre-warmed source from pool
+                source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
+                vc.play(source, after=after_play)
+                # Replenish the pool in the background
+                asyncio.create_task(self.bot.ffmpeg_pool.replenish())
+                logger.debug("FFmpegWarmPool: playing %s…", stream_url[:80])
+            except Exception as exc:
+                logger.error("FFmpeg start failed: %s", exc)
+                if skip_depth < config.SKIP_ERROR_LIMIT:
+                    return await self._play_next(guild_id, skip_depth=skip_depth + 1)
+                return
+
+            # ── Update player state ───────────────────────────────────────────────
+            import datetime
+            player.now_playing     = next_track
+            player.play_start_time = datetime.datetime.now(datetime.timezone.utc)
+            player.idle_since      = None
+
+            # ── Record analytics ───────────────────────────────────────────────────
+            asyncio.create_task(
+                self.bot.db.log_event(guild_id, "track_play", {"title": next_track.title, "url": next_track.url})
+            )
+
+            # ── Feature 15: Background metadata refresh ───────────────────────────
+            asyncio.create_task(
+                bg_refresh_metadata(next_track, self.bot.youtube)
+            )
+
+            # ── Feature 14: Predictive thumbnail pre-warm for next N tracks ────────
+            asyncio.create_task(
+                prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=player.adaptive_prefetch_limit())
+            )
+
+            # ── Send now-playing embed ────────────────────────────────────────────
             if player.text_channel:
                 try:
-                    await player.text_channel.send(
-                        embed=error_embed("Service Busy", "YouTube API circuit breaker is OPEN. Try again later."),
-                        delete_after=30,
-                    )
-                except Exception:
-                    pass
-            player.reset()
-            return
-        except Exception as exc:
-            logger.warning("Stream URL resolve failed for '%s': %s", next_track.title[:50], exc)
-            if skip_depth < config.SKIP_ERROR_LIMIT:
-                await notify_playback_error(self.bot, guild_id, next_track.title, exc)
-                return await self._play_next(guild_id, skip_depth=skip_depth + 1)
-            player.reset()
-            return
+                    color = await get_dominant_color(next_track.thumbnail, self.bot.http_session)
+                    embed = now_playing_embed(player, color, self.bot.user, theme=player.embed_theme)
+                    view  = MusicControlView(self.bot, guild_id)
+                    msg   = await player.text_channel.send(embed=embed, view=view)
+                    player.now_playing_msg    = msg
+                    player.now_playing_msg_id = msg.id
+                except Exception as exc:
+                    logger.warning("Could not send now-playing embed: %s", exc)
 
-        if not stream_url:
-            logger.warning("No stream URL for '%s'", next_track.title[:50])
-            if skip_depth < config.SKIP_ERROR_LIMIT:
-                return await self._play_next(guild_id, skip_depth=skip_depth + 1)
-            player.reset()
-            return
+            # ── Schedule predictive prefetch for next track ───────────────────────
+            self._schedule_prefetch(guild_id, next_track)
 
-        # ── Build FFmpeg options ───────────────────────────────────────────────
-        cfg_server = await self.bot.db.get_server_config(guild_id)
-
-        # Feature 11: Resume offset — if track has a stored position, seek to it
-        resume_offset = getattr(next_track, "_resume_offset", 0) or 0
-        if resume_offset:
-            next_track._resume_offset = 0  # clear after use
-
-        ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
-            effects         = player.effects,
-            volume          = player.volume,
-            quality         = cfg_server.audio_quality,
-            seek_seconds    = resume_offset,      # seek to saved position
-            speed           = player.playback_speed,        # F21
-            pitch_semitones = player.pitch_semitones,       # F22
-            crossfade_secs  = player.crossfade_seconds,     # F23
-            silence_trim    = player.silence_trim,           # F24
-            replay_gain     = player.replay_gain,            # F25
-        )
-
-        # ── Start playback (Feature 13: use warm pool) ────────────────────────
-        def after_play(error: Optional[Exception]) -> None:
-            if error:
-                logger.error("Playback error in guild %d: %s", guild_id, error)
-            asyncio.run_coroutine_threadsafe(
-                self._play_next(guild_id), self.bot.loop
-            )
-
-        try:
-            # Feature 13: acquire pre-warmed source from pool
-            source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
-            vc.play(source, after=after_play)
-            # Replenish the pool in the background
-            asyncio.create_task(self.bot.ffmpeg_pool.replenish())
-            logger.debug("FFmpegWarmPool: playing %s…", stream_url[:80])
-        except Exception as exc:
-            logger.error("FFmpeg start failed: %s", exc)
-            if skip_depth < config.SKIP_ERROR_LIMIT:
-                return await self._play_next(guild_id, skip_depth=skip_depth + 1)
-            return
-
-        # ── Update player state ───────────────────────────────────────────────
-        import datetime
-        player.now_playing     = next_track
-        player.play_start_time = datetime.datetime.now(datetime.timezone.utc)
-        player.idle_since      = None
-
-        # ── Record analytics ───────────────────────────────────────────────────
-        asyncio.create_task(
-            self.bot.db.log_event(guild_id, "track_play", {"title": next_track.title, "url": next_track.url})
-        )
-
-        # ── Feature 15: Background metadata refresh ───────────────────────────
-        asyncio.create_task(
-            bg_refresh_metadata(next_track, self.bot.youtube)
-        )
-
-        # ── Feature 14: Predictive thumbnail pre-warm for next N tracks ────────
-        asyncio.create_task(
-            prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=player.adaptive_prefetch_limit())
-        )
-
-        # ── Send now-playing embed ────────────────────────────────────────────
-        if player.text_channel:
-            try:
-                color = await get_dominant_color(next_track.thumbnail, self.bot.http_session)
-                embed = now_playing_embed(player, color, self.bot.user, theme=player.embed_theme)
-                view  = MusicControlView(self.bot, guild_id)
-                msg   = await player.text_channel.send(embed=embed, view=view)
-                player.now_playing_msg    = msg
-                player.now_playing_msg_id = msg.id
-            except Exception as exc:
-                logger.warning("Could not send now-playing embed: %s", exc)
-
-        # ── Schedule predictive prefetch for next track ───────────────────────
-        self._schedule_prefetch(guild_id, next_track)
 
     def _schedule_prefetch(self, guild_id: int, current_track: Track) -> None:
         """Schedule background prefetch ~15s before current track ends."""
@@ -769,6 +797,8 @@ class MusicCog(commands.Cog, name="Music"):
         )
 
         if is_dj or is_owner:
+            # Bug 1: cancel prefetch before stopping so no stale FFmpeg task races
+            player.cancel_prefetch()
             vc.stop()
             label = "DJ Skip ⏭" if is_dj else "Skipped (Your Track) ⏭"
             await interaction.followup.send(
@@ -799,6 +829,8 @@ class MusicCog(commands.Cog, name="Music"):
 
         # Already enough? Skip immediately
         if len(player.skip_votes) >= threshold:
+            # Bug 1: cancel prefetch before stopping
+            player.cancel_prefetch()
             vc.stop()
             await interaction.followup.send(
                 embed=success_embed(
@@ -837,6 +869,8 @@ class MusicCog(commands.Cog, name="Music"):
             return
         player = self.bot.get_player(interaction.guild_id)
         vc = interaction.guild.voice_client
+        # Bug 1: cancel prefetch before stopping so no orphan FFmpeg task runs
+        player.cancel_prefetch()
         if vc and vc.is_playing():
             vc.stop()
         player.reset()
