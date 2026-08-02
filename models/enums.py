@@ -112,3 +112,28 @@ class NLUIntent(str, Enum):
     LOOP    = "loop"
     SHUFFLE = "shuffle"
     UNKNOWN = "unknown"
+
+
+class EmbedTheme(str, Enum):
+    """Visual theme for now-playing and queue embeds (F27)."""
+    CLASSIC = "classic"   # Dynamic colour from thumbnail — current behaviour
+    SPOTIFY = "spotify"   # Spotify green, large artwork card
+    MINIMAL = "minimal"   # Dark, no fields, ultra-clean
+    GLASS   = "glass"     # Frosted / gradient feel
+
+    def display_name(self) -> str:
+        return {
+            "classic": "🎨 Classic",
+            "spotify": "🟢 Spotify",
+            "minimal": "◻️ Minimal",
+            "glass":   "🔮 Glass",
+        }[self.value]
+
+    def accent_color(self, dynamic_color: int = 0x5865F2) -> int:
+        """Return the embed color for this theme (dynamic_color used only by Classic)."""
+        return {
+            "classic": dynamic_color,
+            "spotify": 0x1DB954,
+            "minimal": 0x2F3136,
+            "glass":   0xA8D8EA,
+        }[self.value]

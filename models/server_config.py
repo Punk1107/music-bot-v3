@@ -10,15 +10,20 @@ Tier-S additions:
   - queue_locked: prevents non-DJ/Admin from adding to queue (Feature 2)
   - queue_add_permission: granular permission level for adding tracks (Feature 3)
   - duplicate_mode: how duplicate URLs are handled (Feature 6)
+
+Tier A/A+/B additions:
+  - auto_leave_alone, auto_pause_empty: voice channel behaviour (F17, F18)
+  - embed_theme: visual theme for embeds (F27)
+  - guild_presets: saved preset bundles (F26)
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from models.enums import AudioQuality, QueuePermission, DuplicateMode
+from models.enums import AudioQuality, QueuePermission, DuplicateMode, EmbedTheme
 
 
 @dataclass
@@ -56,6 +61,19 @@ class ServerConfig:
     # Tier-S: Duplicate Detection Mode (Feature 6)
     duplicate_mode: DuplicateMode = DuplicateMode.ALLOW
 
+    # ── Tier A: Voice Channel Behaviour ──────────────────────────────────────
+    # F17: Auto-leave when bot is the only member for >90s
+    auto_leave_alone: bool = True
+    # F18: Auto-pause when channel is empty; resume on rejoin
+    auto_pause_empty: bool = True
+
+    # ── Tier B: Theme System (F27) ────────────────────────────────────────────
+    embed_theme: EmbedTheme = EmbedTheme.CLASSIC
+
+    # ── Tier B: Guild Presets (F26) ───────────────────────────────────────────
+    # Stored as {preset_name: {effects, volume, quality, loop, speed, pitch, crossfade}}
+    guild_presets: Dict[str, Any] = field(default_factory=dict)
+
     # ── Serialisation ─────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -74,6 +92,11 @@ class ServerConfig:
             "queue_locked":           self.queue_locked,
             "queue_add_permission":   self.queue_add_permission.value,
             "duplicate_mode":         self.duplicate_mode.value,
+            # Tier A/B
+            "auto_leave_alone":       self.auto_leave_alone,
+            "auto_pause_empty":       self.auto_pause_empty,
+            "embed_theme":            self.embed_theme.value,
+            "guild_presets":          self.guild_presets,
         }
 
     def to_json(self) -> str:
@@ -96,6 +119,11 @@ class ServerConfig:
             queue_locked          = bool(data.get("queue_locked", False)),
             queue_add_permission  = QueuePermission(data.get("queue_add_permission", "everyone")),
             duplicate_mode        = DuplicateMode(data.get("duplicate_mode", "allow")),
+            # Tier A/B
+            auto_leave_alone      = bool(data.get("auto_leave_alone", True)),
+            auto_pause_empty      = bool(data.get("auto_pause_empty", True)),
+            embed_theme           = EmbedTheme(data.get("embed_theme", "classic")),
+            guild_presets         = data.get("guild_presets", {}),
         )
 
     @classmethod
