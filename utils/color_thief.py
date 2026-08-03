@@ -8,6 +8,13 @@ A concurrency semaphore limits simultaneous extractions.
 
 Pure Python — no Pillow dependency.
 Supports JPEG and PNG thumbnails via HTTP.
+
+Perf-1 changes:
+  - Dedicated bounded ThreadPoolExecutor (max_workers=2) for color extraction
+    so the default executor (used by yt-dlp and other heavy tasks) is not
+    starved by image-decoding work.
+  - Cache hit/miss/eviction counters exposed via color_cache_stats().
+  - Eviction logging at DEBUG level.
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ import logging
 import struct
 import time
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import aiohttp
@@ -32,8 +40,20 @@ _COLOR_CACHE: dict[str, tuple[tuple[int, int, int], float]] = {}
 _CACHE_TTL    = 3600.0   # 1 hour
 _CACHE_MAX    = 1024
 
-# ── Concurrency limit ─────────────────────────────────────────────────────────
+# ── Cache metrics ─────────────────────────────────────────────────────────────
+_cache_hits:      int = 0
+_cache_misses:    int = 0
+_cache_evictions: int = 0
+
+# ── Concurrency limit (semaphore on coroutine side) ───────────────────────────
 _SEM: asyncio.Semaphore | None = None
+
+# ── Perf-1: Dedicated bounded thread-pool for CPU-bound color extraction ──────
+# max_workers=2 means at most 2 images are being decoded simultaneously.
+# This keeps the default executor free for yt-dlp / ffmpeg calls.
+_COLOR_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="color_thief"
+)
 
 
 def animated_embed_color(base_color: int, elapsed_seconds: int, interval: int = 7) -> int:
@@ -176,11 +196,16 @@ async def get_dominant_color(
     V3: CPU work dispatched to thread-pool executor via loop.run_in_executor().
     Results cached for CACHE_TTL seconds. Max CACHE_MAX entries.
 
+    Perf-1: Uses a dedicated bounded ThreadPoolExecutor (max_workers=2) so
+    color extraction never competes with yt-dlp threads on the default pool.
+
     Args:
         url:      Image URL (thumbnail). Returns fallback if None.
         session:  Shared aiohttp session. Creates a temporary one if None.
         fallback: Color to return on any error.
     """
+    global _cache_hits, _cache_misses, _cache_evictions
+
     if not url:
         return fallback
 
@@ -190,8 +215,13 @@ async def get_dominant_color(
     if url in _COLOR_CACHE:
         color, ts = _COLOR_CACHE[url]
         if now - ts < _CACHE_TTL:
+            _cache_hits += 1
             return (color[0] << 16) | (color[1] << 8) | color[2]
         del _COLOR_CACHE[url]
+        _cache_evictions += 1
+        logger.debug("Color cache TTL eviction for url=%s…", url[:40])
+
+    _cache_misses += 1
 
     async with _get_sem():
         try:
@@ -213,10 +243,10 @@ async def get_dominant_color(
                 if close_session and session:
                     await session.close()
 
-            # Dispatch CPU work to executor
+            # Dispatch CPU work to dedicated bounded executor (Perf-1)
             loop = asyncio.get_running_loop()
             color = await loop.run_in_executor(
-                None, _extract_dominant_color, raw, content_type
+                _COLOR_EXECUTOR, _extract_dominant_color, raw, content_type
             )
 
             # Store in cache
@@ -224,9 +254,23 @@ async def get_dominant_color(
             if len(_COLOR_CACHE) > _CACHE_MAX:
                 oldest = min(_COLOR_CACHE, key=lambda k: _COLOR_CACHE[k][1])
                 del _COLOR_CACHE[oldest]
+                _cache_evictions += 1
 
             return (color[0] << 16) | (color[1] << 8) | color[2]
 
         except Exception as exc:
             logger.debug("Color extraction failed for '%s': %s", url[:60] if url else "", exc)
             return fallback
+
+
+def color_cache_stats() -> dict:
+    """Return hit/miss/eviction metrics for the color cache."""
+    total = _cache_hits + _cache_misses
+    return {
+        "hits":      _cache_hits,
+        "misses":    _cache_misses,
+        "evictions": _cache_evictions,
+        "hit_rate":  round(_cache_hits / total, 3) if total else 0.0,
+        "size":      len(_COLOR_CACHE),
+        "max_size":  _CACHE_MAX,
+    }

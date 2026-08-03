@@ -141,6 +141,12 @@ class GuildPlayer:
         # ── Tier B: Embed Theme (F27) ─────────────────────────────────
         self.embed_theme: str = "classic"  # matches EmbedTheme values
 
+        # ── Perf-1: Cached embed color (set on track start, cleared on reset) ──
+        # Avoids re-fetching the thumbnail URL on every 7-second np_refresh tick.
+        self._cached_base_color: Optional[int] = None
+        # Last quantised progress-bar step; used to skip redundant msg.edit() calls.
+        self._np_last_bar_step:  int           = -1
+
     # ── Queue helpers ─────────────────────────────────────────────────────────
 
     def __len__(self) -> int:
@@ -228,6 +234,9 @@ class GuildPlayer:
         self._play_seq += 1
         # Reset vote-skip state for the next track
         self.skip_votes.clear()
+        # Perf-1: clear embed color cache so the next track re-resolves its color
+        self._cached_base_color = None
+        self._np_last_bar_step  = -1
 
     # ── Tier A: Undo (F19) ─────────────────────────────────────────
 
@@ -423,6 +432,9 @@ class GuildPlayer:
         # and replace the playing lock (may be locked from a concurrent call).
         self._play_seq    += 1
         self._playing_lock = asyncio.Lock()
+        # Perf-1: clear cached embed-color and progress step on full reset
+        self._cached_base_color = None
+        self._np_last_bar_step  = -1
         # Note: intentional_disconnect is NOT reset here on purpose.
         # It is set True after reset() in /stop and /leave, then cleared
         # in _ensure_voice() when a new voice connection is established.

@@ -482,6 +482,9 @@ class MusicCog(commands.Cog, name="Music"):
             if player.text_channel:
                 try:
                     color = await get_dominant_color(next_track.thumbnail, self.bot.http_session)
+                    # Perf-1: cache resolved base color on player so _np_refresh
+                    # can skip re-fetching the thumbnail on every 7-second tick.
+                    player._cached_base_color = color
                     embed = now_playing_embed(player, color, self.bot.user, theme=player.embed_theme)
                     view  = MusicControlView(self.bot, guild_id)
                     msg   = await player.text_channel.send(embed=embed, view=view)
@@ -495,7 +498,17 @@ class MusicCog(commands.Cog, name="Music"):
 
 
     def _schedule_prefetch(self, guild_id: int, current_track: Track) -> None:
-        """Schedule background prefetch ~15s before current track ends."""
+        """
+        Schedule background stream-URL prefetch for the next track.
+
+        Perf-1: Adaptive delay based on current track duration so we neither
+        prefetch too early (wasting the TTL on a long track) nor too late
+        (causing a gap on a very short track):
+
+          duration < 2 min  →  prefetch 8 s before end
+          2 min – 30 min    →  prefetch 15 s before end  (original behaviour)
+          > 30 min          →  prefetch 25 s before end
+        """
         player = self.bot.get_player(guild_id)
         player.cancel_prefetch()
 
@@ -504,7 +517,16 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
         next_track = queue[0]
-        delay = max(0, (current_track.duration or 60) - 15)
+        dur = current_track.duration or 60
+
+        if dur < 120:          # < 2 minutes
+            ahead = 8
+        elif dur > 1800:       # > 30 minutes
+            ahead = 25
+        else:
+            ahead = 15
+
+        delay = max(0, dur - ahead)
 
         async def _prefetch_after_delay():
             await asyncio.sleep(delay)

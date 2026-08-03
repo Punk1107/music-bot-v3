@@ -12,6 +12,16 @@ V3 Changes:
   - Connection pool comment: aiosqlite is single-connection; we serialize via
     asyncio.Lock. For multi-process deployments, use PostgreSQL instead.
 
+Performance (Perf-1):
+  - save_queue:  DELETE + executemany batch INSERT in a single transaction
+  - log_event:   Buffered async write — events are queued in-memory and
+                 flushed in a single batch transaction every ANALYTICS_FLUSH_INTERVAL
+                 seconds (or when the buffer hits ANALYTICS_FLUSH_SIZE).
+  - get_server_config: In-memory LRU cache with TTL so the hot path (every
+                 voice-state event, every message) skips the DB entirely.
+  - Additional indexes: idx_history_user (user_id filter), idx_analytics_ts
+                 (standalone ts for pruning), idx_user_stats_user (user_id).
+
 Schema: WAL mode + NORMAL sync + FK enforcement.
 Handles: queue persistence, play history, server config, user stats, search
          history, analytics, favorites.
@@ -22,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
@@ -34,7 +45,15 @@ from models.server_config import ServerConfig
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────── Schema SQL ──────────────────────────────────────
+# ── Analytics write buffer ────────────────────────────────────────────────────
+# Events accumulate here and are flushed in a single batch transaction.
+ANALYTICS_FLUSH_INTERVAL: float = 5.0    # seconds between auto-flushes
+ANALYTICS_FLUSH_SIZE:     int   = 50     # flush early if buffer this full
+
+# ── Server config cache ───────────────────────────────────────────────────────
+_CFG_CACHE_TTL: float = 30.0            # cache guild config for 30 s
+
+# ── Schema SQL ───────────────────────────────────────────────────────────────
 
 _SCHEMA_SQL = """
 PRAGMA journal_mode = WAL;
@@ -135,17 +154,38 @@ CREATE TABLE IF NOT EXISTS session_state (
     saved_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_queue_guild_pos       ON queue(guild_id, position);
-CREATE INDEX IF NOT EXISTS idx_history_guild_user    ON history(guild_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_history_played_at     ON history(played_at);
-CREATE INDEX IF NOT EXISTS idx_history_guild_recent  ON history(guild_id, played_at DESC);
-CREATE INDEX IF NOT EXISTS idx_user_stats_guild      ON user_stats(guild_id);
-CREATE INDEX IF NOT EXISTS idx_search_history_guild  ON search_history(guild_id, used_at);
-CREATE INDEX IF NOT EXISTS idx_analytics_guild_ts    ON analytics(guild_id, ts);
-CREATE INDEX IF NOT EXISTS idx_analytics_event       ON analytics(event_type);
-CREATE INDEX IF NOT EXISTS idx_favorites_user_guild  ON favorites(user_id, guild_id);
-CREATE INDEX IF NOT EXISTS idx_bookmarks_user_guild  ON queue_bookmarks(user_id, guild_id);
+-- ── Indexes ──────────────────────────────────────────────────────────────────
+-- Queue
+CREATE INDEX IF NOT EXISTS idx_queue_guild_pos         ON queue(guild_id, position);
+
+-- History — composite for guild+user filtering, and guild+played_at for recency
+CREATE INDEX IF NOT EXISTS idx_history_guild_user      ON history(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_history_played_at       ON history(played_at);
+CREATE INDEX IF NOT EXISTS idx_history_guild_recent    ON history(guild_id, played_at DESC);
+-- Perf-1: standalone user_id index for cross-guild personal lookups
+CREATE INDEX IF NOT EXISTS idx_history_user            ON history(user_id);
+
+-- User stats
+CREATE INDEX IF NOT EXISTS idx_user_stats_guild        ON user_stats(guild_id);
+-- Perf-1: standalone user_id for leaderboard / personal stat queries
+CREATE INDEX IF NOT EXISTS idx_user_stats_user         ON user_stats(user_id);
+
+-- Search history
+CREATE INDEX IF NOT EXISTS idx_search_history_guild    ON search_history(guild_id, used_at);
+-- Perf-1: user_id index for per-user search history lookups
+CREATE INDEX IF NOT EXISTS idx_search_history_user     ON search_history(user_id);
+
+-- Analytics
+CREATE INDEX IF NOT EXISTS idx_analytics_guild_ts      ON analytics(guild_id, ts);
+CREATE INDEX IF NOT EXISTS idx_analytics_event         ON analytics(event_type);
+-- Perf-1: standalone ts for the daily prune DELETE
+CREATE INDEX IF NOT EXISTS idx_analytics_ts            ON analytics(ts);
+
+-- Favorites
+CREATE INDEX IF NOT EXISTS idx_favorites_user_guild    ON favorites(user_id, guild_id);
+
+-- Queue bookmarks
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user_guild    ON queue_bookmarks(user_id, guild_id);
 """
 
 
@@ -153,6 +193,15 @@ class DatabaseManager:
     """
     Async SQLite manager — single persistent connection, all writes serialised
     via asyncio.Lock for safety.
+
+    Perf-1 additions:
+      - save_queue() uses executemany for O(1) round-trips regardless of queue size.
+      - log_event() is buffered: events queue in RAM and flush in a single batch
+        transaction every ANALYTICS_FLUSH_INTERVAL seconds or when the buffer
+        reaches ANALYTICS_FLUSH_SIZE entries.
+      - get_server_config() maintains a per-guild in-memory cache (TTL=30 s) so
+        the hot path (voice-state, on_message, every permission check) never
+        touches the disk.
 
     Lifecycle:
         db = DatabaseManager()
@@ -166,6 +215,21 @@ class DatabaseManager:
         self._conn: Optional[aiosqlite.Connection] = None
         self._lock: asyncio.Lock = asyncio.Lock()
 
+        # ── Perf-1: Analytics write buffer ───────────────────────────────────
+        # List of (guild_id, event_type, payload_json) tuples pending flush.
+        self._analytics_buf: list[tuple[int, str, str]] = []
+        self._analytics_lock: asyncio.Lock = asyncio.Lock()
+        self._analytics_flush_task: Optional[asyncio.Task] = None
+
+        # ── Perf-1: Server config cache ───────────────────────────────────────
+        # {guild_id: (ServerConfig, monotonic_timestamp)}
+        self._cfg_cache: dict[int, tuple[ServerConfig, float]] = {}
+        self._cfg_lock: asyncio.Lock = asyncio.Lock()
+
+        # ── Cache metrics ─────────────────────────────────────────────────────
+        self._cfg_hits:   int = 0
+        self._cfg_misses: int = 0
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def initialise(self) -> None:
@@ -177,7 +241,23 @@ class DatabaseManager:
         await self._conn.commit()
         logger.info("Database initialised at %s", self._db_path)
 
+        # Start background analytics flush loop
+        self._analytics_flush_task = asyncio.create_task(
+            self._analytics_flush_loop()
+        )
+
     async def close(self) -> None:
+        # Cancel and await flush task
+        if self._analytics_flush_task and not self._analytics_flush_task.done():
+            self._analytics_flush_task.cancel()
+            try:
+                await self._analytics_flush_task
+            except asyncio.CancelledError:
+                pass
+
+        # Final analytics flush
+        await self._flush_analytics_buffer()
+
         if self._conn:
             try:
                 await self._conn.commit()
@@ -215,24 +295,25 @@ class DatabaseManager:
         channel_id: int,
         tracks: list[Track],
     ) -> None:
-        """Persist the full queue for a guild (replaces existing)."""
+        """
+        Persist the full queue for a guild (replaces existing).
+
+        Perf-1: Uses executemany to batch-insert all rows in a single
+        round-trip instead of one execute() call per track.
+        """
+        rows = [
+            (guild_id, channel_id, track.to_json(), pos, track.requested_by_id or 0)
+            for pos, track in enumerate(tracks)
+        ]
         async with self._connect() as conn:
-            await conn.execute(
-                "DELETE FROM queue WHERE guild_id = ?", (guild_id,)
-            )
-            for pos, track in enumerate(tracks):
-                await conn.execute(
+            await conn.execute("DELETE FROM queue WHERE guild_id = ?", (guild_id,))
+            if rows:
+                await conn.executemany(
                     """
                     INSERT INTO queue (guild_id, channel_id, track_data, position, user_id)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (
-                        guild_id,
-                        channel_id,
-                        track.to_json(),
-                        pos,
-                        track.requested_by_id or 0,
-                    ),
+                    rows,
                 )
             await conn.commit()
 
@@ -364,15 +445,51 @@ class DatabaseManager:
     # ── Server Config ─────────────────────────────────────────────────────────
 
     async def get_server_config(self, guild_id: int) -> ServerConfig:
+        """
+        Return ServerConfig for the guild.
+
+        Perf-1: Checks an in-memory cache first (TTL = 30 s).  On a busy bot
+        this avoids hundreds of SELECT statements per second during playback.
+        """
+        now = time.monotonic()
+
+        async with self._cfg_lock:
+            entry = self._cfg_cache.get(guild_id)
+            if entry:
+                cfg, ts = entry
+                if now - ts < _CFG_CACHE_TTL:
+                    self._cfg_hits += 1
+                    return cfg
+            self._cfg_misses += 1
+
+        # Cache miss — fetch from DB
         async with self._connect() as conn:
             cursor = await conn.execute(
                 "SELECT config_data FROM server_configs WHERE guild_id = ?",
                 (guild_id,),
             )
             row = await cursor.fetchone()
-        if row:
-            return ServerConfig.from_json(row["config_data"])
-        return ServerConfig.default(guild_id)
+
+        cfg = ServerConfig.from_json(row["config_data"]) if row else ServerConfig.default(guild_id)
+
+        async with self._cfg_lock:
+            self._cfg_cache[guild_id] = (cfg, time.monotonic())
+
+        return cfg
+
+    def invalidate_config_cache(self, guild_id: int) -> None:
+        """Invalidate cached config for a guild after a save."""
+        self._cfg_cache.pop(guild_id, None)
+
+    def config_cache_stats(self) -> dict:
+        """Return hit/miss metrics for the config cache."""
+        total = self._cfg_hits + self._cfg_misses
+        return {
+            "hits":     self._cfg_hits,
+            "misses":   self._cfg_misses,
+            "hit_rate": round(self._cfg_hits / total, 3) if total else 0.0,
+            "size":     len(self._cfg_cache),
+        }
 
     async def save_server_config(self, cfg: ServerConfig) -> None:
         async with self._connect() as conn:
@@ -387,6 +504,8 @@ class DatabaseManager:
                 (cfg.guild_id, cfg.to_json()),
             )
             await conn.commit()
+        # Invalidate cache after write
+        self.invalidate_config_cache(cfg.guild_id)
 
     # ── Search History (autocomplete) ─────────────────────────────────────────
 
@@ -438,26 +557,72 @@ class DatabaseManager:
             rows = await cursor.fetchall()
         return [row["query"] for row in rows]
 
-    # ── Analytics ─────────────────────────────────────────────────────────────
+    # ── Analytics (buffered writes) ───────────────────────────────────────────
 
     async def log_event(
         self, guild_id: int, event_type: str, payload: dict | None = None
     ) -> None:
-        """Fire-and-forget analytics log. Silently swallows errors."""
+        """
+        Fire-and-forget analytics log.
+
+        Perf-1: Events are buffered in-memory and written in a single batch
+        INSERT every ANALYTICS_FLUSH_INTERVAL seconds (or when the buffer
+        reaches ANALYTICS_FLUSH_SIZE).  This converts N separate BEGIN/INSERT/COMMIT
+        round-trips into a single transaction.
+        """
         try:
-            async with self._connect() as conn:
-                await conn.execute(
-                    "INSERT INTO analytics (guild_id, event_type, payload) VALUES (?, ?, ?)",
-                    (guild_id, event_type, json.dumps(payload or {}, ensure_ascii=False)),
-                )
-                await conn.commit()
+            payload_json = json.dumps(payload or {}, ensure_ascii=False)
+            async with self._analytics_lock:
+                self._analytics_buf.append((guild_id, event_type, payload_json))
+                should_flush = len(self._analytics_buf) >= ANALYTICS_FLUSH_SIZE
+
+            if should_flush:
+                await self._flush_analytics_buffer()
         except Exception as exc:
             logger.debug("analytics log_event error: %s", exc)
+
+    async def _flush_analytics_buffer(self) -> None:
+        """Write all buffered analytics events in a single transaction."""
+        async with self._analytics_lock:
+            if not self._analytics_buf:
+                return
+            batch = self._analytics_buf.copy()
+            self._analytics_buf.clear()
+
+        if not batch:
+            return
+        try:
+            async with self._connect() as conn:
+                await conn.executemany(
+                    "INSERT INTO analytics (guild_id, event_type, payload) VALUES (?, ?, ?)",
+                    batch,
+                )
+                await conn.commit()
+            logger.debug("Analytics flush: %d events committed", len(batch))
+        except Exception as exc:
+            logger.warning("Analytics flush error: %s", exc)
+            # Re-queue failed events
+            async with self._analytics_lock:
+                self._analytics_buf[:0] = batch
+
+    async def _analytics_flush_loop(self) -> None:
+        """Background loop: flush analytics buffer every ANALYTICS_FLUSH_INTERVAL seconds."""
+        while True:
+            try:
+                await asyncio.sleep(ANALYTICS_FLUSH_INTERVAL)
+                await self._flush_analytics_buffer()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.debug("Analytics flush loop error: %s", exc)
 
     async def get_analytics(
         self, guild_id: int, days: int = 7
     ) -> dict[str, Any]:
         """Return aggregated analytics for a guild over the last N days."""
+        # Flush buffer first so the query sees recent events
+        await self._flush_analytics_buffer()
+
         async with self._connect() as conn:
             # Top tracks from history
             cursor = await conn.execute(
@@ -511,6 +676,8 @@ class DatabaseManager:
 
     async def prune_analytics(self, days: int = 30) -> int:
         """Delete analytics older than N days. Returns rows deleted."""
+        # Flush pending buffer before pruning
+        await self._flush_analytics_buffer()
         async with self._connect() as conn:
             cursor = await conn.execute(
                 "DELETE FROM analytics WHERE ts < datetime('now', ?)",
@@ -1082,4 +1249,3 @@ class DatabaseManager:
             "total_days":     len(active_dates),
             "active_dates":   [d.isoformat() for d in active_dates[:30]],
         }
-
