@@ -670,15 +670,38 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=30)
     async def _idle_check(self) -> None:
-        """Disconnect guilds that have been idle longer than their configured timeout."""
+        """
+        Disconnect guilds idle longer than their configured timeout.
+
+        Perf-1 Memory Audit: Also purges stale GuildPlayer entries for guilds
+        the bot has left or that have no voice connection and nothing queued.
+        Prevents _players from growing unboundedly across the bot's lifetime.
+        """
         now = datetime.now(timezone.utc)
+        stale_guilds: list[int] = []
+
         for guild_id, player in list(self._players.items()):
+            guild = self.get_guild(guild_id)
+
+            # Perf-1: guild no longer in bot's guild list (kicked / deleted)
+            if not guild:
+                stale_guilds.append(guild_id)
+                continue
+
+            vc = guild.voice_client
+
+            # Perf-1: idle player with empty queue and no VC — free memory
+            if (
+                not player.now_playing
+                and not player.queue
+                and (not vc or not vc.is_connected())
+            ):
+                stale_guilds.append(guild_id)
+                continue
+
+            # Standard idle timeout check
             if player.now_playing or not player.idle_since:
                 continue
-            guild = self.get_guild(guild_id)
-            if not guild:
-                continue
-            vc = guild.voice_client
             if not vc or not vc.is_connected():
                 player.idle_since = None
                 continue
@@ -705,6 +728,18 @@ class MusicBot(commands.Bot):
                     await vc.disconnect(force=True)
                 except Exception:
                     pass
+                stale_guilds.append(guild_id)
+
+        # Remove all stale players in one pass (after iterating)
+        for gid in stale_guilds:
+            p = self._players.pop(gid, None)
+            if p:
+                p.reset()
+        if stale_guilds:
+            logger.debug(
+                "Pruned %d stale GuildPlayer entries from _players registry",
+                len(stale_guilds),
+            )
 
     @_idle_check.before_loop
     async def _before_idle_check(self) -> None:
@@ -732,18 +767,52 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=7)
     async def _np_refresh(self) -> None:
-        """Refresh now-playing embed progress bar every 7 seconds."""
+        """
+        Refresh now-playing embed progress bar every 7 seconds.
+
+        Perf-1 optimisations:
+          1. Use player._cached_base_color instead of re-fetching the thumbnail
+             on every tick (thumbnail URL and dominant color don't change mid-track).
+          2. Skip msg.edit() when the quantised progress hasn't advanced by at
+             least one step (~1 / bar_width ≈ 3 %).  This prevents a burst of
+             Discord API calls on very short tracks or when the bot is paused.
+        """
         for guild_id, player in self._players.items():
             if not player.now_playing or not player.now_playing_msg:
                 continue
             try:
                 from utils.embeds import now_playing_embed
-                from utils.color_thief import animated_embed_color, get_dominant_color
-                base_color = await get_dominant_color(
-                    player.now_playing.thumbnail, self.http_session
+                from utils.color_thief import animated_embed_color
+
+                # Perf-1: reuse the color cached when playback started
+                base_color = getattr(player, "_cached_base_color", None)
+                if base_color is None:
+                    # Fallback: fetch (only happens if track started before this patch)
+                    from utils.color_thief import get_dominant_color
+                    base_color = await get_dominant_color(
+                        player.now_playing.thumbnail, self.http_session
+                    )
+                    player._cached_base_color = base_color
+
+                # Perf-1: quantise progress to 32 steps (matching bar width).
+                # Only edit the message when the step changes (≈ every 3 % of duration).
+                bar_width = 32
+                fraction  = player.progress_fraction()
+                step      = int(fraction * bar_width)
+                last_step = getattr(player, "_np_last_bar_step", -1)
+                is_paused = (
+                    self.get_guild(guild_id).voice_client.is_paused()
+                    if self.get_guild(guild_id) and self.get_guild(guild_id).voice_client
+                    else False
                 )
+
+                if step == last_step and not is_paused:
+                    # Progress bar hasn't moved — skip this edit cycle
+                    continue
+
+                player._np_last_bar_step = step
                 color = animated_embed_color(base_color, player.elapsed_seconds)
-                embed = now_playing_embed(player, color, self.user, theme=getattr(player, "embed_theme", "classic"))
+                embed = now_playing_embed(player, color, self.user, paused=is_paused, theme=getattr(player, "embed_theme", "classic"))
                 msg   = player.now_playing_msg
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)
@@ -770,6 +839,24 @@ class MusicBot(commands.Bot):
                 "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
                 raw_n, search_n, thumb_n, meta_n,
             )
+        # Perf-1: log all cache metrics at DEBUG level every 30 min
+        from utils.color_thief import color_cache_stats
+        from core.lru_cache import combined_stats as _lru_stats
+        lru = await _lru_stats()
+        color = color_cache_stats()
+        cfg   = self.db.config_cache_stats()
+        logger.debug(
+            "Cache metrics — color: hits=%d misses=%d evictions=%d hit_rate=%.1f%% | "
+            "config: hits=%d misses=%d hit_rate=%.1f%% size=%d | "
+            "lru metadata: hits=%d misses=%d evictions=%d | "
+            "lru thumbnail: hits=%d misses=%d evictions=%d | "
+            "lru search: hits=%d misses=%d evictions=%d",
+            color["hits"], color["misses"], color["evictions"], color["hit_rate"] * 100,
+            cfg["hits"], cfg["misses"], cfg["hit_rate"] * 100, cfg["size"],
+            lru["metadata"]["hits"], lru["metadata"]["misses"], lru["metadata"]["evictions"],
+            lru["thumbnail"]["hits"], lru["thumbnail"]["misses"], lru["thumbnail"]["evictions"],
+            lru["search"]["hits"],    lru["search"]["misses"],    lru["search"]["evictions"],
+        )
 
     @_cache_prune.before_loop
     async def _before_cache_prune(self) -> None:

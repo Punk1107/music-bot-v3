@@ -104,10 +104,22 @@ class YouTubeExtractor:
         # Instance-level semaphore for extraction concurrency
         self._extract_sem: asyncio.Semaphore | None = None
 
+        # Perf-1: outer semaphore limiting concurrent playlist extraction jobs
+        self._playlist_sem: asyncio.Semaphore | None = None
+
     def _get_sem(self) -> asyncio.Semaphore:
         if self._extract_sem is None:
             self._extract_sem = asyncio.Semaphore(config.EXTRACT_CONCURRENCY)
         return self._extract_sem
+
+    def _get_playlist_sem(self) -> asyncio.Semaphore:
+        """Perf-1: Outer semaphore that limits concurrent playlist extraction jobs."""
+        if self._playlist_sem is None:
+            # Allow at most 2 playlist jobs simultaneously across all guilds.
+            self._playlist_sem = asyncio.Semaphore(
+                getattr(config, "PLAYLIST_EXTRACT_CONCURRENCY", 2)
+            )
+        return self._playlist_sem
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -390,7 +402,17 @@ class YouTubeExtractor:
         return tracks
 
     async def get_playlist(self, url: str, max_tracks: int = 50) -> list[Track]:
-        """Extract up to max_tracks tracks from a YouTube playlist (flat)."""
+        """
+        Extract up to max_tracks tracks from a YouTube playlist (flat).
+
+        Perf-1: Wrapped in _playlist_sem so that adding 100-track playlists
+        from multiple guilds concurrently doesn't flood yt-dlp workers.
+        """
+        async with self._get_playlist_sem():
+            return await self._get_playlist_inner(url, max_tracks)
+
+    async def _get_playlist_inner(self, url: str, max_tracks: int = 50) -> list[Track]:
+        """Internal playlist extraction (called under _playlist_sem)."""
         logger.info("Extracting playlist (max %d): %s", max_tracks, url)
         loop = asyncio.get_running_loop()
         try:

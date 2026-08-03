@@ -78,6 +78,14 @@ STREAM_URL_TTL: float = float(os.getenv("STREAM_URL_TTL", "14400.0"))   # 4 hour
 # Caps simultaneous heavy yt-dlp calls to avoid CPU spikes.
 EXTRACT_CONCURRENCY: int = int(os.getenv("EXTRACT_CONCURRENCY", "3"))
 
+# ── Playlist extraction concurrency (Perf-1) ──────────────────────────────────
+# Caps simultaneous bulk-playlist extraction jobs across all guilds.
+# A 100-track playlist should not spawn 100 yt-dlp workers at once.
+PLAYLIST_EXTRACT_CONCURRENCY: int = int(os.getenv("PLAYLIST_EXTRACT_CONCURRENCY", "2"))
+
+# ── Color extraction concurrency ──────────────────────────────────────────────
+COLOR_EXTRACT_CONCURRENCY: int = int(os.getenv("COLOR_EXTRACT_CONCURRENCY", "3"))
+
 # ── Track limits ──────────────────────────────────────────────────────────────
 MAX_TRACK_LENGTH: int = int(os.getenv("MAX_TRACK_LENGTH", "7200"))  # seconds (2h)
 MAX_PLAYLIST_TRACKS: int = int(os.getenv("MAX_PLAYLIST_TRACKS", "100"))
@@ -111,8 +119,6 @@ QUEUE_SAVE_INTERVAL: int = int(os.getenv("QUEUE_SAVE_INTERVAL", "300"))  # secon
 # ── NLU (V3: Regex engine — no external API) ──────────────────────────────────
 NLU_ENABLED: bool = os.getenv("NLU_ENABLED", "true").lower() == "true"
 
-# ── Color extraction concurrency ──────────────────────────────────────────────
-COLOR_EXTRACT_CONCURRENCY: int = int(os.getenv("COLOR_EXTRACT_CONCURRENCY", "3"))
 
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
