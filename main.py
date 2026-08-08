@@ -794,23 +794,11 @@ class MusicBot(commands.Bot):
                     )
                     player._cached_base_color = base_color
 
-                # Perf-1: quantise progress to 32 steps (matching bar width).
-                # Only edit the message when the step changes (≈ every 3 % of duration).
-                bar_width = 32
-                fraction  = player.progress_fraction()
-                step      = int(fraction * bar_width)
-                last_step = getattr(player, "_np_last_bar_step", -1)
                 is_paused = (
                     self.get_guild(guild_id).voice_client.is_paused()
                     if self.get_guild(guild_id) and self.get_guild(guild_id).voice_client
                     else False
                 )
-
-                if step == last_step and not is_paused:
-                    # Progress bar hasn't moved — skip this edit cycle
-                    continue
-
-                player._np_last_bar_step = step
                 color = animated_embed_color(base_color, player.elapsed_seconds)
                 embed = now_playing_embed(player, color, self.user, paused=is_paused, theme=getattr(player, "embed_theme", "classic"))
                 msg   = player.now_playing_msg
