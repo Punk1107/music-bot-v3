@@ -985,13 +985,17 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=60)
     async def _memory_pressure(self) -> None:
-        """Check RAM usage and evict caches if pressure thresholds exceeded (F32)."""
+        """Check bot process RSS and evict caches if pressure thresholds exceeded (F32).
+
+        Monitors OWN process RSS (not system-wide RAM) to avoid false positives
+        when other apps (Chrome, VS Code, etc.) consume memory on the same host.
+        """
         try:
             result = await check_memory_pressure()
             if result["level"] >= 2:
                 logger.warning(
-                    "Memory pressure action: %s | %.1f%% RAM | freed %d entries",
-                    result["action"], result["ram_pct"], result["freed"],
+                    "Memory pressure action: %s | bot RSS=%.0fMiB | system RAM=%.1f%% | freed %d entries",
+                    result["action"], result["rss_mb"], result["sys_ram_pct"], result["freed"],
                 )
         except Exception as exc:
             logger.debug("Memory pressure check error: %s", exc)

@@ -122,16 +122,39 @@ class HealthCog(commands.Cog, name="Health"):
         embed.add_field(name="🗄️  SQLite",  value=db_status, inline=True)
 
         # ── Memory (psutil) ───────────────────────────────────────────────────
+        # Shows TWO values:
+        #   1. Bot process RSS  — primary metric, drives cache eviction thresholds
+        #   2. System RAM       — diagnostic only (high system RAM ≠ bot memory issue)
         if psutil:
-            vm       = psutil.virtual_memory()
-            ram_pct  = vm.percent
-            ram_used = vm.used  // (1024 * 1024)
-            ram_tot  = vm.total // (1024 * 1024)
-            mem_icon = "✅" if ram_pct < 70 else ("⚠️" if ram_pct < 85 else "🔴")
+            import os as _os
+            vm          = psutil.virtual_memory()
+            sys_ram_pct = vm.percent
+            sys_ram_used = vm.used  // (1024 * 1024)
+            sys_ram_tot  = vm.total // (1024 * 1024)
+
+            try:
+                proc    = psutil.Process(_os.getpid())
+                rss_mb  = proc.memory_info().rss / (1024 * 1024)
+                # Thresholds match lru_cache.py defaults (overridable via config)
+                try:
+                    import config as _cfg
+                    _light = float(getattr(_cfg, "MEMORY_PRESSURE_MB_LIGHT", 400))
+                    _agg   = float(getattr(_cfg, "MEMORY_PRESSURE_MB_AGGRESSIVE", 900))
+                except Exception:
+                    _light, _agg = 400.0, 900.0
+                bot_icon = "✅" if rss_mb < _light else ("⚠️" if rss_mb < _agg else "🔴")
+                bot_mem_str = f"{bot_icon} **{rss_mb:.0f} MiB** (bot process RSS)"
+            except Exception:
+                bot_mem_str = "⚠️ process RSS unavailable"
+
+            sys_icon = "✅" if sys_ram_pct < 70 else ("⚠️" if sys_ram_pct < 90 else "🔴")
             embed.add_field(
-                name   = "🧠  Memory",
-                value  = f"{mem_icon} **{ram_pct:.1f}%** ({ram_used}MB / {ram_tot}MB)",
-                inline = True,
+                name  = "🧠  Memory",
+                value = (
+                    f"{bot_mem_str}\n"
+                    f"{sys_icon} System: **{sys_ram_pct:.1f}%** ({sys_ram_used}MB / {sys_ram_tot}MB) — diagnostic"
+                ),
+                inline = False,
             )
         else:
             embed.add_field(name="🧠  Memory", value="⚠️ psutil not installed", inline=True)
