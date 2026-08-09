@@ -50,6 +50,12 @@ from core.media_cache    import (                    # Tier-S+ F14 F15
 )
 from core.lru_cache      import check_memory_pressure, combined_stats as lru_stats  # F31 F32
 from core.self_test      import run_self_test, SelfTestReport                        # F34
+from core.stability      import (                    # Stability suite
+    ExceptionKind, classify_exception, log_with_kind,
+    DeadTaskWatchdog, MemoryLeakDetector,
+)
+from core import metrics as metrics_module           # Runtime metrics snapshots
+from core.startup_validator import validate_pre_login  # Pre-login validation
 from webserver           import WebServer
 
 
@@ -118,17 +124,22 @@ class MusicBot(commands.Bot):
             recovery_window   = config.CIRCUIT_BREAKER_WINDOW,
         )
 
-        # ── Per-guild player registry ─────────────────────────────────────────
+        # ── Per-guild player registry ──────────────────────────────────────────────────
         self._players:   dict[int, GuildPlayer] = {}
 
-        # ── Shared HTTP session (created in setup_hook) ───────────────────────
+        # ── Shared HTTP session (created in setup_hook) ──────────────────────────────
         self.http_session: Optional[aiohttp.ClientSession] = None
 
-        # ── Timing ────────────────────────────────────────────────────────────
+        # ── Timing ──────────────────────────────────────────────────────────────────
         self.start_time: datetime = datetime.now(timezone.utc)
 
         # ── Tier Performance: Self-test report (F34) ──────────────────────────
         self.self_test_report: Optional[SelfTestReport] = None
+
+        # ── Stability subsystems (populated in setup_hook) ────────────────────
+        self.task_watchdog:     Optional[DeadTaskWatchdog]             = None
+        self.mem_leak_detector: Optional[MemoryLeakDetector]           = None
+        self.metrics:           Optional[metrics_module.MetricsCollector] = None
 
     # ── Player registry ───────────────────────────────────────────────────────
 
@@ -143,6 +154,12 @@ class MusicBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Called once before the bot connects — ideal for async init."""
         logger.info("🚀 Music Bot V3 initialising…")
+
+        # Initialise stability subsystems
+        self.metrics           = metrics_module.MetricsCollector(self)
+        self.mem_leak_detector = MemoryLeakDetector()
+        self.task_watchdog     = DeadTaskWatchdog(interval=60.0)
+        metrics_module.set_collector(self.metrics)
 
         # Shared aiohttp session
         self.http_session = aiohttp.ClientSession(
@@ -174,6 +191,21 @@ class MusicBot(commands.Bot):
             except Exception as exc:
                 logger.error("Command sync failed: %s", exc)
 
+        # Register all loops with the dead task watchdog
+        if self.task_watchdog:
+            for _loop_task, _loop_name in [
+                (self._idle_check,        "idle_check"),
+                (self._queue_save,        "queue_save"),
+                (self._np_refresh,        "np_refresh"),
+                (self._cache_prune,       "cache_prune"),
+                (self._analytics_prune,   "analytics_prune"),
+                (self._session_heartbeat, "session_heartbeat"),
+                (self._memory_pressure,   "memory_pressure"),
+                (self._metrics_snapshot,  "metrics_snapshot"),
+                (self._memory_leak_detect,"memory_leak_detect"),
+            ]:
+                self.task_watchdog.register(_loop_task, _loop_name)
+
         # Start background tasks
         self._idle_check.start()
         self._queue_save.start()
@@ -182,6 +214,9 @@ class MusicBot(commands.Bot):
         self._analytics_prune.start()
         self._session_heartbeat.start()  # Tier-S+ F11: session state heartbeat
         self._memory_pressure.start()    # Tier Performance F32: memory pressure handler
+        self._metrics_snapshot.start()   # Stability: runtime metrics every 5 min
+        self._memory_leak_detect.start() # Stability: memory leak detection every 30 min
+        self._dead_task_watchdog.start() # Stability: dead task detector every 60 s
 
         # Tier-S+ F13: Warm FFmpeg pool
         asyncio.create_task(self.ffmpeg_pool.initialise())
@@ -195,20 +230,43 @@ class MusicBot(commands.Bot):
         """Graceful shutdown: save queues, stop services, close connections."""
         logger.info("Shutting down Music Bot V3…")
 
-        # Bug 6: cancel all background tasks then gather so they drain cleanly
-        # before we proceed with DB saves and service teardown.
-        _tasks_to_cancel = [
+        # Signal watchdog to stop restarting tasks
+        if self.task_watchdog:
+            self.task_watchdog.stop()
+
+        # Cancel discord.ext.tasks loops
+        _task_loops = [
             t for t in [
                 self._idle_check, self._queue_save, self._np_refresh,
                 self._cache_prune, self._analytics_prune,
                 self._session_heartbeat, self._memory_pressure,
+                self._metrics_snapshot, self._memory_leak_detect,
+                self._dead_task_watchdog,
             ]
             if t is not None
         ]
-        for t in _tasks_to_cancel:
+        for t in _task_loops:
             t.cancel()
-        await asyncio.gather(*[t.get_task() for t in _tasks_to_cancel if t.get_task() is not None],
-                             return_exceptions=True)
+        await asyncio.gather(
+            *[t.get_task() for t in _task_loops if t.get_task() is not None],
+            return_exceptions=True,
+        )
+
+        # Cancel ALL floating asyncio tasks (prefetch, _leave_if_still_alone,
+        # _delayed_resume, sleep timers, etc.) — every create_task() that was
+        # launched but never explicitly cancelled.
+        current_task  = asyncio.current_task()
+        floating_tasks = [
+            t for t in asyncio.all_tasks()
+            if t is not current_task and not t.done()
+        ]
+        if floating_tasks:
+            logger.info(
+                "Cancelling %d floating asyncio task(s)…", len(floating_tasks)
+            )
+            for ft in floating_tasks:
+                ft.cancel()
+            await asyncio.gather(*floating_tasks, return_exceptions=True)
 
         # Tier-S+ F11: Persist FULL session state (including now_playing position)
         for guild_id, player in self._players.items():
@@ -232,32 +290,36 @@ class MusicBot(commands.Bot):
                 except Exception as exc:
                     logger.warning("Session state save on shutdown guild %d: %s", guild_id, exc)
 
-        # Bug 4: Remove redundant legacy save_queue loop.
-        # save_session_state() above already saves queue + loop + volume + effects
-        # atomically in a single DB transaction per guild.
-        # Having two separate save loops creates a partial-write window.
-
-        # Disconnect all voice clients
+        # Disconnect all voice clients with per-guild timeout
         for guild in self.guilds:
             vc = guild.voice_client
             if vc and vc.is_connected():
                 try:
-                    await vc.disconnect(force=True)
+                    await asyncio.wait_for(vc.disconnect(force=True), timeout=5.0)
                 except Exception:
                     pass
 
         # Tier-S+ F13: Close FFmpeg warm pool
         await self.ffmpeg_pool.close()
 
-        # Stop webserver
-        await self.webserver.stop()
+        # Stop webserver (closes WebSocket connections gracefully)
+        try:
+            await asyncio.wait_for(self.webserver.stop(), timeout=10.0)
+        except Exception as exc:
+            logger.warning("Webserver stop error: %s", exc)
 
         # Close DB
-        await self.db.close()
+        try:
+            await asyncio.wait_for(self.db.close(), timeout=10.0)
+        except Exception as exc:
+            logger.warning("DB close error on shutdown: %s", exc)
 
         # Close HTTP session
         if self.http_session:
-            await self.http_session.close()
+            try:
+                await asyncio.wait_for(self.http_session.close(), timeout=5.0)
+            except Exception:
+                pass
 
         await super().close()
         logger.info("✅ Shutdown complete.")
@@ -819,36 +881,60 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(minutes=30)
     async def _cache_prune(self) -> None:
-        """Prune expired yt-dlp cache entries and media cache every 30 minutes."""
-        raw_n, search_n = await self.youtube.prune_cache()
-        thumb_n, meta_n = prune_media_caches()  # Tier-S+ F14
-        if raw_n or search_n or thumb_n or meta_n:
-            logger.debug(
-                "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
-                raw_n, search_n, thumb_n, meta_n,
+        """Prune expired yt-dlp cache entries and media cache every 30 minutes.
+
+        Auto-recovery: if the cache raises an unexpected error (corruption),
+        it is cleared entirely and a warning is logged so the next prune runs clean.
+        """
+        try:
+            raw_n, search_n = await self.youtube.prune_cache()
+            thumb_n, meta_n = prune_media_caches()  # Tier-S+ F14
+            if raw_n or search_n or thumb_n or meta_n:
+                logger.debug(
+                    "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
+                    raw_n, search_n, thumb_n, meta_n,
+                )
+        except Exception as exc:
+            # Auto-recovery: cache may be corrupted — clear and rebuild
+            logger.warning(
+                "🔧 Cache prune raised %s (%s) — clearing all caches for auto-recovery.",
+                type(exc).__name__, exc,
             )
+            try:
+                async with self.youtube._cache_lock:
+                    self.youtube._cache.clear()
+                async with self.youtube._search_cache_lock:
+                    self.youtube._search_cache.clear()
+                prune_media_caches()
+            except Exception as clear_exc:
+                logger.error("Cache auto-recovery failed: %s", clear_exc)
+
         # Perf-1: log all cache metrics at DEBUG level every 30 min
-        from utils.color_thief import color_cache_stats
-        from core.lru_cache import combined_stats as _lru_stats
-        lru = await _lru_stats()
-        color = color_cache_stats()
-        cfg   = self.db.config_cache_stats()
-        logger.debug(
-            "Cache metrics — color: hits=%d misses=%d evictions=%d hit_rate=%.1f%% | "
-            "config: hits=%d misses=%d hit_rate=%.1f%% size=%d | "
-            "lru metadata: hits=%d misses=%d evictions=%d | "
-            "lru thumbnail: hits=%d misses=%d evictions=%d | "
-            "lru search: hits=%d misses=%d evictions=%d",
-            color["hits"], color["misses"], color["evictions"], color["hit_rate"] * 100,
-            cfg["hits"], cfg["misses"], cfg["hit_rate"] * 100, cfg["size"],
-            lru["metadata"]["hits"], lru["metadata"]["misses"], lru["metadata"]["evictions"],
-            lru["thumbnail"]["hits"], lru["thumbnail"]["misses"], lru["thumbnail"]["evictions"],
-            lru["search"]["hits"],    lru["search"]["misses"],    lru["search"]["evictions"],
-        )
+        try:
+            from utils.color_thief import color_cache_stats
+            from core.lru_cache import combined_stats as _lru_stats
+            lru = await _lru_stats()
+            color = color_cache_stats()
+            cfg   = self.db.config_cache_stats()
+            logger.debug(
+                "Cache metrics — color: hits=%d misses=%d evictions=%d hit_rate=%.1f%% | "
+                "config: hits=%d misses=%d hit_rate=%.1f%% size=%d | "
+                "lru metadata: hits=%d misses=%d evictions=%d | "
+                "lru thumbnail: hits=%d misses=%d evictions=%d | "
+                "lru search: hits=%d misses=%d evictions=%d",
+                color["hits"], color["misses"], color["evictions"], color["hit_rate"] * 100,
+                cfg["hits"], cfg["misses"], cfg["hit_rate"] * 100, cfg["size"],
+                lru["metadata"]["hits"], lru["metadata"]["misses"], lru["metadata"]["evictions"],
+                lru["thumbnail"]["hits"], lru["thumbnail"]["misses"], lru["thumbnail"]["evictions"],
+                lru["search"]["hits"],    lru["search"]["misses"],    lru["search"]["evictions"],
+            )
+        except Exception as exc:
+            logger.warning("Cache metrics logging error: %s", exc)
 
     @_cache_prune.before_loop
     async def _before_cache_prune(self) -> None:
         await self.wait_until_ready()
+
 
     @tasks.loop(hours=24)
     async def _analytics_prune(self) -> None:
@@ -914,6 +1000,59 @@ class MusicBot(commands.Bot):
     async def _before_memory_pressure(self) -> None:
         await self.wait_until_ready()
 
+    # ── Stability: New background tasks ───────────────────────────────────────
+
+    @tasks.loop(minutes=5)
+    async def _metrics_snapshot(self) -> None:
+        """Collect and log a runtime metrics snapshot every 5 minutes."""
+        if self.metrics:
+            try:
+                await self.metrics.collect()
+            except Exception as exc:
+                logger.debug("Metrics snapshot error: %s", exc)
+
+    @_metrics_snapshot.before_loop
+    async def _before_metrics_snapshot(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(minutes=30)
+    async def _memory_leak_detect(self) -> None:
+        """Take a memory snapshot every 30 minutes and warn on anomalous growth."""
+        if self.mem_leak_detector:
+            try:
+                # Gather extra stats for the snapshot log line
+                extra: dict = {
+                    "guilds":  len(self.guilds),
+                    "players": len(self._players),
+                    "queued":  sum(len(p) for p in self._players.values()),
+                }
+                try:
+                    from core.lru_cache import combined_stats
+                    lru = await combined_stats()
+                    extra["lru_entries"] = sum(s.get("size", 0) for s in lru.values())
+                except Exception:
+                    pass
+                await self.mem_leak_detector.tick(extra_stats=extra)
+            except Exception as exc:
+                logger.debug("Memory leak detector error: %s", exc)
+
+    @_memory_leak_detect.before_loop
+    async def _before_memory_leak_detect(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(seconds=60)
+    async def _dead_task_watchdog(self) -> None:
+        """Check all registered background task loops and restart any that have died."""
+        if self.task_watchdog:
+            try:
+                await self.task_watchdog.tick()
+            except Exception as exc:
+                logger.debug("Dead task watchdog error: %s", exc)
+
+    @_dead_task_watchdog.before_loop
+    async def _before_dead_task_watchdog(self) -> None:
+        await self.wait_until_ready()
+
     # ── Error handlers ────────────────────────────────────────────────────────
 
     async def on_application_command_error(
@@ -922,7 +1061,8 @@ class MusicBot(commands.Bot):
         error: Exception,
     ) -> None:
         from utils.embeds import error_embed
-        logger.error("App command error: %s", error, exc_info=True)
+        # Classify the exception and log at appropriate level
+        kind = log_with_kind(error, logger, context="app_command", include_traceback=True)
         embed = error_embed("Unexpected Error", str(error)[:200])
         try:
             if interaction.response.is_done():
@@ -932,16 +1072,29 @@ class MusicBot(commands.Bot):
         except Exception:
             pass
 
-        from utils.error_handler import forward_to_dev_channel
-        await forward_to_dev_channel(self, error, interaction)
+        # Only forward FATAL / RECOVERABLE errors to dev channel (not EXPECTED)
+        if kind != ExceptionKind.EXPECTED:
+            from utils.error_handler import forward_to_dev_channel
+            await forward_to_dev_channel(self, error, interaction)
 
     async def on_error(self, event: str, *args, **kwargs) -> None:
-        logger.error("Unhandled error in event '%s':", event, exc_info=True)
+        import sys
+        exc = sys.exc_info()[1]
+        if exc is not None:
+            log_with_kind(exc, logger, context=f"event:{event}")
+        else:
+            logger.error("Unhandled error in event '%s':", event, exc_info=True)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    import sys
+    # Pre-login validation — runs BEFORE any network connection to Discord
+    report = validate_pre_login(print_report=True)
+    if report.has_fatal:
+        sys.exit(1)
+
     bot = MusicBot()
     bot.run(config.TOKEN, log_handler=None)
 
