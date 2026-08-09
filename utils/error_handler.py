@@ -4,6 +4,10 @@ utils/error_handler.py — Bilingual error classification & embed builders for V
 
 Errors display with English + Thai subtitles.
 Classifies common playback failures (copyright, age-restricted, rate limit, etc.)
+
+V3 Stability additions:
+  - ExceptionKind re-export (from core.stability)
+  - log_classified(): log exception at correct level based on its kind
 """
 
 from __future__ import annotations
@@ -13,6 +17,9 @@ import traceback
 from typing import Optional, TYPE_CHECKING
 
 import discord
+
+# Re-export for callers that import from utils.error_handler
+from core.stability import ExceptionKind, log_with_kind as log_classified  # noqa: F401
 
 if TYPE_CHECKING:
     from main import MusicBot

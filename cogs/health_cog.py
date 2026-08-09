@@ -29,6 +29,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.lru_cache import combined_stats as lru_combined_stats
+from core import metrics as metrics_module
 from utils.embeds import error_embed
 
 if TYPE_CHECKING:
@@ -108,16 +109,15 @@ class HealthCog(commands.Cog, name="Health"):
             inline = True,
         )
 
-        # ── SQLite ────────────────────────────────────────────────────────────
-        t0 = time.monotonic()
+        # ── SQLite (live ping) ────────────────────────────────────────────────────
         try:
-            await self.bot.db.get_server_config(interaction.guild_id)
-            db_latency = (time.monotonic() - t0) * 1000
-            db_status  = f"✅ OK  ({db_latency:.0f}ms)"
-            db_color   = "✅"
+            db_latency = await asyncio.wait_for(self.bot.db.ping(), timeout=5.0)
+            db_icon    = "✅" if db_latency < 100 else ("⚠️" if db_latency < 200 else "🔴")
+            db_status  = f"{db_icon} {db_latency:.0f}ms ping"
+        except asyncio.TimeoutError:
+            db_status = "❌ Timed out (>5s)"
         except Exception as exc:
-            db_status  = f"❌ Error: {str(exc)[:60]}"
-            db_color   = "❌"
+            db_status = f"❌ Error: {str(exc)[:60]}"
 
         embed.add_field(name="🗄️  SQLite",  value=db_status, inline=True)
 
@@ -199,12 +199,83 @@ class HealthCog(commands.Cog, name="Health"):
         )
 
         embed.set_footer(text="Music Bot V3  •  /health")
+
+        # ── Runtime Metrics Snapshot ──────────────────────────────────────────────────
+        snap = metrics_module.get_latest_snapshot()
+        if snap:
+            ws_icon = "✅" if snap.ws_latency_ms < 150 else ("⚠️" if snap.ws_latency_ms < 300 else "🔴")
+            metrics_val = (
+                f"**Guilds:** {snap.guild_count}  •  "
+                f"**Players:** {snap.active_players} active / {snap.voice_connections} in VC\n"
+                f"**Queue:** {snap.total_queue_length} tracks total  •  "
+                f"**Tasks:** {snap.asyncio_task_count}\n"
+                f"{ws_icon} **WebSocket:** {snap.ws_latency_ms:.0f}ms  •  "
+                f"**Last snapshot:** {snap.timestamp_iso()}"
+            )
+        else:
+            metrics_val = "⏳ No snapshot yet (runs every 5 min)"
+
+        embed.add_field(
+            name   = "📊  Runtime Metrics",
+            value  = metrics_val,
+            inline = False,
+        )
+
+        # ── Memory Trend ────────────────────────────────────────────────────────────
+        mem_detector = getattr(self.bot, "mem_leak_detector", None)
+        if mem_detector and mem_detector.latest:
+            latest  = mem_detector.latest
+            history = mem_detector.history
+            if len(history) >= 2:
+                oldest      = history[0]
+                rss_delta   = latest.rss_mb - oldest.rss_mb
+                elapsed_min = (latest.ts - oldest.ts) / 60.0
+                trend_icon  = "🔴" if rss_delta > 50 else ("⚠️" if rss_delta > 20 else "✅")
+                trend_text  = (
+                    f"{trend_icon} RSS **{latest.rss_mb:.0f}MiB**  "
+                    f"(Δ{rss_delta:+.1f}MiB over {elapsed_min:.0f}min)\n"
+                    f"Threads: **{latest.thread_count}**  •  "
+                    f"asyncio tasks: **{latest.task_count}**  •  "
+                    f"GC objects: **{latest.gc_objects:,}**"
+                )
+            else:
+                trend_text = f"✅ RSS **{latest.rss_mb:.0f}MiB**  (only 1 snapshot so far)"
+        else:
+            trend_text = "⏳ No memory snapshots yet (runs every 30 min)"
+
+        embed.add_field(
+            name   = "🧠  Memory Trend (30-min window)",
+            value  = trend_text,
+            inline = False,
+        )
+
+        # ── Dead Task Watchdog ────────────────────────────────────────────────────────
+        watchdog = getattr(self.bot, "task_watchdog", None)
+        if watchdog:
+            watched_tasks = getattr(watchdog, "_tasks", [])
+            wt_lines = []
+            for wt in watched_tasks:
+                icon   = "✅" if wt.loop.is_running() else "🔴"
+                rcount = f"  (restarted {wt.restart_count}×)" if wt.restart_count else ""
+                wt_lines.append(f"{icon} **{wt.name}**{rcount}")
+            wd_text = "\n".join(wt_lines) if wt_lines else "—"
+        else:
+            wd_text = "⏳ Watchdog not initialised"
+
+        embed.add_field(
+            name   = "🐕  Dead Task Watchdog",
+            value  = wd_text,
+            inline = False,
+        )
+
+        embed.set_footer(text="Music Bot V3  •  /health")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="cacheinfo", description="Show detailed LRU cache statistics (Admin/DJ)")
     async def cacheinfo(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
+
             return
 
         try:

@@ -216,6 +216,99 @@ async def _check_spotify(bot: "MusicBot") -> CheckResult:
         return CheckResult("Spotify", False, str(exc)[:120], latency)
 
 
+async def _check_db_latency(bot: "MusicBot") -> CheckResult:
+    """
+    Measure actual DB round-trip latency using the dedicated ping() method.
+    WARN if > 100ms (indicates disk/I/O pressure).
+    """
+    t0 = time.monotonic()
+    try:
+        latency_ms = await asyncio.wait_for(bot.db.ping(), timeout=10.0)
+        status     = "OK" if latency_ms < 100 else f"SLOW ({latency_ms:.0f}ms)"
+        ok         = latency_ms < 200  # 200ms hard threshold for FAIL
+        return CheckResult(
+            "DB Latency", ok,
+            f"{status} — {latency_ms:.1f}ms round-trip",
+            (time.monotonic() - t0),
+        )
+    except asyncio.TimeoutError:
+        latency = time.monotonic() - t0
+        return CheckResult("DB Latency", False, "Timed out after 10s", latency)
+    except Exception as exc:
+        latency = time.monotonic() - t0
+        return CheckResult("DB Latency", False, str(exc)[:100], latency)
+
+
+async def _check_voice_latency(bot: "MusicBot") -> CheckResult:
+    """
+    Report Discord WebSocket latency (heartbeat round-trip).
+    Not a failure if the bot isn't connected yet — returns a warning instead.
+    """
+    t0 = time.monotonic()
+    try:
+        ws_ms = bot.latency * 1000 if bot.latency else None
+        latency = time.monotonic() - t0
+        if ws_ms is None:
+            return CheckResult("Voice/WS Latency", True, "Not yet connected (pre-ready)", latency)
+        ok     = ws_ms < 200
+        status = f"{ws_ms:.0f}ms"
+        if ws_ms >= 200:
+            status += " (HIGH — >200ms)"
+        return CheckResult("Voice/WS Latency", ok, f"Discord WebSocket {status}", latency)
+    except Exception as exc:
+        latency = time.monotonic() - t0
+        return CheckResult("Voice/WS Latency", False, str(exc)[:100], latency)
+
+
+async def _check_cache_status(bot: "MusicBot") -> CheckResult:
+    """
+    Verify LRU caches are functional and report their hit-rates.
+    Flags a problem if a cache cannot be queried (corruption indicator).
+    """
+    t0 = time.monotonic()
+    try:
+        from core.lru_cache import combined_stats
+        stats   = await asyncio.wait_for(combined_stats(), timeout=5.0)
+        summary = "  ".join(
+            f"{name}: {int(s.get('hit_rate', 0)*100)}% hit ({s.get('size',0)} entries)"
+            for name, s in stats.items()
+        )
+        latency = time.monotonic() - t0
+        return CheckResult("LRU Caches", True, summary or "No caches initialised", latency)
+    except asyncio.TimeoutError:
+        latency = time.monotonic() - t0
+        return CheckResult("LRU Caches", False, "Stats query timed out — possible cache corruption", latency)
+    except Exception as exc:
+        latency = time.monotonic() - t0
+        return CheckResult("LRU Caches", False, f"Error: {str(exc)[:80]}", latency)
+
+
+async def _check_config(bot: "MusicBot") -> CheckResult:
+    """
+    Verify critical config values are sensible.
+    Issues are WARN (ok=True) not failures — bot can still run.
+    """
+    t0 = time.monotonic()
+    try:
+        import config
+        issues: list[str] = []
+        if not config.TOKEN:
+            issues.append("TOKEN missing")
+        if config.IDLE_TIMEOUT < 30:
+            issues.append(f"IDLE_TIMEOUT={config.IDLE_TIMEOUT}s (very low)")
+        if config.MAX_QUEUE_SIZE > 5000:
+            issues.append(f"MAX_QUEUE_SIZE={config.MAX_QUEUE_SIZE} (very high)")
+        if not getattr(config, "DEV_LOG_CHANNEL_ID", None):
+            issues.append("DEV_LOG_CHANNEL_ID not set (no error forwarding)")
+        latency = time.monotonic() - t0
+        if issues:
+            return CheckResult("Config", True, "Warnings: " + "; ".join(issues), latency)
+        return CheckResult("Config", True, "All checked values look sane", latency)
+    except Exception as exc:
+        latency = time.monotonic() - t0
+        return CheckResult("Config", False, str(exc)[:100], latency)
+
+
 # ── Main runner ───────────────────────────────────────────────────────────────
 
 async def run_self_test(bot: "MusicBot") -> SelfTestReport:
@@ -229,12 +322,16 @@ async def run_self_test(bot: "MusicBot") -> SelfTestReport:
     logger.info("🔍 Running startup self-test…")
 
     checks_to_run = [
-        ("SQLite",      _check_sqlite),
-        ("FFmpeg",      _check_ffmpeg),
-        ("Voice",       _check_voice),
-        ("Permissions", _check_permissions),
-        ("YouTube",     _check_youtube),
-        ("Spotify",     _check_spotify),
+        ("SQLite",          _check_sqlite),
+        ("FFmpeg",          _check_ffmpeg),
+        ("Voice",           _check_voice),
+        ("Permissions",     _check_permissions),
+        ("YouTube",         _check_youtube),
+        ("Spotify",         _check_spotify),
+        ("DB Latency",      _check_db_latency),
+        ("Voice/WS Latency",_check_voice_latency),
+        ("LRU Caches",      _check_cache_status),
+        ("Config",          _check_config),
     ]
 
     for name, fn in checks_to_run:

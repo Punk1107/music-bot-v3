@@ -267,6 +267,25 @@ class DatabaseManager:
             finally:
                 self._conn = None
 
+    # ── Health / Latency ──────────────────────────────────────────────────────
+
+    async def ping(self, timeout: float = 5.0) -> float:
+        """
+        Run a lightweight ``SELECT 1`` and return latency in milliseconds.
+
+        Raises asyncio.TimeoutError if *timeout* seconds elapse.
+        Used by MetricsCollector and /health to monitor DB responsiveness.
+        """
+        t0 = time.monotonic()
+        async with self._lock:
+            if not self._conn:
+                raise RuntimeError("Database not initialised")
+            await asyncio.wait_for(
+                self._conn.execute("SELECT 1"),
+                timeout=timeout,
+            )
+        return (time.monotonic() - t0) * 1000.0
+
     # ── Internal context manager ───────────────────────────────────────────────
 
     @asynccontextmanager
