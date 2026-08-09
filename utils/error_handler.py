@@ -145,19 +145,24 @@ async def forward_to_dev_channel(
     error: Exception,
     ctx:   Optional[discord.Interaction] = None,
 ) -> None:
-    """Forward a full traceback to the developer log channel."""
+    """Forward a full traceback to all configured developer log channels."""
     import config as cfg
-    if not cfg.DEV_LOG_CHANNEL_ID:
+    channel_ids: list[int] = getattr(cfg, "DEV_LOG_CHANNEL_IDS", [])
+    if not channel_ids:
         return
-    channel = bot.get_channel(cfg.DEV_LOG_CHANNEL_ID)
-    if not channel:
-        return
-    tb  = "".join(traceback.format_exception(type(error), error, error.__traceback__))
+
+    tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     ctx_info = ""
     if ctx:
         ctx_info = f"Guild: {ctx.guild_id} | User: {ctx.user.id} | Command: {ctx.command}\n"
     content = f"```\n{ctx_info}{tb[:1800]}\n```"
-    try:
-        await channel.send(content=f"🚨 **Unhandled Error**\n{content}")
-    except Exception:
-        pass
+
+    for cid in channel_ids:
+        channel = bot.get_channel(cid)
+        if not channel:
+            logger.debug("forward_to_dev_channel: channel %d not found or not cached.", cid)
+            continue
+        try:
+            await channel.send(content=f"🚨 **Unhandled Error**\n{content}")
+        except Exception as send_err:
+            logger.debug("forward_to_dev_channel: failed to send to %d: %s", cid, send_err)

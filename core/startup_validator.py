@@ -180,16 +180,39 @@ def _check_spotify(report: ValidationReport) -> None:
 def _check_config_completeness(report: ValidationReport) -> None:
     import config
 
-    recommended: list[tuple[str, str]] = [
-        ("DEV_LOG_CHANNEL_ID", "Error forwarding disabled — set for dev channel alerts."),
-        ("API_SECRET",         "REST API has no authentication — consider setting API_SECRET."),
-    ]
-    for attr, msg in recommended:
-        val = getattr(config, attr, None)
-        if not val:
-            report.add(f"Config/{attr}", Severity.WARNING, msg)
+    # ── DEV_LOG_CHANNEL_IDS ───────────────────────────────────────────────────
+    channel_ids: list[int] = getattr(config, "DEV_LOG_CHANNEL_IDS", [])
+    if not channel_ids:
+        report.add(
+            "Config/DEV_LOG_CHANNEL_IDS",
+            Severity.WARNING,
+            "Error forwarding disabled — set DEV_LOG_CHANNEL_IDS for dev channel alerts.",
+        )
+    else:
+        ids_preview = ", ".join(str(c) for c in channel_ids)
+        report.add(
+            "Config/DEV_LOG_CHANNEL_IDS",
+            Severity.OK,
+            f"{len(channel_ids)} channel(s) configured: {ids_preview}",
+        )
 
-    # Sanity-check numeric values
+    # ── API_SECRET ────────────────────────────────────────────────────────────
+    api_secret: str = getattr(config, "API_SECRET", "") or ""
+    if not api_secret:
+        report.add(
+            "Config/API_SECRET",
+            Severity.WARNING,
+            "REST API has no authentication — consider setting API_SECRET.",
+        )
+    else:
+        masked = api_secret[:4] + "*" * (len(api_secret) - 4)
+        report.add(
+            "Config/API_SECRET",
+            Severity.OK,
+            f"Bearer token set ({masked})",
+        )
+
+    # ── Sanity-check numeric values ───────────────────────────────────────────
     try:
         import config as cfg
         if cfg.IDLE_TIMEOUT < 30:
