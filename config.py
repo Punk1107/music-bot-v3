@@ -43,10 +43,17 @@ SPOTIFY_CLIENT_SECRET: str = os.getenv("SPOTIFY_CLIENT_SECRET", "")
 # ── Database ──────────────────────────────────────────────────────────────────
 DATABASE_PATH: str = os.getenv("DATABASE_PATH", "data/musicbot.db")
 
-# ── Developer channel (error forwarding) ──────────────────────────────────────
-DEV_LOG_CHANNEL_ID: int | None = (
-    int(os.getenv("DEV_LOG_CHANNEL_ID")) if os.getenv("DEV_LOG_CHANNEL_ID") else None
-)
+# ── Developer channels (error forwarding) ─────────────────────────────────────
+# Supports multiple channel IDs separated by commas.
+# e.g. DEV_LOG_CHANNEL_IDS=123456789,987654321
+_raw_dev_channels: str = os.getenv("DEV_LOG_CHANNEL_IDS", "") or os.getenv("DEV_LOG_CHANNEL_ID", "")
+DEV_LOG_CHANNEL_IDS: list[int] = [
+    int(cid.strip())
+    for cid in _raw_dev_channels.split(",")
+    if cid.strip().isdigit()
+]
+# Backward-compat alias: first channel in the list (or None)
+DEV_LOG_CHANNEL_ID: int | None = DEV_LOG_CHANNEL_IDS[0] if DEV_LOG_CHANNEL_IDS else None
 
 # ── Auto-resume on startup ────────────────────────────────────────────────────
 AUTO_RESUME: bool = os.getenv("AUTO_RESUME", "false").lower() == "true"
