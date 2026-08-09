@@ -108,11 +108,11 @@ class InfoCog(commands.Cog, name="Info"):
             pass
 
         embed.set_footer(text=f"discord.py {discord.__version__} · Music Bot V3")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
     @app_commands.command(name="help", description="Show all available commands")
     async def help_cmd(self, interaction: discord.Interaction) -> None:
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=False)
         embed = discord.Embed(
             title       = "🎵 Music Bot V3 — Commands",
             description = "All slash commands for Music Bot V3.",
@@ -168,7 +168,7 @@ class InfoCog(commands.Cog, name="Info"):
             embed.add_field(name=section, value="\n".join(cmds), inline=False)
 
         embed.set_footer(text="V3 • FFmpeg only • No Lavalink • EN/TH support")
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=False)
 
 
 async def setup(bot: "MusicBot") -> None:
