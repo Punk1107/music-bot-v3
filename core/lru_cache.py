@@ -15,11 +15,12 @@ Tier Performance F31: LRU Cache
     - Stats-tracked (hits, misses, evictions)
 
 Tier Performance F32: Memory Pressure Handler
-  MemoryPressureManager monitors psutil.virtual_memory().percent every 60 s.
-  Thresholds:
-    70 % → prune expired entries only (light)
-    80 % → evict 50 % of each cache (moderate)
-    90 % → clear all caches immediately (aggressive)
+  MemoryPressureManager monitors the bot's OWN PROCESS RSS (not system-wide RAM).
+  Thresholds (default, overridable via config.MEMORY_PRESSURE_MB_*):
+    400 MiB → prune expired entries only (light)
+    600 MiB → evict 50 % of each cache (moderate)
+    900 MiB → clear all caches immediately (aggressive)
+  System RAM % is logged as a diagnostic field but NEVER triggers actions.
   All actions are logged and stats updated.
 """
 
@@ -176,13 +177,31 @@ async def combined_stats() -> dict:
 
 
 # ── Memory Pressure Handler (F32) ──────────────────────────────────────────────
+#
+# DESIGN NOTE (fix/ram-problem):
+#   The original implementation used psutil.virtual_memory().percent (system-wide
+#   RAM) as its trigger.  This caused spurious CRITICAL alerts and useless cache
+#   clears when the host machine was busy (Chrome, VS Code, Discord, etc.) even
+#   though the bot process itself used only ~300 MB.
+#
+#   New approach: track the bot's OWN PROCESS RSS (Resident Set Size) in MiB.
+#   Absolute MiB thresholds are used so the numbers are meaningful regardless of
+#   how much RAM the host has.
+#
+#   System RAM is still collected as a DIAGNOSTIC value and logged alongside the
+#   process RSS, but it NEVER triggers any cache action.
+#
+# Thresholds (process RSS in MiB):
+_LEVEL_LIGHT_MB       = 400   # prune expired entries only
+_LEVEL_MODERATE_MB    = 600   # evict 50 % of each cache
+_LEVEL_AGGRESSIVE_MB  = 900   # clear all caches immediately
+#
+# Override via config.MEMORY_PRESSURE_MB_LIGHT / _MODERATE / _AGGRESSIVE
+# if you want to tune them without touching this file.
 
-# Pressure levels (RAM usage %)
-_LEVEL_LIGHT      = 70   # prune expired entries only
-_LEVEL_MODERATE   = 80   # evict 50 % of each cache
-_LEVEL_AGGRESSIVE = 90   # clear all caches immediately
+import os as _os
 
-_last_action_level: int = 0   # track last level acted on (avoid storm)
+_last_action_level: int = 0   # avoid log-storm on repeated ticks
 
 
 def _try_import_psutil():
@@ -193,62 +212,115 @@ def _try_import_psutil():
         return None
 
 
+def _load_thresholds() -> tuple[float, float, float]:
+    """Read threshold overrides from config (if present)."""
+    try:
+        import config as _cfg
+        light      = float(getattr(_cfg, "MEMORY_PRESSURE_MB_LIGHT",      _LEVEL_LIGHT_MB))
+        moderate   = float(getattr(_cfg, "MEMORY_PRESSURE_MB_MODERATE",   _LEVEL_MODERATE_MB))
+        aggressive = float(getattr(_cfg, "MEMORY_PRESSURE_MB_AGGRESSIVE", _LEVEL_AGGRESSIVE_MB))
+        return light, moderate, aggressive
+    except Exception:
+        return float(_LEVEL_LIGHT_MB), float(_LEVEL_MODERATE_MB), float(_LEVEL_AGGRESSIVE_MB)
+
+
 async def check_memory_pressure() -> dict:
     """
-    Check current RAM usage and apply cache eviction if thresholds are exceeded.
-    Returns a dict with { level, ram_pct, action, freed_entries }.
+    Check the bot's own process RSS and apply cache eviction if thresholds are exceeded.
+
+    Returns a dict:
+    {
+        "level":      int,    # 0 = normal, 1 = light, 2 = moderate, 3 = aggressive
+        "rss_mb":     float,  # bot process RSS in MiB  ← primary metric
+        "sys_ram_pct":float,  # system-wide RAM %       ← diagnostic only
+        "action":     str,
+        "freed":      int,    # cache entries freed
+    }
+
     Safe to call when psutil is not installed (returns level=0, no action).
     """
     global _last_action_level
 
     psutil = _try_import_psutil()
     if not psutil:
-        return {"level": 0, "ram_pct": 0.0, "action": "psutil_unavailable", "freed": 0}
+        return {
+            "level": 0, "rss_mb": 0.0, "sys_ram_pct": 0.0,
+            "action": "psutil_unavailable", "freed": 0,
+        }
 
-    ram_pct = psutil.virtual_memory().percent
-    result  = {"ram_pct": ram_pct, "freed": 0, "action": "none", "level": 0}
+    # ── Measure bot process RSS ──────────────────────────────────────────────
+    try:
+        proc    = psutil.Process(_os.getpid())
+        rss_mb  = proc.memory_info().rss / (1024 * 1024)
+    except Exception:
+        rss_mb = 0.0
 
-    if ram_pct >= _LEVEL_AGGRESSIVE:
+    # ── System RAM (diagnostic only — NOT used for action decisions) ─────────
+    try:
+        sys_ram_pct = psutil.virtual_memory().percent
+    except Exception:
+        sys_ram_pct = 0.0
+
+    light_mb, moderate_mb, aggressive_mb = _load_thresholds()
+
+    result = {
+        "rss_mb":      rss_mb,
+        "sys_ram_pct": sys_ram_pct,
+        "freed":       0,
+        "action":      "none",
+        "level":       0,
+    }
+
+    if rss_mb >= aggressive_mb:
         result["level"]  = 3
         result["action"] = "aggressive_clear"
         freed = 0
         for c in all_caches():
             freed += await c.clear()
-        result["freed"]  = freed
+        result["freed"] = freed
         logger.warning(
-            "🔴 Memory pressure CRITICAL (%.1f%% RAM) — cleared all caches (%d entries freed)",
-            ram_pct, freed,
+            "🔴 Memory pressure CRITICAL — bot RSS=%.0fMiB (threshold %.0fMiB) | "
+            "system RAM=%.1f%% — cleared all caches (%d entries freed)",
+            rss_mb, aggressive_mb, sys_ram_pct, freed,
         )
         _last_action_level = 3
 
-    elif ram_pct >= _LEVEL_MODERATE:
+    elif rss_mb >= moderate_mb:
         result["level"]  = 2
         result["action"] = "moderate_evict_50pct"
         freed = 0
         for c in all_caches():
             freed += await c.evict_fraction(0.5)
-        result["freed"]  = freed
+        result["freed"] = freed
         logger.warning(
-            "🟠 Memory pressure HIGH (%.1f%% RAM) — evicted 50%% of each cache (%d entries freed)",
-            ram_pct, freed,
+            "🟠 Memory pressure HIGH — bot RSS=%.0fMiB (threshold %.0fMiB) | "
+            "system RAM=%.1f%% — evicted 50%% of each cache (%d entries freed)",
+            rss_mb, moderate_mb, sys_ram_pct, freed,
         )
         _last_action_level = 2
 
-    elif ram_pct >= _LEVEL_LIGHT:
+    elif rss_mb >= light_mb:
         result["level"]  = 1
         result["action"] = "light_prune_expired"
         freed = 0
         for c in all_caches():
             freed += await c.prune_expired()
-        result["freed"]  = freed
+        result["freed"] = freed
         if freed:
             logger.info(
-                "🟡 Memory pressure ELEVATED (%.1f%% RAM) — pruned %d expired cache entries",
-                ram_pct, freed,
+                "🟡 Memory pressure ELEVATED — bot RSS=%.0fMiB (threshold %.0fMiB) | "
+                "system RAM=%.1f%% — pruned %d expired entries",
+                rss_mb, light_mb, sys_ram_pct, freed,
             )
         _last_action_level = 1
 
     else:
+        if _last_action_level > 0:
+            logger.info(
+                "🟢 Memory pressure normal — bot RSS=%.0fMiB | system RAM=%.1f%%",
+                rss_mb, sys_ram_pct,
+            )
         _last_action_level = 0
 
     return result
+
