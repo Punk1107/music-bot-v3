@@ -419,8 +419,8 @@ class MusicCog(commands.Cog, name="Music"):
             # causing _play_next to silently return without starting audio.
             await asyncio.sleep(0.5)
 
-        if vc.is_playing():
-            logger.debug("guild %d: _play_next while already playing — ignoring.", guild_id)
+        if vc.is_playing() or vc.is_paused():
+            logger.debug("guild %d: _play_next while already playing/paused — ignoring.", guild_id)
             return None
 
         await player.finish_track()
@@ -675,8 +675,12 @@ class MusicCog(commands.Cog, name="Music"):
             self.bot.db.add_search_history(interaction.guild_id, interaction.user.id, track.title)
         )
 
+        # Bug 2 fix: snapshot vc state BEFORE the async color fetch to avoid a
+        # race where the VC transitions to is_playing between the await and our
+        # check — which would silently skip the _play_next call.
+        was_playing = vc.is_playing() or vc.is_paused()
         color = await get_dominant_color(track.thumbnail, self.bot.http_session)
-        if vc.is_playing() or vc.is_paused():
+        if was_playing:
             await interaction.followup.send(
                 embed=track_added_embed(track, pos, color, interaction.user, eta_secs=eta)
             )
