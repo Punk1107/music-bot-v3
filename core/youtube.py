@@ -310,9 +310,16 @@ class YouTubeExtractor:
         Uses pre-fetch cache on Track if available (instant, zero yt-dlp cost).
         """
         if track and track.stream_url_cache and track.stream_url_expires:
-            if time.monotonic() < track.stream_url_expires:
+            # Use a 60-second safety buffer before the actual expiry so we never
+            # hand FFmpeg a URL that's about to become invalid mid-stream.
+            # YouTube CDN URLs typically last ~6h but can expire seconds early.
+            if time.monotonic() < track.stream_url_expires - 60:
                 logger.debug("Pre-fetch cache hit for '%s'", url[:60])
                 return track.stream_url_cache
+            # Nearing expiry — clear the cache and fall through to re-fetch
+            track.stream_url_cache   = None
+            track.stream_url_expires = None
+
 
         url  = self._clean_url(url)
         loop = asyncio.get_running_loop()
