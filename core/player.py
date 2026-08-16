@@ -70,6 +70,13 @@ class GuildPlayer:
         # after a full stop.
         self._playing_lock: asyncio.Lock = asyncio.Lock()
 
+        # ── Pending-play flag ─────────────────────────────────────────────────
+        # Set to True when after_play fires while _playing_lock is already held
+        # (e.g. yt-dlp is resolving the next URL).  The lock holder checks this
+        # after releasing the lock and re-triggers _play_next if set, so no
+        # "play next" signal is ever silently dropped.
+        self._pending_play: bool = False
+
         # ── Playback sequence counter (Bug 3) ─────────────────────────────────
         # Incremented on finish_track() and reset(). The after_play FFmpeg
         # callback captures the seq at creation time; if it has changed by the
@@ -430,8 +437,9 @@ class GuildPlayer:
         self.replay_gain           = False
         # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
         # and replace the playing lock (may be locked from a concurrent call).
-        self._play_seq    += 1
-        self._playing_lock = asyncio.Lock()
+        self._play_seq     += 1
+        self._playing_lock  = asyncio.Lock()
+        self._pending_play  = False
         # Perf-1: clear cached embed-color and progress step on full reset
         self._cached_base_color = None
         self._np_last_bar_step  = -1
