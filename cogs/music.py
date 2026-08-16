@@ -266,6 +266,11 @@ class MusicCog(commands.Cog, name="Music"):
                     )
                 except Exception as exc:
                     logger.warning("guild %d: failed to move VC: %s", guild.id, exc)
+            # Fix A: clear intentional_disconnect whenever the user explicitly
+            # triggers a join (via /play, /join, etc.) so that a subsequent
+            # voice drop doesn't block _try_reconnect.
+            player = self.bot.get_player(interaction.guild_id)
+            player.intentional_disconnect = False
             return vc
 
         # Not connected — join the user's channel
@@ -293,8 +298,12 @@ class MusicCog(commands.Cog, name="Music"):
         """Self-healing voice reconnect with exponential backoff."""
         player = self.bot.get_player(guild_id)
 
-        # Don't reconnect if the disconnect was intentional (/stop, /leave)
-        if player.intentional_disconnect:
+        # Don't reconnect if the disconnect was intentional (/stop, /leave).
+        # Fix C: however, if a track is actively playing (or was just playing)
+        # when the VC dropped, the disconnect was NOT intentional from the user's
+        # perspective even if the flag was set — honour the reconnect so audio
+        # resumes rather than going silent.
+        if player.intentional_disconnect and not player.now_playing:
             logger.debug("guild %d: skipping reconnect — intentional disconnect.", guild_id)
             return None
 
@@ -315,6 +324,9 @@ class MusicCog(commands.Cog, name="Music"):
                 vc = await channel.connect(timeout=10.0, reconnect=True)
                 # Bug 2: update last_channel_id so future reconnects use correct channel
                 player.last_channel_id = channel.id
+                # Fix D: clear intentional_disconnect so future VC drops are
+                # treated as unexpected and trigger another reconnect attempt.
+                player.intentional_disconnect = False
                 logger.info("✅ Voice reconnected for guild %d on attempt %d", guild_id, attempt)
                 return vc
             except Exception as exc:
@@ -401,6 +413,11 @@ class MusicCog(commands.Cog, name="Music"):
             if not vc:
                 player.reset()
                 return None
+            # Fix B: give discord.py a moment to fully settle the new voice
+            # connection before we check is_playing() — without this, a fresh
+            # VC may briefly report is_playing()=True from stale internal state,
+            # causing _play_next to silently return without starting audio.
+            await asyncio.sleep(0.5)
 
         if vc.is_playing():
             logger.debug("guild %d: _play_next while already playing — ignoring.", guild_id)
