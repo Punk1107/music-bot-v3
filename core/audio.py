@@ -171,16 +171,10 @@ class AudioEffectsProcessor:
             filters.append(f"afade=t=out:st=0:d={crossfade_secs}")
 
         filter_str = ",".join(filters)
+        # Note: do NOT add -b:a here. discord.FFmpegPCMAudio appends its own
+        # output pipeline (-f s16le -ar 48000 -ac 2) internally. Adding -b:a
+        # conflicts with that PCM output format and causes silent playback.
         options_parts = ["-vn", f"-af {filter_str}"]
-
-        # Quality bitrate
-        bitrate_map = {
-            AudioQuality.LOW:    "64k",
-            AudioQuality.MEDIUM: "128k",
-            AudioQuality.HIGH:   "192k",
-            AudioQuality.ULTRA:  "320k",
-        }
-        options_parts.append(f"-b:a {bitrate_map.get(quality, '192k')}")
 
         return {
             "before_options": " ".join(before_opts),
@@ -201,13 +195,8 @@ class AudioEffectsProcessor:
             f"afade=t=in:st=0:d={crossfade_secs}",
             f"volume={max(0.0, min(2.0, volume)):.2f}",
         ]
-        bitrate_map = {
-            AudioQuality.LOW:    "64k",
-            AudioQuality.MEDIUM: "128k",
-            AudioQuality.HIGH:   "192k",
-            AudioQuality.ULTRA:  "320k",
-        }
+        # Note: no -b:a here for the same reason as build_ffmpeg_options.
         return {
             "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": f"-vn -af {','.join(filters)} -b:a {bitrate_map.get(quality, '192k')}",
+            "options": f"-vn -af {','.join(filters)}",
         }
