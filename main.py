@@ -608,7 +608,7 @@ class MusicBot(commands.Bot):
         elif result.intent == NLUIntent.SKIP:
             guild = message.guild
             vc    = guild.voice_client
-            if vc and vc.is_playing():
+            if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             try:
                 reply = await message.channel.send("⏭ Skipped!", delete_after=5)
@@ -856,11 +856,16 @@ class MusicBot(commands.Bot):
                     )
                     player._cached_base_color = base_color
 
-                is_paused = (
-                    self.get_guild(guild_id).voice_client.is_paused()
-                    if self.get_guild(guild_id) and self.get_guild(guild_id).voice_client
-                    else False
-                )
+                guild_vc = self.get_guild(guild_id).voice_client if self.get_guild(guild_id) else None
+                is_paused = bool(guild_vc and guild_vc.is_paused())
+
+                # Perf-1 UX: When paused the progress knob doesn't move — skip
+                # the edit unless something else changed (the embed_theme or
+                # now_playing changed). This avoids Discord API churn and prevents
+                # the embed from flickering every 7 s while paused.
+                if is_paused:
+                    continue
+
                 color = animated_embed_color(base_color, player.elapsed_seconds)
                 embed = now_playing_embed(player, color, self.user, paused=is_paused, theme=getattr(player, "embed_theme", "classic"))
                 msg   = player.now_playing_msg
