@@ -166,13 +166,33 @@ class MusicControlView(discord.ui.View):
             return
         if vc.is_playing():
             vc.pause()
+            now_paused = True
         elif vc.is_paused():
             vc.resume()
+            now_paused = False
         else:
             await interaction.response.send_message(
                 embed=error_embed("Nothing Playing", "There is nothing to pause or resume."), ephemeral=True
             )
             return
+        # Update the now-playing embed immediately so ⏸/▶ icon reflects the
+        # new state. _np_refresh skips editing while paused, so without this
+        # the progress-bar prefix stays stale until the next play.
+        player = self.bot.get_player(self.guild_id)
+        if player.now_playing and player.now_playing_msg:
+            try:
+                from utils.embeds import now_playing_embed
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=now_paused,
+                    theme=getattr(player, "embed_theme", "classic"),
+                )
+                self._sync_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+                return
+            except Exception:
+                pass
         await self._refresh_message(interaction)
 
     @discord.ui.button(label="⏭ Skip", style=discord.ButtonStyle.primary, custom_id="mb_skip", row=0)
@@ -180,6 +200,9 @@ class MusicControlView(discord.ui.View):
         if not await self._check(interaction):
             return
         await interaction.response.defer()
+        player = self.bot.get_player(self.guild_id)
+        # Cancel prefetch before stopping so no orphaned FFmpeg task races _play_next
+        player.cancel_prefetch()
         vc = self._vc(interaction)
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
@@ -209,9 +232,9 @@ class MusicControlView(discord.ui.View):
             return
         vc = self._vc(interaction)
         player = self.bot.get_player(self.guild_id)
-        # Bug 1: cancel prefetch before stopping
+        # Cancel prefetch before stopping
         player.cancel_prefetch()
-        if vc and vc.is_playing():
+        if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
         player.reset()
         # Bug 9: also clear the persisted DB queue (the slash /stop already does
@@ -499,9 +522,14 @@ class VoteSkipView(discord.ui.View):
         vc      = guild.voice_client if guild else None
 
         # Must be in the same voice channel
-        if not interaction.user.voice or (vc and interaction.user.voice.channel != vc.channel):
+        if not interaction.user.voice:
             await interaction.response.send_message(
                 embed=error_embed("Not in Voice", "Join the voice channel to vote."), ephemeral=True
+            )
+            return
+        if vc and interaction.user.voice.channel != vc.channel:
+            await interaction.response.send_message(
+                embed=error_embed("Wrong Channel", f"Join **{vc.channel.name}** to vote."), ephemeral=True
             )
             return
 
