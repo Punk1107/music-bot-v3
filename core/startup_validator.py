@@ -142,6 +142,15 @@ def _check_ffmpeg(report: ValidationReport) -> None:
         report.add("FFmpeg", Severity.FATAL, f"Unexpected error: {exc}")
 
 
+def _check_js_runtime(report: ValidationReport) -> None:
+    js_runtime = shutil.which("node") or shutil.which("deno") or shutil.which("bun") or shutil.which("quickjs")
+    if not js_runtime:
+        report.add("JS Runtime", Severity.WARNING,
+                   "Node.js / Deno not found in PATH — YouTube challenge solving (EJS) may fail.")
+    else:
+        report.add("JS Runtime", Severity.OK, f"Found '{js_runtime}'")
+
+
 def _check_database(report: ValidationReport) -> None:
     import config
     db_path = getattr(config, "DATABASE_PATH", "data/musicbot.db")
@@ -251,6 +260,7 @@ def validate_pre_login(*, print_report: bool = True) -> ValidationReport:
     _check_discord_token(report)
     _check_app_id(report)
     _check_ffmpeg(report)
+    _check_js_runtime(report)
     _check_database(report)
     _check_logs_dir(report)
     _check_spotify(report)

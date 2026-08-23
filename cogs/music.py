@@ -303,7 +303,10 @@ class MusicCog(commands.Cog, name="Music"):
         # when the VC dropped, the disconnect was NOT intentional from the user's
         # perspective even if the flag was set — honour the reconnect so audio
         # resumes rather than going silent.
-        if player.intentional_disconnect and not player.now_playing:
+        # Fix (permanent): also honour reconnect when now_playing is None but
+        # the queue still has tracks (e.g. bot kicked during URL resolution).
+        has_active_session = player.now_playing is not None or len(player) > 0
+        if player.intentional_disconnect and not has_active_session:
             logger.debug("guild %d: skipping reconnect — intentional disconnect.", guild_id)
             return None
 

@@ -71,7 +71,7 @@ class FFmpegBackend(AudioBackend):
         ffmpeg_opts must contain 'before_options' and 'options' keys
         as returned by AudioEffectsProcessor.build_ffmpeg_options().
         """
-        source = discord.FFmpegOpusAudio(
+        source = discord.FFmpegPCMAudio(
             stream_url,
             before_options=ffmpeg_opts.get("before_options", ""),
             options=ffmpeg_opts.get("options", "-vn"),

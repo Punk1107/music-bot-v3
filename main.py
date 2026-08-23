@@ -448,14 +448,21 @@ class MusicBot(commands.Bot):
                 )
 
             if was_connected and not now_connected:
-                # Bot was kicked from voice / Discord dropped the connection
-                if not player.intentional_disconnect and player.now_playing:
+                # Bot was kicked from voice / Discord dropped the connection.
+                # Reconnect if: not intentional AND (was playing OR has queued tracks).
+                # Previously required player.now_playing to be truthy, which caused
+                # permanent silence when the bot was kicked while the queue had tracks
+                # but now_playing was None (e.g. during URL resolution or first join).
+                has_active_session = player.now_playing is not None or len(player) > 0
+                if not player.intentional_disconnect and has_active_session:
                     logger.info(
                         "guild %d: Bot voice disconnected unexpectedly — scheduling reconnect",
                         guild.id,
                     )
                     # Delegate reconnect + resume to MusicCog._try_reconnect
-                    # by triggering _play_next after a short delay
+                    # by triggering _play_next after a short delay.
+                    # Note: guild_id is passed explicitly to avoid closure capture bug
+                    # (Python closures capture variables by reference, not by value).
                     music_cog = self.cogs.get("Music")
                     if music_cog:
                         async def _delayed_resume(gid: int) -> None:
