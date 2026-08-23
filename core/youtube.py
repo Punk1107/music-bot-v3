@@ -37,7 +37,18 @@ _YOUTUBE_DOMAINS = frozenset([
 
 # ── yt-dlp option presets ─────────────────────────────────────────────────────
 
+_COMMON_OPTS: dict = {
+    "js_runtimes":       {"node": {}},
+    "remote_components": ["ejs:github"],
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "mweb", "web"],
+        }
+    },
+}
+
 _META_OPTS: dict = {
+    **_COMMON_OPTS,
     "format":             config.YTDL_AUDIO_FORMAT,
     "quiet":              True,
     "no_warnings":        True,
@@ -55,6 +66,7 @@ _META_OPTS: dict = {
 }
 
 _STREAM_OPTS: dict = {
+    **_COMMON_OPTS,
     "format":                        config.YTDL_AUDIO_FORMAT,
     "quiet":                         True,
     "no_warnings":                   True,
@@ -72,6 +84,7 @@ _STREAM_OPTS: dict = {
 }
 
 _PLAYLIST_OPTS: dict = {
+    **_COMMON_OPTS,
     "format":             config.YTDL_AUDIO_FORMAT,
     "quiet":              True,
     "no_warnings":        True,
@@ -222,15 +235,19 @@ class YouTubeExtractor:
     def _extract_stream_url(entry: dict) -> str | None:
         formats = entry.get("formats") or []
         if formats:
-            # audio-only: vcodec must be explicitly "none" (not None/missing)
-            audio_only = [
+            # Valid audio-bearing formats: must have an audio codec and not be a storyboard
+            audio_formats = [
                 f for f in formats
-                if f.get("vcodec") == "none" and f.get("url")
+                if f.get("url")
+                and f.get("acodec") not in (None, "none", "")
+                and f.get("ext") != "mhtml"
             ]
-            candidates = audio_only or [
-                f for f in formats
-                if f.get("url") and f.get("acodec") not in (None, "none", "")
-            ] or [f for f in formats if f.get("url")]
+            # Prefer pure audio-only streams (vcodec is none)
+            audio_only = [
+                f for f in audio_formats
+                if f.get("vcodec") in (None, "none")
+            ]
+            candidates = audio_only or audio_formats
             if candidates:
                 best = max(candidates, key=lambda f: (f.get("abr") or f.get("tbr") or 0))
                 stream = best.get("url")

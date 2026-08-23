@@ -99,7 +99,7 @@ class FFmpegWarmPool:
         self,
         stream_url:  str,
         ffmpeg_opts: dict,
-    ) -> discord.FFmpegOpusAudio:
+    ) -> discord.FFmpegPCMAudio:
         """
         Return an FFmpegPCMAudio source for stream_url.
 
@@ -120,7 +120,7 @@ class FFmpegWarmPool:
         except asyncio.QueueEmpty:
             pass
 
-        source = discord.FFmpegOpusAudio(
+        source = discord.FFmpegPCMAudio(
             stream_url,
             before_options=ffmpeg_opts.get("before_options", ""),
             options=ffmpeg_opts.get("options", "-vn"),
