@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  Reproduciendo ahora",
+  "now_playing.footer": "Music Bot V3  •  Reproduciendo ahora",
+  "now_playing.nothing": "No hay nada reproduciéndose en este momento.",
+  "now_playing.paused": "⏸ En pausa",
+  "now_playing.playing": "▶ Reproduciendo ahora",
+
+  "queue.added": "Se añadió **{title}** en la posición #{pos}",
+  "queue.empty": "La cola está vacía.",
+  "queue.cleared": "Cola vaciada — se eliminaron {count} pista(s).",
+  "queue.shuffled": "🔀 Se mezclaron {count} pistas.",
+  "queue.removed": "Se eliminó **{title}** de la posición {pos}.",
+  "queue.moved": "Pista movida de la posición {from_pos} → {to_pos}.",
+  "queue.not_enough": "Se necesitan al menos 2 pistas para mezclar.",
+  "queue.invalid_pos": "No hay ninguna pista en la posición {pos}.",
+  "queue.locked": "🔒 La cola está bloqueada. Solo los DJs pueden añadir pistas.",
+
+  "skip.done": "⏭ Omitido.",
+  "skip.vote": "Votación para omitir: {votes}/{needed} votos",
+  "skip.already_voted": "Ya votaste para omitir.",
+
+  "volume.set": "🔊 Volumen establecido en **{vol}%**",
+  "volume.invalid": "El volumen debe estar entre 0 y 200.",
+
+  "error.not_in_voice": "Debes estar en un canal de voz para usar este comando.",
+  "error.not_playing": "No hay nada reproduciéndose actualmente.",
+  "error.dj_required": "🎧 Necesitas el rol de DJ para usar este comando.",
+  "error.no_results": "No se encontraron resultados para `{query}`.",
+  "error.too_long": "La pista es demasiado larga (máx. {max} min).",
+  "error.circuit_open": "⚠️ YouTube no está disponible temporalmente. Por favor, inténtalo de nuevo en breve.",
+  "error.unexpected": "Se produjo un error inesperado.",
+  "error.duplicate": "Esta pista ya está en la cola.",
+
+  "leave.alone": "👋 Se abandonó el canal — nadie estaba escuchando.",
+  "leave.idle": "💤 Desconectado por inactividad.",
+  "leave.manual": "👋 Desconectado.",
+
+  "sleep.set": "😴 Temporizador de suspensión activado para **{duration}**.",
+  "sleep.cancelled": "Temporizador de suspensión cancelado.",
+  "sleep.fired": "😴 La reproducción se detuvo según lo programado. ¡Buenas noches! 🌙",
+  "sleep.no_timer": "No hay ningún temporizador de suspensión activo.",
+
+  "auto_pause.paused": "⏸ Pausado automáticamente (canal vacío).",
+  "auto_pause.resumed": "▶ Reanudado automáticamente (alguien se unió).",
+
+  "undo.success": "↩️ Se deshizo **{op}** — se restauraron {count} pista(s).",
+  "undo.empty": "No hay nada que deshacer.",
+
+  "effects.applied": "🎛 Efecto aplicado: **{effect}**",
+  "effects.cleared": "🎛 Se borraron todos los efectos.",
+
+  "speed.set": "⚡ Velocidad establecida en **{rate}x**",
+  "pitch.set": "🎵 Tono establecido en **{semitones:+d} semitono(s)**",
+  "crossfade.set": "🎚️ Crossfade establecido en **{secs}s**",
+  "crossfade.off": "🎚️ Crossfade desactivado.",
+
+  "preset.applied": "✅ Preset **{name}** aplicado.",
+  "preset.saved": "💾 Preset **{name}** guardado.",
+  "preset.not_found": "No se encontró el preset `{name}`.",
+  "preset.deleted": "Preset `{name}` eliminado.",
+
+  "health.title": "🩺 Informe de salud",
+  "health.ok": "✅ Correcto",
+  "health.warning": "⚠️ Advertencia",
+  "health.error": "❌ Error",
+
+  "lang.set": "🌐 Idioma establecido en **Español**.",
+  "lang.permission_denied": "Solo los **Administradores** o **DJs** pueden cambiar el idioma del servidor."
+}

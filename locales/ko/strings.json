@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  현재 재생 중",
+  "now_playing.footer": "Music Bot V3  •  현재 재생 중",
+  "now_playing.nothing": "현재 재생 중인 곡이 없습니다.",
+  "now_playing.paused": "⏸ 일시 정지됨",
+  "now_playing.playing": "▶ 현재 재생 중",
+
+  "queue.added": "**{title}**을(를) #{pos}번 위치에 추가했습니다",
+  "queue.empty": "대기열이 비어 있습니다.",
+  "queue.cleared": "대기열을 비웠습니다 — {count}개의 곡을 삭제했습니다.",
+  "queue.shuffled": "🔀 {count}개의 곡을 섞었습니다.",
+  "queue.removed": "{pos}번 위치에서 **{title}**을(를) 삭제했습니다.",
+  "queue.moved": "곡을 {from_pos}번 위치에서 {to_pos}번 위치로 이동했습니다.",
+  "queue.not_enough": "섞으려면 최소 2개의 곡이 필요합니다.",
+  "queue.invalid_pos": "{pos}번 위치에 곡이 없습니다.",
+  "queue.locked": "🔒 대기열이 잠겨 있습니다. DJ만 곡을 추가할 수 있습니다.",
+
+  "skip.done": "⏭ 건너뛰었습니다.",
+  "skip.vote": "건너뛰기 투표: {votes}/{needed} 표",
+  "skip.already_voted": "이미 건너뛰기에 투표했습니다.",
+
+  "volume.set": "🔊 볼륨을 **{vol}%**로 설정했습니다",
+  "volume.invalid": "볼륨은 0에서 200 사이여야 합니다.",
+
+  "error.not_in_voice": "이 명령을 사용하려면 음성 채널에 있어야 합니다.",
+  "error.not_playing": "현재 재생 중인 곡이 없습니다.",
+  "error.dj_required": "🎧 이 명령을 사용하려면 DJ 역할이 필요합니다.",
+  "error.no_results": "`{query}`에 대한 결과를 찾을 수 없습니다.",
+  "error.too_long": "곡이 너무 깁니다(최대 {max}분).",
+  "error.circuit_open": "⚠️ YouTube를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+  "error.unexpected": "예상치 못한 오류가 발생했습니다.",
+  "error.duplicate": "이 곡은 이미 대기열에 있습니다.",
+
+  "leave.alone": "👋 아무도 듣지 않아서 채널을 떠났습니다.",
+  "leave.idle": "💤 비활성 상태로 인해 연결이 끊겼습니다.",
+  "leave.manual": "👋 연결이 끊겼습니다.",
+
+  "sleep.set": "😴 **{duration}** 후 슬립 타이머가 설정되었습니다.",
+  "sleep.cancelled": "슬립 타이머가 취소되었습니다.",
+  "sleep.fired": "😴 예정대로 재생이 중지되었습니다. 잘 자요! 🌙",
+  "sleep.no_timer": "활성화된 슬립 타이머가 없습니다.",
+
+  "auto_pause.paused": "⏸ 자동으로 일시 정지되었습니다 (채널 비어 있음).",
+  "auto_pause.resumed": "▶ 자동으로 재개되었습니다 (누군가 입장함).",
+
+  "undo.success": "↩️ **{op}**을(를) 취소했습니다 — {count}개의 곡을 복원했습니다.",
+  "undo.empty": "취소할 항목이 없습니다.",
+
+  "effects.applied": "🎛 효과 적용됨: **{effect}**",
+  "effects.cleared": "🎛 모든 효과가 지워졌습니다.",
+
+  "speed.set": "⚡ 재생 속도를 **{rate}x**로 설정했습니다",
+  "pitch.set": "🎵 피치를 **{semitones:+d} 반음**으로 설정했습니다",
+  "crossfade.set": "🎚️ 크로스페이드를 **{secs}s**로 설정했습니다",
+  "crossfade.off": "🎚️ 크로스페이드가 비활성화되었습니다.",
+
+  "preset.applied": "✅ 프리셋 **{name}**이(가) 적용되었습니다.",
+  "preset.saved": "💾 프리셋 **{name}**이(가) 저장되었습니다.",
+  "preset.not_found": "프리셋 `{name}`을(를) 찾을 수 없습니다.",
+  "preset.deleted": "프리셋 `{name}`이(가) 삭제되었습니다.",
+
+  "health.title": "🩺 상태 보고서",
+  "health.ok": "✅ 정상",
+  "health.warning": "⚠️ 경고",
+  "health.error": "❌ 오류",
+
+  "lang.set": "🌐 언어가 **한국어**로 설정되었습니다.",
+  "lang.permission_denied": "서버 언어는 **관리자** 또는 **DJ**만 변경할 수 있습니다."
+}
