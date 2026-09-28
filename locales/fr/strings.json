@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  En cours de lecture",
+  "now_playing.footer": "Music Bot V3  •  En cours de lecture",
+  "now_playing.nothing": "Rien n'est en cours de lecture pour l'instant.",
+  "now_playing.paused": "⏸ En pause",
+  "now_playing.playing": "▶ En cours de lecture",
+
+  "queue.added": "**{title}** ajouté à la position #{pos}",
+  "queue.empty": "La file d'attente est vide.",
+  "queue.cleared": "File d'attente vidée — {count} piste(s) supprimée(s).",
+  "queue.shuffled": "🔀 {count} pistes mélangées.",
+  "queue.removed": "**{title}** supprimé de la position {pos}.",
+  "queue.moved": "Piste déplacée de la position {from_pos} → {to_pos}.",
+  "queue.not_enough": "Il faut au moins 2 pistes pour mélanger.",
+  "queue.invalid_pos": "Aucune piste à la position {pos}.",
+  "queue.locked": "🔒 La file d'attente est verrouillée. Seuls les DJs peuvent ajouter des pistes.",
+
+  "skip.done": "⏭ Passé.",
+  "skip.vote": "Vote pour passer : {votes}/{needed} votes",
+  "skip.already_voted": "Vous avez déjà voté pour passer.",
+
+  "volume.set": "🔊 Volume réglé à **{vol}%**",
+  "volume.invalid": "Le volume doit être compris entre 0 et 200.",
+
+  "error.not_in_voice": "Vous devez être dans un salon vocal pour utiliser cette commande.",
+  "error.not_playing": "Rien n'est en cours de lecture.",
+  "error.dj_required": "🎧 Vous avez besoin du rôle DJ pour utiliser cette commande.",
+  "error.no_results": "Aucun résultat trouvé pour `{query}`.",
+  "error.too_long": "La piste est trop longue (max {max} min).",
+  "error.circuit_open": "⚠️ YouTube est temporairement indisponible. Veuillez réessayer dans un moment.",
+  "error.unexpected": "Une erreur inattendue s'est produite.",
+  "error.duplicate": "Cette piste est déjà dans la file d'attente.",
+
+  "leave.alone": "👋 A quitté le salon — personne n'écoutait.",
+  "leave.idle": "💤 Déconnecté pour cause d'inactivité.",
+  "leave.manual": "👋 Déconnecté.",
+
+  "sleep.set": "😴 Minuterie de sommeil activée pour **{duration}**.",
+  "sleep.cancelled": "Minuterie de sommeil annulée.",
+  "sleep.fired": "😴 La lecture s'est arrêtée comme prévu. Bonne nuit ! 🌙",
+  "sleep.no_timer": "Aucune minuterie de sommeil n'est active.",
+
+  "auto_pause.paused": "⏸ Pause automatique (salon vide).",
+  "auto_pause.resumed": "▶ Reprise automatique (quelqu'un a rejoint).",
+
+  "undo.success": "↩️ **{op}** annulé — {count} piste(s) restaurée(s).",
+  "undo.empty": "Rien à annuler.",
+
+  "effects.applied": "🎛 Effet appliqué : **{effect}**",
+  "effects.cleared": "🎛 Tous les effets ont été effacés.",
+
+  "speed.set": "⚡ Vitesse réglée à **{rate}x**",
+  "pitch.set": "🎵 Hauteur réglée à **{semitones:+d} demi-ton(s)**",
+  "crossfade.set": "🎚️ Fondu enchaîné réglé à **{secs}s**",
+  "crossfade.off": "🎚️ Fondu enchaîné désactivé.",
+
+  "preset.applied": "✅ Préréglage **{name}** appliqué.",
+  "preset.saved": "💾 Préréglage **{name}** sauvegardé.",
+  "preset.not_found": "Préréglage `{name}` introuvable.",
+  "preset.deleted": "Préréglage `{name}` supprimé.",
+
+  "health.title": "🩺 Rapport de santé",
+  "health.ok": "✅ Correct",
+  "health.warning": "⚠️ Avertissement",
+  "health.error": "❌ Erreur",
+
+  "lang.set": "🌐 Langue définie sur le **Français**.",
+  "lang.permission_denied": "Seuls les **Administrateurs** ou les **DJs** peuvent changer la langue du serveur."
+}

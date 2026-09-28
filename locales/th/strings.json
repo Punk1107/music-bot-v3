@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  กำลังเล่น",
+  "now_playing.footer": "Music Bot V3  •  กำลังเล่น",
+  "now_playing.nothing": "ไม่มีเพลงกำลังเล่นอยู่ในขณะนี้",
+  "now_playing.paused": "⏸ หยุดชั่วคราว",
+  "now_playing.playing": "▶ กำลังเล่น",
+
+  "queue.added": "เพิ่ม **{title}** ไปที่ตำแหน่ง #{pos} แล้ว",
+  "queue.empty": "คิวว่างอยู่ค่ะ",
+  "queue.cleared": "ล้างคิวแล้ว — ลบ {count} เพลง",
+  "queue.shuffled": "🔀 สับเปลี่ยนลำดับ {count} เพลงแล้ว",
+  "queue.removed": "ลบ **{title}** จากตำแหน่ง {pos} แล้ว",
+  "queue.moved": "ย้ายเพลงจากตำแหน่ง {from_pos} → {to_pos} แล้ว",
+  "queue.not_enough": "ต้องมีอย่างน้อย 2 เพลงในคิวเพื่อสับเปลี่ยน",
+  "queue.invalid_pos": "ไม่มีเพลงที่ตำแหน่ง {pos}",
+  "queue.locked": "🔒 คิวถูกล็อคอยู่ เฉพาะ DJ เท่านั้นที่เพิ่มเพลงได้",
+
+  "skip.done": "⏭ ข้ามเพลงแล้ว",
+  "skip.vote": "โหวตข้ามเพลง: {votes}/{needed} เสียง",
+  "skip.already_voted": "คุณโหวตข้ามไปแล้ว",
+
+  "volume.set": "🔊 ตั้งระดับเสียงเป็น **{vol}%** แล้ว",
+  "volume.invalid": "ระดับเสียงต้องอยู่ระหว่าง 0 ถึง 200",
+
+  "error.not_in_voice": "คุณต้องอยู่ในห้องเสียงก่อนใช้คำสั่งนี้",
+  "error.not_playing": "ไม่มีเพลงกำลังเล่นอยู่ในขณะนี้",
+  "error.dj_required": "🎧 คุณต้องมีสิทธิ์ DJ เพื่อใช้คำสั่งนี้",
+  "error.no_results": "ไม่พบผลลัพธ์สำหรับ `{query}`",
+  "error.too_long": "เพลงยาวเกินไป (สูงสุด {max} นาที)",
+  "error.circuit_open": "⚠️ YouTube ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ในอีกสักครู่",
+  "error.unexpected": "เกิดข้อผิดพลาดที่ไม่คาดคิด",
+  "error.duplicate": "เพลงนี้อยู่ในคิวแล้ว",
+
+  "leave.alone": "👋 ออกจากห้องเนื่องจากไม่มีคนอยู่ด้วย",
+  "leave.idle": "💤 ออกจากห้องเนื่องจากไม่มีการใช้งาน",
+  "leave.manual": "👋 ตัดการเชื่อมต่อแล้ว",
+
+  "sleep.set": "😴 ตั้งตัวจับเวลาหยุดเล่นใน **{duration}**",
+  "sleep.cancelled": "ยกเลิกตัวจับเวลาหยุดเล่นแล้ว",
+  "sleep.fired": "😴 หยุดเล่นเพลงตามกำหนดแล้ว ราตรีสวัสดิ์ 🌙",
+  "sleep.no_timer": "ไม่มีตัวจับเวลาหยุดเล่นที่ใช้งานอยู่",
+
+  "auto_pause.paused": "⏸ หยุดชั่วคราวอัตโนมัติ (ห้องว่าง)",
+  "auto_pause.resumed": "▶ เล่นต่ออัตโนมัติ (มีคนเข้าห้อง)",
+
+  "undo.success": "↩️ เลิกทำ **{op}** — คืนค่า {count} เพลงแล้ว",
+  "undo.empty": "ไม่มีอะไรให้เลิกทำ",
+
+  "effects.applied": "🎛 ใช้เอฟเฟกต์: **{effect}** แล้ว",
+  "effects.cleared": "🎛 ล้างเอฟเฟกต์ทั้งหมดแล้ว",
+
+  "speed.set": "⚡ ตั้งความเร็วเป็น **{rate}x** แล้ว",
+  "pitch.set": "🎵 ตั้ง Pitch เป็น **{semitones:+d} เซมิโทน** แล้ว",
+  "crossfade.set": "🎚️ ตั้ง Crossfade เป็น **{secs}s** แล้ว",
+  "crossfade.off": "🎚️ ปิด Crossfade แล้ว",
+
+  "preset.applied": "✅ ใช้งาน Preset **{name}** แล้ว",
+  "preset.saved": "💾 บันทึก Preset **{name}** แล้ว",
+  "preset.not_found": "ไม่พบ Preset `{name}`",
+  "preset.deleted": "ลบ Preset `{name}` แล้ว",
+
+  "health.title": "🩺 รายงานสถานะ",
+  "health.ok": "✅ ปกติ",
+  "health.warning": "⚠️ คำเตือน",
+  "health.error": "❌ ผิดพลาด",
+
+  "lang.set": "🌐 เปลี่ยนภาษาเป็น **ภาษาไทย** แล้ว",
+  "lang.permission_denied": "เฉพาะ **ผู้ดูแลระบบ** หรือ **DJ** เท่านั้นที่เปลี่ยนภาษาเซิร์ฟเวอร์ได้"
+}

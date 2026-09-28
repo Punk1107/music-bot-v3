@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  再生中",
+  "now_playing.footer": "Music Bot V3  •  再生中",
+  "now_playing.nothing": "現在再生中の楽曲はありません。",
+  "now_playing.paused": "⏸ 一時停止中",
+  "now_playing.playing": "▶ 再生中",
+
+  "queue.added": "**{title}** を #{pos} 番目に追加しました",
+  "queue.empty": "キューは空です。",
+  "queue.cleared": "キューをクリアしました — {count} 曲を削除しました。",
+  "queue.shuffled": "🔀 {count} 曲をシャッフルしました。",
+  "queue.removed": "**{title}** を {pos} 番目から削除しました。",
+  "queue.moved": "楽曲を {from_pos} 番目から {to_pos} 番目に移動しました。",
+  "queue.not_enough": "シャッフルするには少なくとも 2 曲必要です。",
+  "queue.invalid_pos": "{pos} 番目に楽曲がありません。",
+  "queue.locked": "🔒 キューはロックされています。DJ のみが楽曲を追加できます。",
+
+  "skip.done": "⏭ スキップしました。",
+  "skip.vote": "スキップ投票：{votes}/{needed} 票",
+  "skip.already_voted": "すでにスキップに投票しました。",
+
+  "volume.set": "🔊 音量を **{vol}%** に設定しました",
+  "volume.invalid": "音量は 0 から 200 の間で設定してください。",
+
+  "error.not_in_voice": "このコマンドを使用するには、ボイスチャンネルに参加してください。",
+  "error.not_playing": "現在再生中の楽曲はありません。",
+  "error.dj_required": "🎧 このコマンドを使用するには DJ ロールが必要です。",
+  "error.no_results": "`{query}` の検索結果が見つかりませんでした。",
+  "error.too_long": "楽曲が長すぎます（最大 {max} 分）。",
+  "error.circuit_open": "⚠️ YouTube は一時的に利用できません。しばらくしてから再試行してください。",
+  "error.unexpected": "予期しないエラーが発生しました。",
+  "error.duplicate": "この楽曲はすでにキューに入っています。",
+
+  "leave.alone": "👋 誰も聴いていないため、チャンネルを退出しました。",
+  "leave.idle": "💤 非アクティブのため切断しました。",
+  "leave.manual": "👋 切断しました。",
+
+  "sleep.set": "😴 スリープタイマーを **{duration}** 後に設定しました。",
+  "sleep.cancelled": "スリープタイマーをキャンセルしました。",
+  "sleep.fired": "😴 予定通りに再生を停止しました。おやすみなさい！🌙",
+  "sleep.no_timer": "アクティブなスリープタイマーはありません。",
+
+  "auto_pause.paused": "⏸ 自動一時停止しました（チャンネルが空です）。",
+  "auto_pause.resumed": "▶ 自動再開しました（誰かが参加しました）。",
+
+  "undo.success": "↩️ **{op}** を元に戻しました — {count} 曲を復元しました。",
+  "undo.empty": "元に戻す操作がありません。",
+
+  "effects.applied": "🎛 エフェクトを適用しました：**{effect}**",
+  "effects.cleared": "🎛 すべてのエフェクトをクリアしました。",
+
+  "speed.set": "⚡ 再生速度を **{rate}x** に設定しました",
+  "pitch.set": "🎵 ピッチを **{semitones:+d} 半音** に設定しました",
+  "crossfade.set": "🎚️ クロスフェードを **{secs}s** に設定しました",
+  "crossfade.off": "🎚️ クロスフェードを無効にしました。",
+
+  "preset.applied": "✅ プリセット **{name}** を適用しました。",
+  "preset.saved": "💾 プリセット **{name}** を保存しました。",
+  "preset.not_found": "プリセット `{name}` が見つかりません。",
+  "preset.deleted": "プリセット `{name}` を削除しました。",
+
+  "health.title": "🩺 ヘルスレポート",
+  "health.ok": "✅ 正常",
+  "health.warning": "⚠️ 警告",
+  "health.error": "❌ エラー",
+
+  "lang.set": "🌐 言語を**日本語**に設定しました。",
+  "lang.permission_denied": "サーバーの言語を変更できるのは**管理者**または **DJ** のみです。"
+}

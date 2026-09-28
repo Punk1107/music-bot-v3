@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  Wird abgespielt",
+  "now_playing.footer": "Music Bot V3  •  Wird abgespielt",
+  "now_playing.nothing": "Es wird gerade nichts abgespielt.",
+  "now_playing.paused": "⏸ Pausiert",
+  "now_playing.playing": "▶ Wird abgespielt",
+
+  "queue.added": "**{title}** wurde an Position #{pos} hinzugefügt",
+  "queue.empty": "Die Warteschlange ist leer.",
+  "queue.cleared": "Warteschlange geleert — {count} Titel entfernt.",
+  "queue.shuffled": "🔀 {count} Titel gemischt.",
+  "queue.removed": "**{title}** wurde von Position {pos} entfernt.",
+  "queue.moved": "Titel von Position {from_pos} → {to_pos} verschoben.",
+  "queue.not_enough": "Zum Mischen werden mindestens 2 Titel benötigt.",
+  "queue.invalid_pos": "Kein Titel an Position {pos}.",
+  "queue.locked": "🔒 Die Warteschlange ist gesperrt. Nur DJs können Titel hinzufügen.",
+
+  "skip.done": "⏭ Übersprungen.",
+  "skip.vote": "Abstimmung zum Überspringen: {votes}/{needed} Stimmen",
+  "skip.already_voted": "Du hast bereits für das Überspringen gestimmt.",
+
+  "volume.set": "🔊 Lautstärke auf **{vol}%** eingestellt",
+  "volume.invalid": "Die Lautstärke muss zwischen 0 und 200 liegen.",
+
+  "error.not_in_voice": "Du musst in einem Sprachkanal sein, um diesen Befehl zu verwenden.",
+  "error.not_playing": "Es wird gerade nichts abgespielt.",
+  "error.dj_required": "🎧 Du benötigst die DJ-Rolle, um diesen Befehl zu verwenden.",
+  "error.no_results": "Keine Ergebnisse für `{query}` gefunden.",
+  "error.too_long": "Der Titel ist zu lang (max. {max} Min.).",
+  "error.circuit_open": "⚠️ YouTube ist vorübergehend nicht verfügbar. Bitte versuche es in Kürze erneut.",
+  "error.unexpected": "Ein unerwarteter Fehler ist aufgetreten.",
+  "error.duplicate": "Dieser Titel ist bereits in der Warteschlange.",
+
+  "leave.alone": "👋 Den Kanal verlassen — niemand hat zugehört.",
+  "leave.idle": "💤 Wegen Inaktivität getrennt.",
+  "leave.manual": "👋 Getrennt.",
+
+  "sleep.set": "😴 Schlaf-Timer auf **{duration}** eingestellt.",
+  "sleep.cancelled": "Schlaf-Timer abgebrochen.",
+  "sleep.fired": "😴 Wiedergabe wie geplant gestoppt. Gute Nacht! 🌙",
+  "sleep.no_timer": "Kein aktiver Schlaf-Timer.",
+
+  "auto_pause.paused": "⏸ Automatisch pausiert (Kanal leer).",
+  "auto_pause.resumed": "▶ Automatisch fortgesetzt (jemand ist beigetreten).",
+
+  "undo.success": "↩️ **{op}** rückgängig gemacht — {count} Titel wiederhergestellt.",
+  "undo.empty": "Nichts zum Rückgängigmachen.",
+
+  "effects.applied": "🎛 Effekt angewendet: **{effect}**",
+  "effects.cleared": "🎛 Alle Effekte gelöscht.",
+
+  "speed.set": "⚡ Geschwindigkeit auf **{rate}x** eingestellt",
+  "pitch.set": "🎵 Tonhöhe auf **{semitones:+d} Halbton/Halbtöne** eingestellt",
+  "crossfade.set": "🎚️ Überblendung auf **{secs}s** eingestellt",
+  "crossfade.off": "🎚️ Überblendung deaktiviert.",
+
+  "preset.applied": "✅ Voreinstellung **{name}** angewendet.",
+  "preset.saved": "💾 Voreinstellung **{name}** gespeichert.",
+  "preset.not_found": "Voreinstellung `{name}` nicht gefunden.",
+  "preset.deleted": "Voreinstellung `{name}` gelöscht.",
+
+  "health.title": "🩺 Gesundheitsbericht",
+  "health.ok": "✅ OK",
+  "health.warning": "⚠️ Warnung",
+  "health.error": "❌ Fehler",
+
+  "lang.set": "🌐 Sprache auf **Deutsch** eingestellt.",
+  "lang.permission_denied": "Nur **Administratoren** oder **DJs** können die Serversprache ändern."
+}

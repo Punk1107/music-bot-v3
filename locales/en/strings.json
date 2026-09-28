@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  Now Playing",
+  "now_playing.footer": "Music Bot V3  •  Now Playing",
+  "now_playing.nothing": "Nothing is playing right now.",
+  "now_playing.paused": "⏸ Paused",
+  "now_playing.playing": "▶ Now Playing",
+
+  "queue.added": "Added **{title}** to position #{pos}",
+  "queue.empty": "The queue is empty.",
+  "queue.cleared": "Queue cleared — removed {count} track(s).",
+  "queue.shuffled": "🔀 Shuffled {count} tracks.",
+  "queue.removed": "Removed **{title}** from position {pos}.",
+  "queue.moved": "Track moved from position {from_pos} → {to_pos}.",
+  "queue.not_enough": "Need at least 2 tracks to shuffle.",
+  "queue.invalid_pos": "No track at position {pos}.",
+  "queue.locked": "🔒 The queue is locked. Only DJs can add tracks.",
+
+  "skip.done": "⏭ Skipped.",
+  "skip.vote": "Vote to skip: {votes}/{needed} votes",
+  "skip.already_voted": "You already voted to skip.",
+
+  "volume.set": "🔊 Volume set to **{vol}%**",
+  "volume.invalid": "Volume must be between 0 and 200.",
+
+  "error.not_in_voice": "You must be in a voice channel to use this command.",
+  "error.not_playing": "Nothing is currently playing.",
+  "error.dj_required": "🎧 You need the DJ role to use this command.",
+  "error.no_results": "No results found for `{query}`.",
+  "error.too_long": "Track is too long (max {max}min).",
+  "error.circuit_open": "⚠️ YouTube is temporarily unavailable. Please try again shortly.",
+  "error.unexpected": "An unexpected error occurred.",
+  "error.duplicate": "This track is already in the queue.",
+
+  "leave.alone": "👋 Left the channel — no one was listening.",
+  "leave.idle": "💤 Disconnected due to inactivity.",
+  "leave.manual": "👋 Disconnected.",
+
+  "sleep.set": "😴 Sleep timer set for **{duration}**.",
+  "sleep.cancelled": "Sleep timer cancelled.",
+  "sleep.fired": "😴 Playback stopped as scheduled. Good night! 🌙",
+  "sleep.no_timer": "No sleep timer is active.",
+
+  "auto_pause.paused": "⏸ Auto-paused (channel empty).",
+  "auto_pause.resumed": "▶ Auto-resumed (someone joined).",
+
+  "undo.success": "↩️ Undid **{op}** — restored {count} track(s).",
+  "undo.empty": "Nothing to undo.",
+
+  "effects.applied": "🎛 Effect applied: **{effect}**",
+  "effects.cleared": "🎛 All effects cleared.",
+
+  "speed.set": "⚡ Speed set to **{rate}x**",
+  "pitch.set": "🎵 Pitch set to **{semitones:+d} semitone(s)**",
+  "crossfade.set": "🎚️ Crossfade set to **{secs}s**",
+  "crossfade.off": "🎚️ Crossfade disabled.",
+
+  "preset.applied": "✅ Preset **{name}** applied.",
+  "preset.saved": "💾 Preset **{name}** saved.",
+  "preset.not_found": "Preset `{name}` not found.",
+  "preset.deleted": "Preset `{name}` deleted.",
+
+  "health.title": "🩺 Health Report",
+  "health.ok": "✅ OK",
+  "health.warning": "⚠️ Warning",
+  "health.error": "❌ Error",
+
+  "lang.set": "🌐 Language set to **English**.",
+  "lang.permission_denied": "Only **Administrators** or **DJs** can change the server language."
+}

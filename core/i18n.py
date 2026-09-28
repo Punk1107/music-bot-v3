@@ -2,10 +2,26 @@
 """
 core/i18n.py — Localization (i18n) for Music Bot V3.
 
-Tier Performance F30: Full TH/EN localization.
+Tier Performance F30: Multi-language localization (9 languages).
+
+Supported locales:
+  "en"    — English (default / fallback)
+  "th"    — Thai
+  "zh_cn" — Chinese (Simplified)
+  "ja"    — Japanese
+  "ko"    — Korean
+  "es"    — Spanish
+  "ru"    — Russian
+  "fr"    — French
+  "de"    — German
+
+String catalogues are loaded from individual JSON files under:
+  locales/<locale>/strings.json
+
+Locale aliases (e.g. "zh-CN" → "zh_cn") are resolved automatically.
 
 Usage:
-    from core.i18n import t, get_locale, set_locale
+    from core.i18n import t, get_locale, set_locale_cache
 
     locale = await get_locale(guild_id, bot.db)
     msg    = t("now_playing.title", locale)
@@ -13,20 +29,17 @@ Usage:
     # With format params:
     msg = t("queue.added", locale, title="Song", pos=3)
 
-Supported locales:
-  "en" — English (default)
-  "th" — Thai
-
-All user-visible strings are defined in _STRINGS below.
-Fallback: if a key is missing in the target locale, English is used.
-If a key is missing in English too, the key itself is returned.
-
-Guild locale is stored in ServerConfig.language (new field).
+Fallback chain:
+  1. Target locale
+  2. English ("en")
+  3. The key itself
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -34,284 +47,243 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── String catalogue ──────────────────────────────────────────────────────────
+# ── Locale aliases ─────────────────────────────────────────────────────────────
+# Maps alternative tags → canonical locale code used for folder names.
 
-_STRINGS: dict[str, dict[str, str]] = {
-    # ── Playback ──────────────────────────────────────────────────────────────
-    "now_playing.title": {
-        "en": "🎵  Now Playing",
-        "th": "🎵  กำลังเล่น",
-    },
-    "now_playing.footer": {
-        "en": "Music Bot V3  •  Now Playing",
-        "th": "Music Bot V3  •  กำลังเล่น",
-    },
-    "now_playing.nothing": {
-        "en": "Nothing is playing right now.",
-        "th": "ไม่มีเพลงกำลังเล่นอยู่ในขณะนี้",
-    },
-    "now_playing.paused": {
-        "en": "⏸ Paused",
-        "th": "⏸ หยุดชั่วคราว",
-    },
-    "now_playing.playing": {
-        "en": "▶ Now Playing",
-        "th": "▶ กำลังเล่น",
-    },
+_LOCALE_ALIASES: dict[str, str] = {
+    # Chinese Simplified variants
+    "zh":    "zh_cn",
+    "zh-cn": "zh_cn",
+    "zh_hans": "zh_cn",
+    # Japanese
+    "ja-jp": "ja",
+    # Korean
+    "ko-kr": "ko",
+    # Spanish
+    "es-es": "es",
+    "es-mx": "es",
+    "es-419": "es",
+    # Russian
+    "ru-ru": "ru",
+    # French
+    "fr-fr": "fr",
+    "fr-be": "fr",
+    "fr-ca": "fr",
+    # German
+    "de-de": "de",
+    "de-at": "de",
+    "de-ch": "de",
+    # Thai
+    "th-th": "th",
+    # English
+    "en-us": "en",
+    "en-gb": "en",
+    "en-au": "en",
+}
 
-    # ── Queue ─────────────────────────────────────────────────────────────────
-    "queue.added": {
-        "en": "Added **{title}** to position #{pos}",
-        "th": "เพิ่ม **{title}** ไปที่ตำแหน่ง #{pos} แล้ว",
-    },
-    "queue.empty": {
-        "en": "The queue is empty.",
-        "th": "คิวว่างอยู่ค่ะ",
-    },
-    "queue.cleared": {
-        "en": "Queue cleared — removed {count} track(s).",
-        "th": "ล้างคิวแล้ว — ลบ {count} เพลง",
-    },
-    "queue.shuffled": {
-        "en": "🔀 Shuffled {count} tracks.",
-        "th": "🔀 สับเปลี่ยนลำดับ {count} เพลงแล้ว",
-    },
-    "queue.removed": {
-        "en": "Removed **{title}** from position {pos}.",
-        "th": "ลบ **{title}** จากตำแหน่ง {pos} แล้ว",
-    },
-    "queue.moved": {
-        "en": "Track moved from position {from_pos} → {to_pos}.",
-        "th": "ย้ายเพลงจากตำแหน่ง {from_pos} → {to_pos} แล้ว",
-    },
-    "queue.not_enough": {
-        "en": "Need at least 2 tracks to shuffle.",
-        "th": "ต้องมีอย่างน้อย 2 เพลงในคิวเพื่อสับเปลี่ยน",
-    },
-    "queue.invalid_pos": {
-        "en": "No track at position {pos}.",
-        "th": "ไม่มีเพลงที่ตำแหน่ง {pos}",
-    },
-    "queue.locked": {
-        "en": "🔒 The queue is locked. Only DJs can add tracks.",
-        "th": "🔒 คิวถูกล็อคอยู่ เฉพาะ DJ เท่านั้นที่เพิ่มเพลงได้",
-    },
+# ── Locale metadata ────────────────────────────────────────────────────────────
 
-    # ── Skip ──────────────────────────────────────────────────────────────────
-    "skip.done": {
-        "en": "⏭ Skipped.",
-        "th": "⏭ ข้ามเพลงแล้ว",
+LOCALE_META: dict[str, dict] = {
+    "en": {
+        "name":        "English",
+        "native_name": "English",
+        "flag":        "🇬🇧",
+        "color":       0x5865F2,
+        "choice_label": "🇬🇧 English",
     },
-    "skip.vote": {
-        "en": "Vote to skip: {votes}/{needed} votes",
-        "th": "โหวตข้ามเพลง: {votes}/{needed} เสียง",
+    "th": {
+        "name":        "Thai",
+        "native_name": "ภาษาไทย",
+        "flag":        "🇹🇭",
+        "color":       0xA8385D,
+        "choice_label": "🇹🇭 ภาษาไทย (Thai)",
     },
-    "skip.already_voted": {
-        "en": "You already voted to skip.",
-        "th": "คุณโหวตข้ามไปแล้ว",
+    "zh_cn": {
+        "name":        "Chinese (Simplified)",
+        "native_name": "简体中文",
+        "flag":        "🇨🇳",
+        "color":       0xDE2910,
+        "choice_label": "🇨🇳 简体中文 (Chinese Simplified)",
     },
-
-    # ── Volume ────────────────────────────────────────────────────────────────
-    "volume.set": {
-        "en": "🔊 Volume set to **{vol}%**",
-        "th": "🔊 ตั้งระดับเสียงเป็น **{vol}%** แล้ว",
+    "ja": {
+        "name":        "Japanese",
+        "native_name": "日本語",
+        "flag":        "🇯🇵",
+        "color":       0xBC002D,
+        "choice_label": "🇯🇵 日本語 (Japanese)",
     },
-    "volume.invalid": {
-        "en": "Volume must be between 0 and 200.",
-        "th": "ระดับเสียงต้องอยู่ระหว่าง 0 ถึง 200",
+    "ko": {
+        "name":        "Korean",
+        "native_name": "한국어",
+        "flag":        "🇰🇷",
+        "color":       0x0047A0,
+        "choice_label": "🇰🇷 한국어 (Korean)",
     },
-
-    # ── Errors ────────────────────────────────────────────────────────────────
-    "error.not_in_voice": {
-        "en": "You must be in a voice channel to use this command.",
-        "th": "คุณต้องอยู่ในห้องเสียงก่อนใช้คำสั่งนี้",
+    "es": {
+        "name":        "Spanish",
+        "native_name": "Español",
+        "flag":        "🇪🇸",
+        "color":       0xC60B1E,
+        "choice_label": "🇪🇸 Español (Spanish)",
     },
-    "error.not_playing": {
-        "en": "Nothing is currently playing.",
-        "th": "ไม่มีเพลงกำลังเล่นอยู่ในขณะนี้",
+    "ru": {
+        "name":        "Russian",
+        "native_name": "Русский",
+        "flag":        "🇷🇺",
+        "color":       0x0039A6,
+        "choice_label": "🇷🇺 Русский (Russian)",
     },
-    "error.dj_required": {
-        "en": "🎧 You need the DJ role to use this command.",
-        "th": "🎧 คุณต้องมีสิทธิ์ DJ เพื่อใช้คำสั่งนี้",
+    "fr": {
+        "name":        "French",
+        "native_name": "Français",
+        "flag":        "🇫🇷",
+        "color":       0x0055A4,
+        "choice_label": "🇫🇷 Français (French)",
     },
-    "error.no_results": {
-        "en": "No results found for `{query}`.",
-        "th": "ไม่พบผลลัพธ์สำหรับ `{query}`",
-    },
-    "error.too_long": {
-        "en": "Track is too long (max {max}min).",
-        "th": "เพลงยาวเกินไป (สูงสุด {max} นาที)",
-    },
-    "error.circuit_open": {
-        "en": "⚠️ YouTube is temporarily unavailable. Please try again shortly.",
-        "th": "⚠️ YouTube ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ในอีกสักครู่",
-    },
-    "error.unexpected": {
-        "en": "An unexpected error occurred.",
-        "th": "เกิดข้อผิดพลาดที่ไม่คาดคิด",
-    },
-    "error.duplicate": {
-        "en": "This track is already in the queue.",
-        "th": "เพลงนี้อยู่ในคิวแล้ว",
-    },
-
-    # ── Disconnect / Leave ────────────────────────────────────────────────────
-    "leave.alone": {
-        "en": "👋 Left the channel — no one was listening.",
-        "th": "👋 ออกจากห้องเนื่องจากไม่มีคนอยู่ด้วย",
-    },
-    "leave.idle": {
-        "en": "💤 Disconnected due to inactivity.",
-        "th": "💤 ออกจากห้องเนื่องจากไม่มีการใช้งาน",
-    },
-    "leave.manual": {
-        "en": "👋 Disconnected.",
-        "th": "👋 ตัดการเชื่อมต่อแล้ว",
-    },
-
-    # ── Sleep Timer ───────────────────────────────────────────────────────────
-    "sleep.set": {
-        "en": "😴 Sleep timer set for **{duration}**.",
-        "th": "😴 ตั้งตัวจับเวลาหยุดเล่นใน **{duration}**",
-    },
-    "sleep.cancelled": {
-        "en": "Sleep timer cancelled.",
-        "th": "ยกเลิกตัวจับเวลาหยุดเล่นแล้ว",
-    },
-    "sleep.fired": {
-        "en": "😴 Playback stopped as scheduled. Good night! 🌙",
-        "th": "😴 หยุดเล่นเพลงตามกำหนดแล้ว ราตรีสวัสดิ์ 🌙",
-    },
-    "sleep.no_timer": {
-        "en": "No sleep timer is active.",
-        "th": "ไม่มีตัวจับเวลาหยุดเล่นที่ใช้งานอยู่",
-    },
-
-    # ── Auto Pause ────────────────────────────────────────────────────────────
-    "auto_pause.paused": {
-        "en": "⏸ Auto-paused (channel empty).",
-        "th": "⏸ หยุดชั่วคราวอัตโนมัติ (ห้องว่าง)",
-    },
-    "auto_pause.resumed": {
-        "en": "▶ Auto-resumed (someone joined).",
-        "th": "▶ เล่นต่ออัตโนมัติ (มีคนเข้าห้อง)",
-    },
-
-    # ── Undo / Transaction ────────────────────────────────────────────────────
-    "undo.success": {
-        "en": "↩️ Undid **{op}** — restored {count} track(s).",
-        "th": "↩️ เลิกทำ **{op}** — คืนค่า {count} เพลงแล้ว",
-    },
-    "undo.empty": {
-        "en": "Nothing to undo.",
-        "th": "ไม่มีอะไรให้เลิกทำ",
-    },
-
-    # ── Effects ───────────────────────────────────────────────────────────────
-    "effects.applied": {
-        "en": "🎛 Effect applied: **{effect}**",
-        "th": "🎛 ใช้เอฟเฟกต์: **{effect}** แล้ว",
-    },
-    "effects.cleared": {
-        "en": "🎛 All effects cleared.",
-        "th": "🎛 ล้างเอฟเฟกต์ทั้งหมดแล้ว",
-    },
-
-    # ── Playback Controls (A+) ────────────────────────────────────────────────
-    "speed.set": {
-        "en": "⚡ Speed set to **{rate}x**",
-        "th": "⚡ ตั้งความเร็วเป็น **{rate}x** แล้ว",
-    },
-    "pitch.set": {
-        "en": "🎵 Pitch set to **{semitones:+d} semitone(s)**",
-        "th": "🎵 ตั้ง Pitch เป็น **{semitones:+d} เซมิโทน** แล้ว",
-    },
-    "crossfade.set": {
-        "en": "🎚️ Crossfade set to **{secs}s**",
-        "th": "🎚️ ตั้ง Crossfade เป็น **{secs}s** แล้ว",
-    },
-    "crossfade.off": {
-        "en": "🎚️ Crossfade disabled.",
-        "th": "🎚️ ปิด Crossfade แล้ว",
-    },
-
-    # ── Presets ───────────────────────────────────────────────────────────────
-    "preset.applied": {
-        "en": "✅ Preset **{name}** applied.",
-        "th": "✅ ใช้งาน Preset **{name}** แล้ว",
-    },
-    "preset.saved": {
-        "en": "💾 Preset **{name}** saved.",
-        "th": "💾 บันทึก Preset **{name}** แล้ว",
-    },
-    "preset.not_found": {
-        "en": "Preset `{name}` not found.",
-        "th": "ไม่พบ Preset `{name}`",
-    },
-    "preset.deleted": {
-        "en": "Preset `{name}` deleted.",
-        "th": "ลบ Preset `{name}` แล้ว",
-    },
-
-    # ── Health Report (F35) ───────────────────────────────────────────────────
-    "health.title": {
-        "en": "🩺 Health Report",
-        "th": "🩺 รายงานสถานะ",
-    },
-    "health.ok": {
-        "en": "✅ OK",
-        "th": "✅ ปกติ",
-    },
-    "health.warning": {
-        "en": "⚠️ Warning",
-        "th": "⚠️ คำเตือน",
-    },
-    "health.error": {
-        "en": "❌ Error",
-        "th": "❌ ผิดพลาด",
-    },
-
-    # ── Language toggle ───────────────────────────────────────────────────────
-    "lang.set": {
-        "en": "🌐 Language set to **English**.",
-        "th": "🌐 เปลี่ยนภาษาเป็น **ภาษาไทย** แล้ว",
+    "de": {
+        "name":        "German",
+        "native_name": "Deutsch",
+        "flag":        "🇩🇪",
+        "color":       0x000000,
+        "choice_label": "🇩🇪 Deutsch (German)",
     },
 }
 
-# ── Translation engine ────────────────────────────────────────────────────────
+# ── JSON loader ────────────────────────────────────────────────────────────────
 
-_SUPPORTED_LOCALES = frozenset({"en", "th"})
-_DEFAULT_LOCALE    = "en"
+# _STRINGS maps: locale_code -> { key -> translated_string }
+_STRINGS: dict[str, dict[str, str]] = {}
 
+_DEFAULT_LOCALE = "en"
+
+# Locate the locales/ directory relative to this file's location.
+# Layout:  <project_root>/locales/<lang>/strings.json
+#          <project_root>/core/i18n.py
+_LOCALES_DIR: Path = Path(__file__).parent.parent / "locales"
+
+
+def _load_locales() -> None:
+    """
+    Scan the locales/ directory and load every strings.json file found.
+    Called once at module import time.
+    Missing locale directories are silently skipped (warning is logged).
+    """
+    if not _LOCALES_DIR.is_dir():
+        logger.warning(
+            "i18n: locales directory not found at %s — no translations loaded",
+            _LOCALES_DIR,
+        )
+        return
+
+    loaded: list[str] = []
+    for lang_dir in sorted(_LOCALES_DIR.iterdir()):
+        if not lang_dir.is_dir():
+            continue
+        locale_code = lang_dir.name  # e.g. "en", "th", "zh_cn"
+        strings_file = lang_dir / "strings.json"
+        if not strings_file.is_file():
+            logger.warning(
+                "i18n: locale dir %r has no strings.json — skipped", locale_code
+            )
+            continue
+        try:
+            with strings_file.open(encoding="utf-8") as f:
+                data: dict[str, str] = json.load(f)
+            _STRINGS[locale_code] = data
+            loaded.append(locale_code)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.error(
+                "i18n: failed to load %s: %s", strings_file, exc
+            )
+
+    logger.info("i18n: loaded locales: %s", loaded)
+
+
+# Load immediately on import.
+_load_locales()
+
+# Derived set of supported locales (based on what was actually loaded).
+_SUPPORTED_LOCALES: frozenset[str] = frozenset(_STRINGS.keys())
+
+
+# ── Locale normaliser ──────────────────────────────────────────────────────────
+
+def _normalise(locale: str) -> str:
+    """
+    Normalise and resolve alias for a locale tag.
+    Returns a canonical locale code (e.g. "zh_cn", "en") or the default
+    if the input is unsupported.
+
+    Resolution order:
+      1. Lowercase with dashes preserved → check alias table (aliases use dashes)
+      2. Lowercase with dashes → underscores → check supported locales directly
+      3. Fall back to _DEFAULT_LOCALE
+    """
+    lowered_with_dashes = locale.lower()           # e.g. "ja-jp", "en-us"
+    lowered_underscored = lowered_with_dashes.replace("-", "_")  # e.g. "ja_jp", "en_us"
+
+    # 1. Alias table lookup (keys use dashes, e.g. "ja-jp")
+    canonical = _LOCALE_ALIASES.get(lowered_with_dashes)
+    if canonical and canonical in _SUPPORTED_LOCALES:
+        return canonical
+
+    # 2. Direct match with underscore form (canonical locale codes)
+    if lowered_underscored in _SUPPORTED_LOCALES:
+        return lowered_underscored
+
+    # 3. Direct match with dash form (unlikely but safe)
+    if lowered_with_dashes in _SUPPORTED_LOCALES:
+        return lowered_with_dashes
+
+    logger.debug("i18n: unknown locale %r, falling back to %r", locale, _DEFAULT_LOCALE)
+    return _DEFAULT_LOCALE
+
+
+# ── Translation function ───────────────────────────────────────────────────────
 
 def t(key: str, locale: str = "en", **kwargs) -> str:
     """
     Translate a string key into the given locale.
 
-    Falls back to English if the key is not available in the target locale.
-    Falls back to the key itself if not available in English either.
+    Fallback chain:
+      1. Target locale's strings.json
+      2. English ("en") strings.json
+      3. The key itself
+
     Applies str.format(**kwargs) if keyword args are given.
 
     Example:
         t("queue.cleared", "th", count=5)
         → "ล้างคิวแล้ว — ลบ 5 เพลง"
     """
-    if locale not in _SUPPORTED_LOCALES:
-        locale = _DEFAULT_LOCALE
+    canonical = _normalise(locale)
 
-    entry = _STRINGS.get(key)
-    if entry is None:
-        logger.debug("i18n: missing key %r", key)
+    # 1. Target locale
+    raw: str | None = _STRINGS.get(canonical, {}).get(key)
+
+    # 2. English fallback
+    if raw is None:
+        raw = _STRINGS.get(_DEFAULT_LOCALE, {}).get(key)
+        if raw is not None and canonical != _DEFAULT_LOCALE:
+            logger.debug(
+                "i18n: key %r missing in %r, fell back to %r",
+                key, canonical, _DEFAULT_LOCALE,
+            )
+
+    # 3. Key itself as last resort
+    if raw is None:
+        logger.debug("i18n: key %r not found in any locale", key)
         raw = key
-    else:
-        raw = entry.get(locale) or entry.get(_DEFAULT_LOCALE) or key
 
     if kwargs:
         try:
             return raw.format(**kwargs)
         except (KeyError, ValueError):
-            logger.debug("i18n: format error for key %r with %r", key, kwargs)
+            logger.debug(
+                "i18n: format error for key %r with %r", key, kwargs
+            )
             return raw
+
     return raw
 
 
@@ -322,8 +294,12 @@ _locale_cache: dict[int, str] = {}
 
 async def get_locale(guild_id: int, db=None) -> str:
     """
-    Return the locale for a guild ("en" or "th").
-    Uses an in-memory cache so DB is only hit once per session.
+    Return the canonical locale code for a guild.
+
+    Lookup order:
+      1. In-memory cache (O(1) per call after first access)
+      2. DatabaseManager.get_server_config()
+      3. Default ("en")
     """
     if guild_id in _locale_cache:
         return _locale_cache[guild_id]
@@ -332,9 +308,8 @@ async def get_locale(guild_id: int, db=None) -> str:
     if db:
         try:
             cfg    = await db.get_server_config(guild_id)
-            locale = getattr(cfg, "language", _DEFAULT_LOCALE)
-            if locale not in _SUPPORTED_LOCALES:
-                locale = _DEFAULT_LOCALE
+            raw    = getattr(cfg, "language", _DEFAULT_LOCALE)
+            locale = _normalise(raw)
         except Exception:
             pass
 
@@ -344,9 +319,46 @@ async def get_locale(guild_id: int, db=None) -> str:
 
 def set_locale_cache(guild_id: int, locale: str) -> None:
     """Update the in-memory locale cache after a /language command."""
-    if locale in _SUPPORTED_LOCALES:
-        _locale_cache[guild_id] = locale
+    lowered = locale.lower()
+    # Resolve alias, but only accept the result if it is truly a supported locale
+    # (do NOT fall back to default — callers should only pass valid locales).
+    canonical = _LOCALE_ALIASES.get(lowered, lowered.replace("-", "_"))
+    if canonical in _SUPPORTED_LOCALES:
+        _locale_cache[guild_id] = canonical
+    else:
+        logger.warning(
+            "i18n: set_locale_cache called with unsupported locale %r — ignored", locale
+        )
+
+
+def invalidate_locale_cache(guild_id: int) -> None:
+    """Remove a guild's locale from the in-memory cache (forces DB re-read)."""
+    _locale_cache.pop(guild_id, None)
 
 
 def supported_locales() -> list[str]:
+    """Return a sorted list of all loaded locale codes."""
     return sorted(_SUPPORTED_LOCALES)
+
+
+def get_locale_meta(locale: str) -> dict:
+    """
+    Return metadata dict for a locale (name, native_name, flag, color, choice_label).
+    Falls back to English metadata if the locale is unknown.
+    """
+    canonical = _normalise(locale)
+    return LOCALE_META.get(canonical, LOCALE_META[_DEFAULT_LOCALE])
+
+
+def reload_locales() -> None:
+    """
+    Hot-reload all locale files from disk.
+    Useful for development / live translation updates without restarting the bot.
+    Also clears the guild locale cache so next t() calls re-resolve.
+    """
+    global _SUPPORTED_LOCALES
+    _STRINGS.clear()
+    _locale_cache.clear()
+    _load_locales()
+    _SUPPORTED_LOCALES = frozenset(_STRINGS.keys())
+    logger.info("i18n: hot-reloaded all locales — cache cleared")

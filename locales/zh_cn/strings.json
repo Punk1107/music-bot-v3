@@ -1,0 +1,69 @@
+{
+  "now_playing.title": "🎵  正在播放",
+  "now_playing.footer": "Music Bot V3  •  正在播放",
+  "now_playing.nothing": "目前没有正在播放的歌曲。",
+  "now_playing.paused": "⏸ 已暂停",
+  "now_playing.playing": "▶ 正在播放",
+
+  "queue.added": "已将 **{title}** 添加到第 #{pos} 位",
+  "queue.empty": "播放队列为空。",
+  "queue.cleared": "队列已清空 — 已删除 {count} 首歌曲。",
+  "queue.shuffled": "🔀 已随机播放 {count} 首歌曲。",
+  "queue.removed": "已从第 {pos} 位删除 **{title}**。",
+  "queue.moved": "歌曲已从第 {from_pos} 位移动到第 {to_pos} 位。",
+  "queue.not_enough": "至少需要 2 首歌曲才能随机播放。",
+  "queue.invalid_pos": "第 {pos} 位没有歌曲。",
+  "queue.locked": "🔒 队列已锁定。只有 DJ 才能添加歌曲。",
+
+  "skip.done": "⏭ 已跳过。",
+  "skip.vote": "投票跳过：{votes}/{needed} 票",
+  "skip.already_voted": "您已经投票跳过。",
+
+  "volume.set": "🔊 音量已设置为 **{vol}%**",
+  "volume.invalid": "音量必须在 0 到 200 之间。",
+
+  "error.not_in_voice": "您必须在语音频道中才能使用此命令。",
+  "error.not_playing": "当前没有正在播放的歌曲。",
+  "error.dj_required": "🎧 您需要 DJ 身份才能使用此命令。",
+  "error.no_results": "未找到 `{query}` 的结果。",
+  "error.too_long": "歌曲太长（最长 {max} 分钟）。",
+  "error.circuit_open": "⚠️ YouTube 暂时不可用。请稍后再试。",
+  "error.unexpected": "发生了意外错误。",
+  "error.duplicate": "此歌曲已在队列中。",
+
+  "leave.alone": "👋 已离开频道 — 没有人在收听。",
+  "leave.idle": "💤 因长时间未使用而断开连接。",
+  "leave.manual": "👋 已断开连接。",
+
+  "sleep.set": "😴 已设置睡眠计时器：**{duration}** 后停止播放。",
+  "sleep.cancelled": "睡眠计时器已取消。",
+  "sleep.fired": "😴 播放已按计划停止。晚安！🌙",
+  "sleep.no_timer": "当前没有活动的睡眠计时器。",
+
+  "auto_pause.paused": "⏸ 自动暂停（频道为空）。",
+  "auto_pause.resumed": "▶ 自动恢复播放（有人加入）。",
+
+  "undo.success": "↩️ 已撤销 **{op}** — 已恢复 {count} 首歌曲。",
+  "undo.empty": "没有可撤销的操作。",
+
+  "effects.applied": "🎛 已应用效果：**{effect}**",
+  "effects.cleared": "🎛 已清除所有效果。",
+
+  "speed.set": "⚡ 播放速度已设置为 **{rate}x**",
+  "pitch.set": "🎵 音调已设置为 **{semitones:+d} 个半音**",
+  "crossfade.set": "🎚️ 交叉淡入淡出已设置为 **{secs}s**",
+  "crossfade.off": "🎚️ 交叉淡入淡出已禁用。",
+
+  "preset.applied": "✅ 已应用预设 **{name}**。",
+  "preset.saved": "💾 预设 **{name}** 已保存。",
+  "preset.not_found": "未找到预设 `{name}`。",
+  "preset.deleted": "预设 `{name}` 已删除。",
+
+  "health.title": "🩺 健康报告",
+  "health.ok": "✅ 正常",
+  "health.warning": "⚠️ 警告",
+  "health.error": "❌ 错误",
+
+  "lang.set": "🌐 语言已设置为**简体中文**。",
+  "lang.permission_denied": "只有**管理员**或 **DJ** 才能更改服务器语言。"
+}
