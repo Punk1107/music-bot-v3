@@ -806,11 +806,18 @@ class MusicCog(commands.Cog, name="Music"):
             await self.play_track(interaction, track)
             return
 
+        # ── Feature 1.3: SoundCloud & Bandcamp ───────────────────────────────────
+        sources_cog = self.bot.cogs.get("Sources")
+        if sources_cog and sources_cog.router.is_supported(query):
+            await sources_cog.handle_play(interaction, query)
+            return
+
         # ── Search query ──────────────────────────────────────────────────────
         is_safe, reason = validate_search_query(query)
         if not is_safe:
             await interaction.followup.send(embed=error_embed("Blocked", reason), ephemeral=True)
             return
+
 
         try:
             tracks = await self.bot.yt_breaker.call(self.bot.youtube.search, query, 1)
