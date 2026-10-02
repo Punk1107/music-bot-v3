@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 # ── Cogs to load ─────────────────────────────────────────────────────────────
 
 _COGS = [
+    # ── Core (original) ──────────────────────────────────────────────────────
     "cogs.music",
     "cogs.queue_cog",
     "cogs.effects",
@@ -79,6 +80,10 @@ _COGS = [
     "cogs.language_cog",     # Perf    Feature 30: Localization (/language)
     "cogs.health_cog",       # Perf    Feature 35: Health Report (/health)
     "cogs.analytics_cog",    # Tier    Analytics Dashboard (/analytics)
+    # ── New Features (isolated folders) ──────────────────────────────────────
+    "sources.cog",           # Feature 1.3: SoundCloud & Bandcamp native (load before music)
+    "lyrics.cog",            # Feature 1.1: Synced lyrics from YouTube subtitles (/lyrics)
+    "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /jump)
 ]
 
 
