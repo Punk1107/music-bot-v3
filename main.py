@@ -58,6 +58,7 @@ from core import metrics as metrics_module           # Runtime metrics snapshots
 from core.startup_validator import validate_pre_login  # Pre-login validation
 from webserver           import WebServer
 from autoplay.service    import AutoplayService      # Feature 1.4: Smart Autoplay
+from seek.service        import SeekService          # Features 2.1-2.4: Seek & Hot-Reload
 
 
 setup_logging()
@@ -86,6 +87,7 @@ _COGS = [
     "lyrics.cog",            # Feature 1.1: Synced lyrics from YouTube subtitles (/lyrics)
     "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /jump)
     "autoplay.cog",          # Feature 1.4: Smart Autoplay from YouTube Related Videos (/autoplay)
+    "seek.cog",              # Features 2.1-2.4: Seek, Fast-Forward, Rewind, Replay (/seek /forward /rewind /replay)
 ]
 
 
@@ -120,6 +122,7 @@ class MusicBot(commands.Bot):
         self.ffmpeg_pool:    FFmpegWarmPool      = FFmpegWarmPool()  # Tier-S+ F13
         self.autoplay:       AutoplayService     = AutoplayService(self.youtube)  # Feature 1.4
         self.autoplay_service: AutoplayService   = self.autoplay
+        self.seek:           SeekService         = SeekService(self)              # Features 2.1-2.4
 
         # ── Circuit breakers ──────────────────────────────────────────────────
         self.yt_breaker = CircuitBreaker(

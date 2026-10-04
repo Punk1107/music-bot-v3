@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 Smart Autoplay enabled.",
   "autoplay.disabled": "📻 Smart Autoplay disabled.",
-  "autoplay.up_next": "📻 Smart Autoplay | Up next: **{title}**"
+  "autoplay.up_next": "📻 Smart Autoplay | Up next: **{title}**",
+
+  "seek.success": "⏩ Seeked to **{time}**.",
+  "seek.forward": "⏩ Fast-forwarded {seconds}s (at **{time}**).",
+  "seek.rewind": "⏪ Rewound {seconds}s (at **{time}**).",
+  "seek.replay": "🔄 Replaying **{title}** from the beginning.",
+  "seek.invalid_format": "Invalid time format. Use `MM:SS`, `HH:MM:SS`, or seconds (e.g. `1:30`, `90`).",
+  "seek.out_of_range": "Timestamp is out of range. Track duration is **{duration}**."
 }

@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 스마트 자동 재생이 활성화되었습니다.",
   "autoplay.disabled": "📻 스마트 자동 재생이 비활성화되었습니다.",
-  "autoplay.up_next": "📻 스마트 자동 재생 | 다음 곡: **{title}**"
+  "autoplay.up_next": "📻 스마트 자동 재생 | 다음 곡: **{title}**",
+
+  "seek.success": "⏩ **{time}**(으)로 이동했습니다.",
+  "seek.forward": "⏩ {seconds}초 앞으로 이동했습니다 (현재 **{time}**).",
+  "seek.rewind": "⏪ {seconds}초 뒤로 이동했습니다 (현재 **{time}**).",
+  "seek.replay": "🔄 **{title}**을(를) 처음부터 다시 재생합니다.",
+  "seek.invalid_format": "잘못된 시간 형식입니다. `MM:SS`, `HH:MM:SS` 또는 초 단위(예: `1:30`, `90`)를 사용하세요.",
+  "seek.out_of_range": "시간이 범위를 벗어났습니다. 트랙 길이는 **{duration}**입니다."
 }

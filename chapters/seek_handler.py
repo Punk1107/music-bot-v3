@@ -47,7 +47,9 @@ async def seek_to_chapter(
       7. Update player.play_start_time so elapsed progress is accurate.
 
     Returns True on success, False on error.
-    """
+    if hasattr(bot, "seek") and bot.seek:
+        return await bot.seek.seek_to(guild_id, int(chapter.start_sec))
+
     guild  = bot.get_guild(guild_id)
     if not guild:
         return False

@@ -39,14 +39,17 @@ class EffectsCog(commands.Cog, name="Effects"):
         return False
 
     def _restart_audio(self, guild_id: int) -> None:
-        """Restart FFmpeg with updated options if a track is playing."""
+        """Hot-reload FFmpeg with updated options without advancing the queue."""
         import asyncio
-        guild = self.bot.get_guild(guild_id)
-        if not guild:
-            return
-        vc = guild.voice_client
-        if vc and (vc.is_playing() or vc.is_paused()):
-            vc.stop()   # after_play callback will call _play_next which re-applies effects
+        if hasattr(self.bot, "seek") and self.bot.seek:
+            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+        else:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+            vc = guild.voice_client
+            if vc and (vc.is_playing() or vc.is_paused()):
+                vc.stop()
 
     @app_commands.command(name="volume", description="Set playback volume (0–200%)")
     @app_commands.describe(level="Volume percentage 0-200")

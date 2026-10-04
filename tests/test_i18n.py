@@ -154,6 +154,11 @@ class TestFormatParameters:
         ("preset.deleted", {"name": "chill"}),
         ("queue.shuffled_added", {"count": 10}),
         ("autoplay.up_next", {"title": "Test Song"}),
+        ("seek.success",     {"time": "1:30"}),
+        ("seek.forward",     {"seconds": 15, "time": "2:00"}),
+        ("seek.rewind",      {"seconds": 15, "time": "1:00"}),
+        ("seek.replay",      {"title": "Test Song"}),
+        ("seek.out_of_range", {"duration": "3:45"}),
     ]
 
     @pytest.mark.parametrize("locale", sorted(EXPECTED_LOCALES))

@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 เปิดใช้งาน Smart Autoplay แล้ว",
   "autoplay.disabled": "📻 ปิดใช้งาน Smart Autoplay แล้ว",
-  "autoplay.up_next": "📻 Smart Autoplay | เพลงถัดไป: **{title}**"
+  "autoplay.up_next": "📻 Smart Autoplay | เพลงถัดไป: **{title}**",
+
+  "seek.success": "⏩ ข้ามเวลาไปยัง **{time}** แล้ว",
+  "seek.forward": "⏩ กรอไปข้างหน้า {seconds} วินาที (อยู่ที่ **{time}**)",
+  "seek.rewind": "⏪ กรอกลับ {seconds} วินาที (อยู่ที่ **{time}**)",
+  "seek.replay": "🔄 เล่นเพลง **{title}** ซ้ำจากเริ่มต้นแล้ว",
+  "seek.invalid_format": "รูปแบบเวลาไม่ถูกต้อง กรุณาใช้ `MM:SS`, `HH:MM:SS`, หรือวินาที (เช่น `1:30`, `90`)",
+  "seek.out_of_range": "เวลาที่ระบุอยู่นอกช่วงความยาวเพลง ความยาวเพลงคือ **{duration}**"
 }

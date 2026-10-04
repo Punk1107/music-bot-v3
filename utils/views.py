@@ -45,7 +45,7 @@ class MusicControlView(discord.ui.View):
     Persistent playback-control bar shown under the now-playing embed.
 
     Row 0: ⏸/▶ Pause/Resume | ⏭⏭ Skip | 🔁 Loop | ✖ Shuffle | ⏹ Stop
-    Row 1: 🔇 Vol-10%        | 🔊 Vol+10% | ❤️ Favorite
+    Row 1: ⏪ -15s | ⏩ +15s | 🔇 Vol-10% | 🔊 Vol+10% | ❤️ Favorite
     """
 
     def __init__(self, bot: "MusicBot", guild_id: int) -> None:
@@ -102,6 +102,9 @@ class MusicControlView(discord.ui.View):
 
             elif cid == "mb_vol_up":
                 child.disabled = player.volume >= 2.0
+
+            elif cid in ("mb_rewind", "mb_forward"):
+                child.disabled = not is_playing
 
             elif cid == "mb_pause":
                 if is_paused:
@@ -244,7 +247,25 @@ class MusicControlView(discord.ui.View):
             embed=success_embed("Stopped", "Playback stopped and queue cleared."), ephemeral=True
         )
 
-    # ── Row 1: Volume + Favorite ──────────────────────────────────────────────
+    # ── Row 1: Seek + Volume + Favorite ───────────────────────────────────────
+
+    @discord.ui.button(label="⏪ -15s", style=discord.ButtonStyle.secondary, custom_id="mb_rewind", row=1)
+    async def rewind(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self._check(interaction):
+            return
+        await interaction.response.defer()
+        if hasattr(self.bot, "seek") and self.bot.seek:
+            await self.bot.seek.rewind(self.guild_id, 15)
+        await self._refresh_message(interaction)
+
+    @discord.ui.button(label="⏩ +15s", style=discord.ButtonStyle.secondary, custom_id="mb_forward", row=1)
+    async def forward(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not await self._check(interaction):
+            return
+        await interaction.response.defer()
+        if hasattr(self.bot, "seek") and self.bot.seek:
+            await self.bot.seek.forward(self.guild_id, 15)
+        await self._refresh_message(interaction)
 
     @discord.ui.button(label="🔇 -10%", style=discord.ButtonStyle.secondary, custom_id="mb_vol_down", row=1)
     async def vol_down(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
