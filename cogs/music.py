@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from typing import TYPE_CHECKING, Optional
 
 import discord
@@ -35,6 +36,7 @@ from utils.embeds import (
     error_embed, success_embed, info_embed, warning_embed,
     now_playing_embed, track_added_embed, playlist_added_embed,
     search_results_embed, auto_playlist_embed, vote_skip_embed,
+    smart_autoplay_embed,
 )
 from utils.views import MusicControlView, SearchSelectView, VoteSkipView
 from utils.rate_limiter import RateLimiter
@@ -450,6 +452,24 @@ class MusicCog(commands.Cog, name="Music"):
                     next_track = await player.dequeue()
 
         if not next_track:
+            # ── Feature 1.4: Smart Autoplay from YouTube Related Videos ────────
+            if player.smart_autoplay:
+                seed = player._history_track or player.now_playing
+                smart_track = await self.bot.autoplay.get_next_track(guild_id, seed)
+                if smart_track:
+                    smart_track.requested_by_name = "Smart Autoplay"
+                    await player.enqueue(smart_track)
+                    if player.text_channel and seed:
+                        try:
+                            await player.text_channel.send(
+                                embed=smart_autoplay_embed(smart_track, seed),
+                                delete_after=45,
+                            )
+                        except Exception:
+                            pass
+                    next_track = await player.dequeue()
+
+        if not next_track:
             player.idle_since = discord.utils.utcnow()
             return None
 
@@ -719,8 +739,11 @@ class MusicCog(commands.Cog, name="Music"):
         await interaction.followup.send(embed=success_embed("Disconnected", "Queue cleared."))
 
     @app_commands.command(name="play", description="Play a YouTube URL, Spotify URL, or search query")
-    @app_commands.describe(query="YouTube URL, Spotify URL, playlist, or search terms")
-    async def play(self, interaction: discord.Interaction, query: str) -> None:
+    @app_commands.describe(
+        query="YouTube URL, Spotify URL, playlist, or search terms",
+        shuffle="Shuffle playlist before adding to queue (default: False)",
+    )
+    async def play(self, interaction: discord.Interaction, query: str, shuffle: bool = False) -> None:
         await interaction.response.defer()
 
         if self.rate_limiter.is_rate_limited(interaction.guild_id, interaction.user.id):
@@ -753,9 +776,11 @@ class MusicCog(commands.Cog, name="Music"):
             for t in tracks:
                 t.requested_by_id   = interaction.user.id
                 t.requested_by_name = interaction.user.display_name
+            if shuffle and len(tracks) > 1:
+                random.shuffle(tracks)
             await player.extend(tracks)
             asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
-            await interaction.followup.send(embed=playlist_added_embed(len(tracks)))
+            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
             return
@@ -776,9 +801,11 @@ class MusicCog(commands.Cog, name="Music"):
             for t in tracks:
                 t.requested_by_id   = interaction.user.id
                 t.requested_by_name = interaction.user.display_name
+            if shuffle and len(tracks) > 1:
+                random.shuffle(tracks)
             await player.extend(tracks)
             asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
-            await interaction.followup.send(embed=playlist_added_embed(len(tracks)))
+            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
             return
@@ -809,7 +836,7 @@ class MusicCog(commands.Cog, name="Music"):
         # ── Feature 1.3: SoundCloud & Bandcamp ───────────────────────────────────
         sources_cog = self.bot.cogs.get("Sources")
         if sources_cog and sources_cog.router.is_supported(query):
-            await sources_cog.handle_play(interaction, query)
+            await sources_cog.handle_play(interaction, query, shuffle=shuffle)
             return
 
         # ── Search query ──────────────────────────────────────────────────────

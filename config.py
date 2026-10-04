@@ -81,6 +81,15 @@ SEARCH_CACHE_TTL: float = float(os.getenv("SEARCH_CACHE_TTL", "600.0"))  # 10 mi
 SEARCH_CACHE_MAX_SIZE: int = int(os.getenv("SEARCH_CACHE_MAX_SIZE", "256"))
 STREAM_URL_TTL: float = float(os.getenv("STREAM_URL_TTL", "14400.0"))   # 4 hours
 
+# ── yt-dlp Cookie & PO-Token (VPS anti-blocking, Feature 1.6) ────────────────
+# Point to a Netscape-format cookie file exported from your browser.
+# Leave YTDL_COOKIE_FILE as "cookies.txt" (default); the file is loaded only
+# when it actually exists on disk — safe to omit in local development.
+YTDL_COOKIE_FILE: str = os.getenv("YTDL_COOKIE_FILE", "cookies.txt")
+# Optional PO-Token for bypassing YouTube's bot detection.
+# Generate with: https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide
+YTDL_PO_TOKEN: str = os.getenv("YTDL_PO_TOKEN", "")
+
 # ── Extraction concurrency ─────────────────────────────────────────────────────
 # Caps simultaneous heavy yt-dlp calls to avoid CPU spikes.
 EXTRACT_CONCURRENCY: int = int(os.getenv("EXTRACT_CONCURRENCY", "3"))
@@ -116,6 +125,14 @@ SKIP_ERROR_LIMIT: int = int(os.getenv("SKIP_ERROR_LIMIT", "5"))
 # When queue empties, pull from recent play history and enqueue automatically.
 AUTO_PLAYLIST: bool = os.getenv("AUTO_PLAYLIST", "false").lower() == "true"
 AUTO_PLAYLIST_SIZE: int = int(os.getenv("AUTO_PLAYLIST_SIZE", "5"))
+
+# ── Smart Autoplay (Feature 1.4) ──────────────────────────────────────────────
+# When queue empties, fetch YouTube Related Videos from the last-played track.
+SMART_AUTOPLAY: bool = os.getenv("SMART_AUTOPLAY", "false").lower() == "true"
+# How many related tracks to pre-fetch per seed video.
+SMART_AUTOPLAY_FETCH_SIZE: int = int(os.getenv("SMART_AUTOPLAY_FETCH_SIZE", "8"))
+# Rolling dedup history size — tracks already played are skipped.
+SMART_AUTOPLAY_HISTORY_SIZE: int = int(os.getenv("SMART_AUTOPLAY_HISTORY_SIZE", "100"))
 
 # ── Favorites limits (V3 NEW) ─────────────────────────────────────────────────
 MAX_FAVORITES_PER_USER: int = int(os.getenv("MAX_FAVORITES_PER_USER", "50"))

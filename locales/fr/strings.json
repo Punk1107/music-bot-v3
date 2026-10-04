@@ -9,6 +9,7 @@
   "queue.empty": "La file d'attente est vide.",
   "queue.cleared": "File d'attente vidée — {count} piste(s) supprimée(s).",
   "queue.shuffled": "🔀 {count} pistes mélangées.",
+  "queue.shuffled_added": "🔀 {count} pistes ajoutées et mélangées.",
   "queue.removed": "**{title}** supprimé de la position {pos}.",
   "queue.moved": "Piste déplacée de la position {from_pos} → {to_pos}.",
   "queue.not_enough": "Il faut au moins 2 pistes pour mélanger.",
@@ -65,5 +66,9 @@
   "health.error": "❌ Erreur",
 
   "lang.set": "🌐 Langue définie sur le **Français**.",
-  "lang.permission_denied": "Seuls les **Administrateurs** ou les **DJs** peuvent changer la langue du serveur."
+  "lang.permission_denied": "Seuls les **Administrateurs** ou les **DJs** peuvent changer la langue du serveur.",
+
+  "autoplay.enabled": "📻 Lecture automatique intelligente activée.",
+  "autoplay.disabled": "📻 Lecture automatique intelligente désactivée.",
+  "autoplay.up_next": "📻 Lecture automatique intelligente | À suivre : **{title}**"
 }

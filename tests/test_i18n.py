@@ -152,6 +152,8 @@ class TestFormatParameters:
         ("preset.saved",   {"name": "chill"}),
         ("preset.not_found", {"name": "nonexistent"}),
         ("preset.deleted", {"name": "chill"}),
+        ("queue.shuffled_added", {"count": 10}),
+        ("autoplay.up_next", {"title": "Test Song"}),
     ]
 
     @pytest.mark.parametrize("locale", sorted(EXPECTED_LOCALES))

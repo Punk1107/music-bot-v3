@@ -9,6 +9,7 @@
   "queue.empty": "대기열이 비어 있습니다.",
   "queue.cleared": "대기열을 비웠습니다 — {count}개의 곡을 삭제했습니다.",
   "queue.shuffled": "🔀 {count}개의 곡을 섞었습니다.",
+  "queue.shuffled_added": "🔀 {count}개의 곡을 추가하고 섞었습니다.",
   "queue.removed": "{pos}번 위치에서 **{title}**을(를) 삭제했습니다.",
   "queue.moved": "곡을 {from_pos}번 위치에서 {to_pos}번 위치로 이동했습니다.",
   "queue.not_enough": "섞으려면 최소 2개의 곡이 필요합니다.",
@@ -65,5 +66,9 @@
   "health.error": "❌ 오류",
 
   "lang.set": "🌐 언어가 **한국어**로 설정되었습니다.",
-  "lang.permission_denied": "서버 언어는 **관리자** 또는 **DJ**만 변경할 수 있습니다."
+  "lang.permission_denied": "서버 언어는 **관리자** 또는 **DJ**만 변경할 수 있습니다.",
+
+  "autoplay.enabled": "📻 스마트 자동 재생이 활성화되었습니다.",
+  "autoplay.disabled": "📻 스마트 자동 재생이 비활성화되었습니다.",
+  "autoplay.up_next": "📻 스마트 자동 재생 | 다음 곡: **{title}**"
 }

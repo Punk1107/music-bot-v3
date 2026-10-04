@@ -109,9 +109,10 @@ def track_added_embed(
     return embed
 
 
-def playlist_added_embed(count: int, color: int = 0x5865F2) -> discord.Embed:
+def playlist_added_embed(count: int, color: int = 0x5865F2, shuffled: bool = False) -> discord.Embed:
+    shuffle_tag = "  🔀 Shuffled" if shuffled else ""
     embed = discord.Embed(
-        description = f"**{count}** tracks have been added to the queue.",
+        description = f"**{count}** tracks have been added to the queue.{shuffle_tag}",
         color       = color,
     )
     embed.set_author(name="📋  PLAYLIST ADDED")
@@ -432,6 +433,28 @@ def auto_playlist_embed(track_count: int) -> discord.Embed:
         ),
         color       = 0x9B59B6,
     )
+
+
+# ── Smart Autoplay embed (Feature 1.4) ────────────────────────────────────────
+
+def smart_autoplay_embed(next_track: "Track", seed_track: "Track") -> discord.Embed:
+    """Notification shown when Smart Autoplay picks a related video."""
+    embed = discord.Embed(
+        title       = "📻  Smart Autoplay",
+        description = (
+            f"[{discord.utils.escape_markdown(next_track.title[:70])}]({next_track.url})\n"
+            f"*Based on:* {discord.utils.escape_markdown(seed_track.title[:60])}"
+        ),
+        color       = 0x1DB954,  # Spotify-green — signals a recommendation
+    )
+    if next_track.thumbnail:
+        embed.set_thumbnail(url=next_track.thumbnail)
+    embed.set_footer(text="Smart Autoplay  •  Related Videos  •  /autoplay off to disable")
+    return embed
+
+
+autoplay_embed = smart_autoplay_embed
+
 
 
 # ── Bot stats embed ───────────────────────────────────────────────────────────

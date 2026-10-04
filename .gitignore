@@ -26,9 +26,14 @@ data/*.db-journal
 logs/
 *.log
 
-# ── Cookies ───────────────────────────────────────────────────────────────────
+# ── Cookies & Auth tokens ─────────────────────────────────────────────────────
 cookies.txt
 cookies_b64.txt
+*.cookies
+*cookies*.txt
+youtube_cookies.txt
+pot_token.txt
+tokens.json
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/

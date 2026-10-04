@@ -9,6 +9,7 @@
   "queue.empty": "คิวว่างอยู่ค่ะ",
   "queue.cleared": "ล้างคิวแล้ว — ลบ {count} เพลง",
   "queue.shuffled": "🔀 สับเปลี่ยนลำดับ {count} เพลงแล้ว",
+  "queue.shuffled_added": "🔀 เพิ่มและสับเปลี่ยน {count} เพลงแล้ว",
   "queue.removed": "ลบ **{title}** จากตำแหน่ง {pos} แล้ว",
   "queue.moved": "ย้ายเพลงจากตำแหน่ง {from_pos} → {to_pos} แล้ว",
   "queue.not_enough": "ต้องมีอย่างน้อย 2 เพลงในคิวเพื่อสับเปลี่ยน",
@@ -65,5 +66,9 @@
   "health.error": "❌ ผิดพลาด",
 
   "lang.set": "🌐 เปลี่ยนภาษาเป็น **ภาษาไทย** แล้ว",
-  "lang.permission_denied": "เฉพาะ **ผู้ดูแลระบบ** หรือ **DJ** เท่านั้นที่เปลี่ยนภาษาเซิร์ฟเวอร์ได้"
+  "lang.permission_denied": "เฉพาะ **ผู้ดูแลระบบ** หรือ **DJ** เท่านั้นที่เปลี่ยนภาษาเซิร์ฟเวอร์ได้",
+
+  "autoplay.enabled": "📻 เปิดใช้งาน Smart Autoplay แล้ว",
+  "autoplay.disabled": "📻 ปิดใช้งาน Smart Autoplay แล้ว",
+  "autoplay.up_next": "📻 Smart Autoplay | เพลงถัดไป: **{title}**"
 }

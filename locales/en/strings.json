@@ -9,6 +9,7 @@
   "queue.empty": "The queue is empty.",
   "queue.cleared": "Queue cleared — removed {count} track(s).",
   "queue.shuffled": "🔀 Shuffled {count} tracks.",
+  "queue.shuffled_added": "🔀 Added and shuffled {count} tracks.",
   "queue.removed": "Removed **{title}** from position {pos}.",
   "queue.moved": "Track moved from position {from_pos} → {to_pos}.",
   "queue.not_enough": "Need at least 2 tracks to shuffle.",
@@ -65,5 +66,9 @@
   "health.error": "❌ Error",
 
   "lang.set": "🌐 Language set to **English**.",
-  "lang.permission_denied": "Only **Administrators** or **DJs** can change the server language."
+  "lang.permission_denied": "Only **Administrators** or **DJs** can change the server language.",
+
+  "autoplay.enabled": "📻 Smart Autoplay enabled.",
+  "autoplay.disabled": "📻 Smart Autoplay disabled.",
+  "autoplay.up_next": "📻 Smart Autoplay | Up next: **{title}**"
 }
