@@ -110,6 +110,10 @@ class GuildPlayer:
         # ── V3: Auto-playlist ─────────────────────────────────────────────────
         self.auto_playlist_mode: bool = False
 
+        # ── Feature 1.4: Smart Autoplay ───────────────────────────────────────
+        # Persists for the session; toggled via /autoplay on|off.
+        self.smart_autoplay: bool = False
+
         # ── V3: Prefetch task reference ───────────────────────────────────────
         self._prefetch_task: Optional[asyncio.Task] = None
 

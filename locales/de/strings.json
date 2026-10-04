@@ -9,6 +9,7 @@
   "queue.empty": "Die Warteschlange ist leer.",
   "queue.cleared": "Warteschlange geleert — {count} Titel entfernt.",
   "queue.shuffled": "🔀 {count} Titel gemischt.",
+  "queue.shuffled_added": "🔀 {count} Titel hinzugefügt und gemischt.",
   "queue.removed": "**{title}** wurde von Position {pos} entfernt.",
   "queue.moved": "Titel von Position {from_pos} → {to_pos} verschoben.",
   "queue.not_enough": "Zum Mischen werden mindestens 2 Titel benötigt.",
@@ -65,5 +66,9 @@
   "health.error": "❌ Fehler",
 
   "lang.set": "🌐 Sprache auf **Deutsch** eingestellt.",
-  "lang.permission_denied": "Nur **Administratoren** oder **DJs** können die Serversprache ändern."
+  "lang.permission_denied": "Nur **Administratoren** oder **DJs** können die Serversprache ändern.",
+
+  "autoplay.enabled": "📻 Smart-Autoplay aktiviert.",
+  "autoplay.disabled": "📻 Smart-Autoplay deaktiviert.",
+  "autoplay.up_next": "📻 Smart-Autoplay | Als Nächstes: **{title}**"
 }

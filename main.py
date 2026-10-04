@@ -57,6 +57,7 @@ from core.stability      import (                    # Stability suite
 from core import metrics as metrics_module           # Runtime metrics snapshots
 from core.startup_validator import validate_pre_login  # Pre-login validation
 from webserver           import WebServer
+from autoplay.service    import AutoplayService      # Feature 1.4: Smart Autoplay
 
 
 setup_logging()
@@ -84,6 +85,7 @@ _COGS = [
     "sources.cog",           # Feature 1.3: SoundCloud & Bandcamp native (load before music)
     "lyrics.cog",            # Feature 1.1: Synced lyrics from YouTube subtitles (/lyrics)
     "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /jump)
+    "autoplay.cog",          # Feature 1.4: Smart Autoplay from YouTube Related Videos (/autoplay)
 ]
 
 
@@ -116,6 +118,8 @@ class MusicBot(commands.Bot):
         self.nlu:            NLUPipeline         = NLUPipeline()
         self.webserver:      WebServer           = WebServer(self)
         self.ffmpeg_pool:    FFmpegWarmPool      = FFmpegWarmPool()  # Tier-S+ F13
+        self.autoplay:       AutoplayService     = AutoplayService(self.youtube)  # Feature 1.4
+        self.autoplay_service: AutoplayService   = self.autoplay
 
         # ── Circuit breakers ──────────────────────────────────────────────────
         self.yt_breaker = CircuitBreaker(

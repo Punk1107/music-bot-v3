@@ -9,6 +9,7 @@
   "queue.empty": "La cola está vacía.",
   "queue.cleared": "Cola vaciada — se eliminaron {count} pista(s).",
   "queue.shuffled": "🔀 Se mezclaron {count} pistas.",
+  "queue.shuffled_added": "🔀 Se agregaron y mezclaron {count} pistas.",
   "queue.removed": "Se eliminó **{title}** de la posición {pos}.",
   "queue.moved": "Pista movida de la posición {from_pos} → {to_pos}.",
   "queue.not_enough": "Se necesitan al menos 2 pistas para mezclar.",
@@ -65,5 +66,9 @@
   "health.error": "❌ Error",
 
   "lang.set": "🌐 Idioma establecido en **Español**.",
-  "lang.permission_denied": "Solo los **Administradores** o **DJs** pueden cambiar el idioma del servidor."
+  "lang.permission_denied": "Solo los **Administradores** o **DJs** pueden cambiar el idioma del servidor.",
+
+  "autoplay.enabled": "📻 Reproducción automática inteligente activada.",
+  "autoplay.disabled": "📻 Reproducción automática inteligente desactivada.",
+  "autoplay.up_next": "📻 Reproducción inteligente | Siguiente: **{title}**"
 }

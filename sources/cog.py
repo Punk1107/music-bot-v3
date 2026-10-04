@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 from typing import TYPE_CHECKING, Optional
 
 import discord
@@ -215,6 +216,7 @@ class SourcesCog(commands.Cog, name="Sources"):
         self,
         interaction: discord.Interaction,
         query:       str,
+        shuffle:     bool = False,
     ) -> bool:
         """
         Handle a /play call for SoundCloud or Bandcamp sources.
@@ -283,9 +285,11 @@ class SourcesCog(commands.Cog, name="Sources"):
                 embed.set_thumbnail(url=tracks[0].thumbnail)
             embed.add_field(name="⏱ Duration", value=tracks[0].duration_str, inline=True)
         else:
+            if shuffle and len(tracks) > 1:
+                random.shuffle(tracks)
             await player.extend(tracks)
             src = "SoundCloud" if is_soundcloud_source(kind) else "Bandcamp"
-            embed = playlist_added_embed(len(tracks))
+            embed = playlist_added_embed(len(tracks), shuffled=shuffle)
             embed.title = f"🔊  {src}: Added {len(tracks)} tracks"
 
         await interaction.followup.send(embed=embed)

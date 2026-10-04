@@ -9,6 +9,7 @@
   "queue.empty": "キューは空です。",
   "queue.cleared": "キューをクリアしました — {count} 曲を削除しました。",
   "queue.shuffled": "🔀 {count} 曲をシャッフルしました。",
+  "queue.shuffled_added": "🔀 {count} 曲を追加してシャッフルしました。",
   "queue.removed": "**{title}** を {pos} 番目から削除しました。",
   "queue.moved": "楽曲を {from_pos} 番目から {to_pos} 番目に移動しました。",
   "queue.not_enough": "シャッフルするには少なくとも 2 曲必要です。",
@@ -65,5 +66,9 @@
   "health.error": "❌ エラー",
 
   "lang.set": "🌐 言語を**日本語**に設定しました。",
-  "lang.permission_denied": "サーバーの言語を変更できるのは**管理者**または **DJ** のみです。"
+  "lang.permission_denied": "サーバーの言語を変更できるのは**管理者**または **DJ** のみです。",
+
+  "autoplay.enabled": "📻 スマート自動再生を有効にしました。",
+  "autoplay.disabled": "📻 スマート自動再生を無効にしました。",
+  "autoplay.up_next": "📻 スマート自動再生 | 次の曲: **{title}**"
 }

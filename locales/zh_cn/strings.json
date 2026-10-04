@@ -9,6 +9,7 @@
   "queue.empty": "播放队列为空。",
   "queue.cleared": "队列已清空 — 已删除 {count} 首歌曲。",
   "queue.shuffled": "🔀 已随机播放 {count} 首歌曲。",
+  "queue.shuffled_added": "🔀 已添加并随机打乱 {count} 首歌曲。",
   "queue.removed": "已从第 {pos} 位删除 **{title}**。",
   "queue.moved": "歌曲已从第 {from_pos} 位移动到第 {to_pos} 位。",
   "queue.not_enough": "至少需要 2 首歌曲才能随机播放。",
@@ -65,5 +66,9 @@
   "health.error": "❌ 错误",
 
   "lang.set": "🌐 语言已设置为**简体中文**。",
-  "lang.permission_denied": "只有**管理员**或 **DJ** 才能更改服务器语言。"
+  "lang.permission_denied": "只有**管理员**或 **DJ** 才能更改服务器语言。",
+
+  "autoplay.enabled": "📻 已启用智能自动播放。",
+  "autoplay.disabled": "📻 已禁用智能自动播放。",
+  "autoplay.up_next": "📻 智能自动播放 | 即将播放：**{title}**"
 }

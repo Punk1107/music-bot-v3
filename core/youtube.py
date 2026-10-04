@@ -20,6 +20,7 @@ import asyncio
 import logging
 import re
 import time
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -100,6 +101,20 @@ _PLAYLIST_OPTS: dict = {
     "skip_download":      True,
 }
 
+# ── Cookie & PO-Token injection (Feature 1.6) ──────────────────────────────
+# Applied once at module load; silently skipped when files are absent.
+# This means local dev works without cookies; VPS just needs cookies.txt present.
+_cookie_path = Path(config.YTDL_COOKIE_FILE)
+if _cookie_path.is_file():
+    _COMMON_OPTS["cookiefile"] = str(_cookie_path)
+    logger.info("yt-dlp: cookiefile loaded from '%s'", _cookie_path)
+else:
+    logger.debug("yt-dlp: no cookiefile found at '%s' — running without cookies", _cookie_path)
+
+if config.YTDL_PO_TOKEN:
+    _COMMON_OPTS.setdefault("extractor_args", {})\
+               .setdefault("youtube", {})["po_token"] = [config.YTDL_PO_TOKEN]
+    logger.info("yt-dlp: PO-Token configured")
 
 
 class YouTubeExtractor:

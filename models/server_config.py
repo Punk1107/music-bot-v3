@@ -52,6 +52,9 @@ class ServerConfig:
     auto_playlist: bool = False
     auto_playlist_size: int = 5
 
+    # Feature 1.4: Smart Autoplay
+    smart_autoplay: bool = False
+
     # Playlist import limit
     max_playlist_tracks: int = 100
 
@@ -94,6 +97,7 @@ class ServerConfig:
             "request_channel_id":  self.request_channel_id,
             "auto_playlist":       self.auto_playlist,
             "auto_playlist_size":  self.auto_playlist_size,
+            "smart_autoplay":      self.smart_autoplay,
             "max_playlist_tracks":    self.max_playlist_tracks,
             "queue_locked":           self.queue_locked,
             "queue_add_permission":   self.queue_add_permission.value,
@@ -123,6 +127,7 @@ class ServerConfig:
             request_channel_id = data.get("request_channel_id"),
             auto_playlist         = bool(data.get("auto_playlist", False)),
             auto_playlist_size    = int(data.get("auto_playlist_size", 5)),
+            smart_autoplay        = bool(data.get("smart_autoplay", False)),
             max_playlist_tracks   = int(data.get("max_playlist_tracks", 100)),
             queue_locked          = bool(data.get("queue_locked", False)),
             queue_add_permission  = QueuePermission(data.get("queue_add_permission", "everyone")),
