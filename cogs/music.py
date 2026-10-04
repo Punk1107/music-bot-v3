@@ -526,18 +526,19 @@ class MusicCog(commands.Cog, name="Music"):
 
         ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
             effects         = player.effects,
-            volume          = player.volume,
+            volume          = 1.0,                          # Unity gain; live volume handled by PCMVolumeTransformer
             quality         = cfg_server.audio_quality,
-            seek_seconds    = resume_offset,      # seek to saved position
+            seek_seconds    = resume_offset,                # seek to saved position
             speed           = player.playback_speed,        # F21
             pitch_semitones = player.pitch_semitones,       # F22
             crossfade_secs  = player.crossfade_seconds,     # F23
-            silence_trim    = player.silence_trim,           # F24
-            replay_gain     = player.replay_gain,            # F25
+            silence_trim    = player.silence_trim,          # F24
+            replay_gain     = player.replay_gain,           # F25
             equalizer_filter= eq_filter,
             loudnorm        = loudnorm_flag,
             pan_filter      = pan_filter,
             stereo_filter   = stereo_filter,
+            track_duration  = next_track.duration,
         )
 
         # ── Start playback ────────────────────────────────────────────────────
@@ -563,7 +564,9 @@ class MusicCog(commands.Cog, name="Music"):
 
         try:
             # Feature 13: acquire pre-warmed source from pool
-            source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
+            raw_source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
+            # Wrap in PCMVolumeTransformer for real-time live volume control without restarting FFmpeg
+            source = discord.PCMVolumeTransformer(raw_source, volume=player.volume)
             vc.play(source, after=after_play)
             # Replenish the pool in the background
             asyncio.create_task(self.bot.ffmpeg_pool.replenish())

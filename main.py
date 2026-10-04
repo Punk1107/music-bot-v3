@@ -181,6 +181,14 @@ class MusicBot(commands.Bot):
         self.task_watchdog     = DeadTaskWatchdog(interval=60.0)
         metrics_module.set_collector(self.metrics)
 
+        # Ensure Opus audio codec is loaded
+        if not discord.opus.is_loaded():
+            try:
+                discord.opus._load_default()
+                logger.info("✅ Opus audio codec loaded (is_loaded=%s)", discord.opus.is_loaded())
+            except Exception as exc:
+                logger.warning("Could not auto-load Opus audio codec: %s", exc)
+
         # Shared aiohttp session
         self.http_session = aiohttp.ClientSession(
             connector    = aiohttp.TCPConnector(limit=50, ttl_dns_cache=300),

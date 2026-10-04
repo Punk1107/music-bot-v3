@@ -113,6 +113,10 @@ class DashboardService:
                 }
             )
 
+        total_dur = sum(t.duration for t in player.queue if t.duration)
+        if player.now_playing and player.now_playing.duration:
+            total_dur += player.remaining_seconds
+
         return {
             "guild_id": str(guild_id),
             "guild_name": guild.name if guild else str(guild_id),
@@ -126,6 +130,8 @@ class DashboardService:
             "volume": round(player.volume, 2),
             "volume_percent": int(round(player.volume * 100)),
             "loop_mode": player.loop_mode.value,
+            "effects": [e.value for e in player.effects] if hasattr(player, "effects") else [],
+            "total_duration": total_dur,
         }
 
     # ── Playback Controls ─────────────────────────────────────────────────────
@@ -308,3 +314,180 @@ class DashboardService:
         await player.shuffle()
         await self.broadcast_state(guild_id)
         return {"success": True, "queue_size": len(player)}
+
+    # ── Advanced Controls (Loop, Effects, Search, Add, Lyrics) ────────────────
+
+    async def set_loop_mode(self, guild_id: int, mode: str) -> dict:
+        """Set loop mode ('off', 'track', 'queue')."""
+        from models.enums import LoopMode
+        mode_str = str(mode).lower().strip()
+        if mode_str not in ("off", "track", "queue"):
+            return {"success": False, "error": f"Invalid loop mode: {mode}"}
+        player = self.bot.get_player(guild_id)
+        player.loop_mode = LoopMode(mode_str)
+        await self.broadcast_state(guild_id)
+        return {"success": True, "loop_mode": player.loop_mode.value}
+
+    async def toggle_effect(self, guild_id: int, effect_name: str) -> dict:
+        """Toggle an audio effect on/off for the given guild."""
+        from models.enums import AudioEffect
+        eff_enum = None
+        target = effect_name.lower().strip()
+        for ae in AudioEffect:
+            if ae.value.lower() == target or ae.name.lower() == target:
+                eff_enum = ae
+                break
+        if not eff_enum:
+            return {"success": False, "error": f"Unknown effect: {effect_name}"}
+
+        player = self.bot.get_player(guild_id)
+        if eff_enum in player.effects:
+            player.effects.remove(eff_enum)
+            enabled = False
+        else:
+            player.effects.append(eff_enum)
+            enabled = True
+
+        # Hot-reload audio filter if playing
+        seek_svc = getattr(self.bot, "seek", None)
+        if not seek_svc:
+            try:
+                from seek.service import SeekService
+                seek_svc = SeekService(self.bot)
+            except Exception:
+                seek_svc = None
+        if seek_svc and hasattr(seek_svc, "hot_reload"):
+            asyncio.create_task(seek_svc.hot_reload(guild_id))
+
+        await self.broadcast_state(guild_id)
+        return {
+            "success": True,
+            "effect": eff_enum.value,
+            "enabled": enabled,
+            "effects": [e.value for e in player.effects],
+        }
+
+    async def search_tracks(self, query: str, limit: int = 5) -> list[dict]:
+        """Search tracks via YouTube or resolve URL."""
+        query = query.strip()
+        if not query:
+            return []
+        try:
+            yt = getattr(self.bot, "youtube", None)
+            if yt:
+                if yt.is_youtube_url(query):
+                    track = await yt.get_track(query)
+                    return [track.to_dict()] if track else []
+                tracks = await yt.search(query, limit=limit)
+                return [t.to_dict() for t in tracks]
+        except Exception as exc:
+            logger.error("Dashboard search error: %s", exc)
+        return []
+
+    async def add_to_queue(
+        self,
+        guild_id: int,
+        query: str,
+        play_next: bool = False,
+        requested_by: str = "Web Dashboard",
+    ) -> dict:
+        """Resolve a track query or URL and add to guild queue."""
+        query = query.strip()
+        if not query:
+            return {"success": False, "error": "Query cannot be empty"}
+
+        guild = self.bot.get_guild(guild_id)
+        if not guild:
+            return {"success": False, "error": f"Guild {guild_id} not found"}
+
+        player = self.bot.get_player(guild_id)
+        yt = getattr(self.bot, "youtube", None)
+        sp = getattr(self.bot, "spotify", None)
+        tracks = []
+
+        try:
+            if sp and sp.is_spotify_url(query):
+                import config
+                tracks = await sp.resolve(
+                    query, self.bot.http_session, yt, config.MAX_PLAYLIST_TRACKS
+                )
+            elif yt and yt.is_playlist_url(query):
+                import config
+                tracks = await yt.get_playlist(query, config.MAX_PLAYLIST_TRACKS)
+            elif yt and yt.is_youtube_url(query):
+                track = await yt.get_track(query)
+                if track:
+                    tracks = [track]
+            elif yt:
+                found = await yt.search(query, limit=1)
+                if found:
+                    tracks = found
+        except Exception as exc:
+            logger.error("Dashboard enqueue error resolving query: %s", exc)
+            return {"success": False, "error": f"Resolution failed: {exc}"}
+
+        if not tracks:
+            return {"success": False, "error": "No tracks found"}
+
+        for t in tracks:
+            t.requested_by_name = requested_by
+
+        if play_next:
+            if len(tracks) == 1:
+                await player.enqueue_next(tracks[0])
+            else:
+                await player.extend_next(tracks)
+        else:
+            if len(tracks) == 1:
+                await player.enqueue(tracks[0])
+            else:
+                await player.extend(tracks)
+
+        # Trigger playback if idle and voice connected
+        vc = guild.voice_client
+        if vc and not vc.is_playing() and not vc.is_paused():
+            music_cog = self.bot.get_cog("Music")
+            if music_cog and hasattr(music_cog, "_play_next"):
+                asyncio.create_task(music_cog._play_next(guild_id))
+
+        await self.broadcast_state(guild_id)
+        return {
+            "success": True,
+            "added_count": len(tracks),
+            "tracks": [t.to_dict() for t in tracks],
+            "play_next": play_next,
+        }
+
+    async def get_lyrics(self, guild_id: int) -> dict:
+        """Fetch synced lyrics for currently playing track."""
+        player = self.bot.get_player(guild_id)
+        if not player.now_playing:
+            return {"success": False, "error": "No track currently playing"}
+
+        track = player.now_playing
+        try:
+            from lyrics.service import LyricsService
+            lyrics_svc = LyricsService()
+            result = await lyrics_svc.get_lyrics(track.url, self.bot.http_session)
+            if not result or not result.lines:
+                return {
+                    "success": False,
+                    "error": "No lyrics found for this track",
+                    "title": track.title,
+                }
+            return {
+                "success": True,
+                "title": track.title,
+                "uploader": track.uploader,
+                "lines": [
+                    {
+                        "start": line.start_seconds,
+                        "end": line.end_seconds,
+                        "text": line.text,
+                    }
+                    for line in result.lines
+                ],
+            }
+        except Exception as exc:
+            logger.error("Dashboard get_lyrics error: %s", exc)
+            return {"success": False, "error": str(exc), "title": track.title}

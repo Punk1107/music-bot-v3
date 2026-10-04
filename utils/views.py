@@ -45,8 +45,10 @@ class MusicControlView(discord.ui.View):
     """
     Persistent playback-control bar shown under the now-playing embed.
 
-    Row 0: ⏸/▶ Pause/Resume | ⏭ Skip | 🔁 Loop | 🔀 Shuffle | ⏹ Stop
-    Row 1: ⏪ -15s | ⏩ +15s | 🔇 Vol-10% | 🔊 Vol+10% | ❤️ Favorite
+    Row 0:  ⏸/▶ Pause  |  ⏭ Skip  |  🔁 Loop: Off  |  🔀 Shuffle  |  ⏹ Stop
+    Row 1:  ⏪ -15s     |  ⏩ +15s  |  🔇 -10%       |  🔊 +10%     |  ❤️ Favorite
+
+    Labels are intentionally short so they never truncate on mobile Discord.
     """
 
     def __init__(self, bot: "MusicBot", guild_id: int) -> None:
@@ -80,55 +82,54 @@ class MusicControlView(discord.ui.View):
             cid = child.custom_id
 
             if cid == "mb_skip":
-                skip_base   = t("btn.skip", locale)
-                skip_label  = f"{skip_base}" + (f" ({queue_size})" if queue_size else "")
-                child.label = skip_label
+                # Show queue count if non-empty, keep it short
+                child.label    = f"⏭ Skip" + (f" ({queue_size})" if queue_size else "")
                 child.disabled = not is_playing
 
             elif cid == "mb_shuffle":
-                child.label    = t("btn.shuffle", locale)
+                child.label    = "🔀 Shuffle"
                 child.disabled = queue_size < 2
 
             elif cid == "mb_stop":
-                child.label = t("btn.stop", locale)
+                child.label = "⏹ Stop"
 
             elif cid == "mb_rewind":
-                child.label    = t("btn.rewind", locale)
+                child.label    = "⏪ -15s"
                 child.disabled = not is_playing
 
             elif cid == "mb_forward":
-                child.label    = t("btn.forward", locale)
+                child.label    = "⏩ +15s"
                 child.disabled = not is_playing
 
             elif cid == "mb_vol_down":
-                child.label    = t("btn.vol_down", locale)
+                child.label    = "🔇 -10%"
                 child.disabled = player.volume <= 0.0
 
             elif cid == "mb_vol_up":
-                child.label    = t("btn.vol_up", locale)
+                child.label    = "🔊 +10%"
                 child.disabled = player.volume >= 2.0
 
             elif cid == "mb_favorite":
-                child.label = t("btn.favorite", locale)
+                child.label = "❤️ Favorite"
 
             elif cid == "mb_loop":
                 mode = player.loop_mode.value
                 if mode == "off":
-                    child.label = t("btn.loop_off", locale)
+                    child.label = "🔁 Loop: Off"
                     child.style = discord.ButtonStyle.secondary
                 elif mode == "track":
-                    child.label = t("btn.loop_track", locale)
+                    child.label = "🔂 Loop: Track"
                     child.style = discord.ButtonStyle.primary
                 else:
-                    child.label = t("btn.loop_queue", locale)
+                    child.label = "🔁 Loop: Queue"
                     child.style = discord.ButtonStyle.primary
 
             elif cid == "mb_pause":
                 if is_paused:
-                    child.label = t("btn.resume", locale)
+                    child.label = "▶ Resume"
                     child.style = discord.ButtonStyle.success
                 else:
-                    child.label = t("btn.pause", locale)
+                    child.label = "⏸ Pause"
                     child.style = discord.ButtonStyle.secondary
                 child.disabled = not is_playing
 
@@ -222,12 +223,28 @@ class MusicControlView(discord.ui.View):
             vc.stop()
         self._sync_buttons()
 
-    @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary, custom_id="mb_loop", row=0)
+    @discord.ui.button(label="🔁 Loop: Off", style=discord.ButtonStyle.secondary, custom_id="mb_loop", row=0)
     async def loop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
         player = self.bot.get_player(self.guild_id)
         player.loop_mode = player.loop_mode.next()
+        vc = self._vc(interaction)
+        if player.now_playing and player.now_playing_msg:
+            try:
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                locale = get_locale_sync(self.guild_id)
+                embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=bool(vc and vc.is_paused()),
+                    theme=getattr(player, "embed_theme", "classic"),
+                    locale=locale,
+                )
+                self._sync_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+                return
+            except Exception:
+                pass
         await self._refresh_message(interaction)
 
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="mb_shuffle", row=0)
@@ -282,7 +299,25 @@ class MusicControlView(discord.ui.View):
         if not await self._check(interaction):
             return
         player = self.bot.get_player(self.guild_id)
-        player.volume = max(0.0, player.volume - 0.1)
+        player.volume = max(0.0, round(player.volume - 0.1, 2))
+        vc = self._vc(interaction)
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = player.volume
+        if player.now_playing and player.now_playing_msg:
+            try:
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                locale = get_locale_sync(self.guild_id)
+                embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=bool(vc and vc.is_paused()),
+                    theme=getattr(player, "embed_theme", "classic"),
+                    locale=locale,
+                )
+                self._sync_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+                return
+            except Exception:
+                pass
         await self._refresh_message(interaction)
 
     @discord.ui.button(label="🔊 +10%", style=discord.ButtonStyle.secondary, custom_id="mb_vol_up", row=1)
@@ -290,7 +325,25 @@ class MusicControlView(discord.ui.View):
         if not await self._check(interaction):
             return
         player = self.bot.get_player(self.guild_id)
-        player.volume = min(2.0, player.volume + 0.1)
+        player.volume = min(2.0, round(player.volume + 0.1, 2))
+        vc = self._vc(interaction)
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = player.volume
+        if player.now_playing and player.now_playing_msg:
+            try:
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                locale = get_locale_sync(self.guild_id)
+                embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=bool(vc and vc.is_paused()),
+                    theme=getattr(player, "embed_theme", "classic"),
+                    locale=locale,
+                )
+                self._sync_buttons()
+                await interaction.response.edit_message(embed=embed, view=self)
+                return
+            except Exception:
+                pass
         await self._refresh_message(interaction)
 
     @discord.ui.button(label="❤️ Favorite", style=discord.ButtonStyle.secondary, custom_id="mb_favorite", row=1)
