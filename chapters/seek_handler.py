@@ -98,7 +98,7 @@ async def seek_to_chapter(
     audio_processor = AudioEffectsProcessor()
     ffmpeg_opts = audio_processor.build_ffmpeg_options(
         effects         = player.effects,
-        volume          = player.volume,
+        volume          = 1.0,  # unity volume in filtergraph; PCMVolumeTransformer handles live volume
         quality         = cfg_server.audio_quality,
         seek_seconds    = int(target_sec),
         speed           = player.playback_speed,

@@ -48,7 +48,7 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
         from utils.error_handler import dj_required_embed
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     def _restart_audio(self, guild_id: int) -> None:

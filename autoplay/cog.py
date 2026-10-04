@@ -17,6 +17,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from core.i18n import get_locale, t
 from utils.embeds import error_embed, success_embed, info_embed
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class AutoplayCog(commands.Cog, name="Autoplay"):
     async def autoplay(self, interaction: discord.Interaction, mode: str) -> None:
         await interaction.response.defer(ephemeral=True)
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
 
         if mode == "status":
@@ -53,9 +55,7 @@ class AutoplayCog(commands.Cog, name="Autoplay"):
             await interaction.followup.send(
                 embed=info_embed(
                     "📻 Smart Autoplay",
-                    f"Smart Autoplay is currently **{state}** for this server.\n\n"
-                    "When the queue empties, the bot will automatically recommend "
-                    "and play related YouTube videos based on the last-played song.",
+                    f"{t('autoplay.status', locale, status=state)}\n\n{t('autoplay.status_desc', locale)}",
                 ),
                 ephemeral=True,
             )
@@ -70,17 +70,7 @@ class AutoplayCog(commands.Cog, name="Autoplay"):
         if not is_on:
             await self.bot.autoplay.reset_history(interaction.guild_id)
 
-        status_str = "enabled ✅" if is_on else "disabled ❌"
-        desc = (
-            f"Smart Autoplay has been **{status_str}**.\n\n"
-            + (
-                "🎵 When the queue runs out, I'll automatically play related YouTube videos "
-                "based on the last song.\n"
-                "Use `/autoplay off` to stop."
-                if is_on else
-                "The bot will no longer auto-recommend songs when the queue is empty."
-            )
-        )
+        desc = t("autoplay.desc_on", locale) if is_on else t("autoplay.desc_off", locale)
         await interaction.followup.send(
             embed=success_embed("📻 Smart Autoplay", desc),
             ephemeral=True,

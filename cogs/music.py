@@ -83,7 +83,7 @@ class MusicCog(commands.Cog, name="Music"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
 
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     def _is_dj_or_admin(self, interaction: discord.Interaction, cfg) -> bool:
@@ -462,8 +462,9 @@ class MusicCog(commands.Cog, name="Music"):
                     await player.enqueue(smart_track)
                     if player.text_channel and seed:
                         try:
+                            locale = await get_locale(guild_id, self.bot.db)
                             await player.text_channel.send(
-                                embed=smart_autoplay_embed(smart_track, seed),
+                                embed=smart_autoplay_embed(smart_track, seed, locale=locale),
                                 delete_after=45,
                             )
                         except Exception:
@@ -753,6 +754,7 @@ class MusicCog(commands.Cog, name="Music"):
         await interaction.response.defer()
         if not await self._check_dj(interaction, "stop"):
             return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         player.reset()
         player.intentional_disconnect = True  # must come AFTER reset() so it sticks
@@ -760,7 +762,7 @@ class MusicCog(commands.Cog, name="Music"):
         vc = interaction.guild.voice_client
         if vc:
             await vc.disconnect(force=True)
-        await interaction.followup.send(embed=success_embed("Disconnected", "Queue cleared."))
+        await interaction.followup.send(embed=success_embed(t("btn.stop", locale), t("leave.manual", locale)))
 
     @app_commands.command(name="play", description="Play a YouTube URL, Spotify URL, or search query")
     @app_commands.describe(

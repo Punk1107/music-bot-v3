@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import logging
 import traceback
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Any
 
 import discord
 
 # Re-export for callers that import from utils.error_handler
 from core.stability import ExceptionKind, log_with_kind as log_classified  # noqa: F401
+from core.i18n import get_locale, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -81,10 +82,8 @@ def playback_error_embed(error_str: str, locale: str = "en") -> discord.Embed:
     title, emoji, desc_en, desc_th = classify_error(error_str)
     if locale == "th":
         desc = desc_th
-    elif locale == "en":
-        desc = desc_en
     else:
-        desc = f"{desc_en}\n\n*{desc_th}*"
+        desc = desc_en
     embed = discord.Embed(
         title       = f"{emoji} {title}",
         description = desc,
@@ -94,10 +93,7 @@ def playback_error_embed(error_str: str, locale: str = "en") -> discord.Embed:
 
 
 def voice_connection_error_embed(channel_name: str, attempts: int, locale: str = "en") -> discord.Embed:
-    if locale == "th":
-        desc = f"ไม่สามารถเชื่อมต่อ **{channel_name}** ได้หลังจากพยายาม {attempts} ครั้ง"
-    else:
-        desc = f"Could not reconnect to **{channel_name}** after {attempts} attempts."
+    desc = t("error.voice_reconnect_failed", locale, channel=channel_name, attempts=attempts)
     embed = discord.Embed(
         title       = "🔌 Voice Reconnect Failed",
         description = desc,
@@ -106,11 +102,16 @@ def voice_connection_error_embed(channel_name: str, attempts: int, locale: str =
     return embed
 
 
-def dj_required_embed(locale: str = "en") -> discord.Embed:
-    if locale == "th":
-        desc = "เฉพาะผู้มี **DJ role** หรือผู้ดูแลระบบเท่านั้นที่สามารถใช้คำสั่งนี้ได้"
-    else:
-        desc = "Only users with the **DJ role** can use this command."
+def dj_required_embed(locale: Any = "en") -> discord.Embed:
+    from core.i18n import get_locale_sync
+    if hasattr(locale, "guild_id") and not isinstance(locale, str):
+        locale = get_locale_sync(getattr(locale, "guild_id", None))
+    elif hasattr(locale, "guild") and not isinstance(locale, str):
+        g = getattr(locale, "guild", None)
+        locale = get_locale_sync(getattr(g, "id", None) if g else None)
+    elif isinstance(locale, int):
+        locale = get_locale_sync(locale)
+    desc = t("error.dj_required", str(locale or "en"))
     return discord.Embed(
         title       = "🎚️ DJ Permission Required",
         description = desc,
@@ -119,10 +120,7 @@ def dj_required_embed(locale: str = "en") -> discord.Embed:
 
 
 def rate_limited_embed(retry_after: float, locale: str = "en") -> discord.Embed:
-    if locale == "th":
-        desc = f"คุณส่งคำสั่งเร็วเกินไป ลองอีกครั้งใน **{retry_after:.1f} วินาที**"
-    else:
-        desc = f"You are sending commands too fast. Try again in **{retry_after:.1f}s**."
+    desc = t("error.rate_limited", locale, retry_after=f"{retry_after:.1f}")
     return discord.Embed(
         title       = "⏳ Slow Down!",
         description = desc,
@@ -142,7 +140,8 @@ async def notify_playback_error(
     if not channel:
         return
     try:
-        embed = playback_error_embed(str(error))
+        locale = await get_locale(guild_id, bot.db)
+        embed = playback_error_embed(str(error), locale=locale)
         embed.set_footer(text=f"Track: {track_title[:80]}")
         await channel.send(embed=embed, delete_after=30)
     except Exception:

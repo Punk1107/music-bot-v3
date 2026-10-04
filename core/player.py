@@ -414,6 +414,7 @@ class GuildPlayer:
             target = lst[index]
             # Drop everything before the target
             self._queue = deque(lst[index:])
+            self._history_track = None  # Ensure dequeue() yields the target track even under LoopMode.TRACK
             return target
 
     # ── Prefetch ──────────────────────────────────────────────────────────────

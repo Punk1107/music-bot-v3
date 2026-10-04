@@ -112,7 +112,7 @@ class ThemeCog(commands.Cog, name="Theme"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
         from utils.error_handler import dj_required_embed
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     @app_commands.command(name="theme", description="Set the embed visual theme for this server")
