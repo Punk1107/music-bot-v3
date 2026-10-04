@@ -93,6 +93,7 @@ _COGS = [
     "loudnorm.cog",          # Feature 2.6: EBU R128 Smart Loudness Normalization (/loudnorm)
     "loop_ab.cog",           # Feature 2.7: Loop A-B Segment Repeat (/loopab)
     "pan.cog",               # Feature 2.8: Audio Pan & Stereo Widening (/pan /stereowide)
+    "dashboard.cog",         # Feature 4: Local Web Dashboard (/dashboard)
 ]
 
 
@@ -124,6 +125,7 @@ class MusicBot(commands.Bot):
         self.audio_backend                       = create_backend()
         self.nlu:            NLUPipeline         = NLUPipeline()
         self.webserver:      WebServer           = WebServer(self)
+        self.dashboard                           = self.webserver.dashboard_service  # Feature 4
         self.ffmpeg_pool:    FFmpegWarmPool      = FFmpegWarmPool()  # Tier-S+ F13
         self.autoplay:       AutoplayService     = AutoplayService(self.youtube)  # Feature 1.4
         self.autoplay_service: AutoplayService   = self.autoplay
