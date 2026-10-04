@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ 快退 {seconds} 秒（当前 **{time}**）。",
   "seek.replay": "🔄 重新从头播放 **{title}**。",
   "seek.invalid_format": "时间格式无效。请使用 `MM:SS`、`HH:MM:SS` 或秒数（例如 `1:30`、`90`）。",
-  "seek.out_of_range": "时间戳超出范围。歌曲总时长为 **{duration}**。"
+  "seek.out_of_range": "时间戳超出范围。歌曲总时长为 **{duration}**。",
+
+  "equalizer.preset_applied": "🎚️ 已应用均衡器预设: **{name}**",
+  "equalizer.custom_applied": "🎚️ 已应用自定义均衡器 (超低音: **{sub_bass}dB**, 低音: **{bass}dB**, 中音: **{mid}dB**, 高音: **{treble}dB**)。",
+  "equalizer.reset": "🎚️ 均衡器已重置为平直 (Flat)。",
+  "equalizer.invalid_preset": "预设 `{name}` 无效。可用预设: {presets}",
+  "equalizer.invalid_gain": "增益值必须介于 -10dB 和 +10dB 之间。",
+  "loudnorm.enabled": "📊 EBU R128 响度标准化已**启用**。",
+  "loudnorm.disabled": "📊 EBU R128 响度标准化已**禁用**。",
+  "loopab.started": "🔂 A-B 循环已开启: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 A-B 循环已关闭。",
+  "loopab.invalid_times": "时间范围无效: 结束时间 ({end}) 必须大于开始时间 ({start})。",
+  "loopab.not_active": "当前未激活 A-B 循环。",
+  "pan.set": "🎧 音频左右平衡已设置为 **{position}**。",
+  "stereo.set": "🎧 立体声声场已设置为 **{mode}**。"
 }

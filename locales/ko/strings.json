@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ {seconds}초 뒤로 이동했습니다 (현재 **{time}**).",
   "seek.replay": "🔄 **{title}**을(를) 처음부터 다시 재생합니다.",
   "seek.invalid_format": "잘못된 시간 형식입니다. `MM:SS`, `HH:MM:SS` 또는 초 단위(예: `1:30`, `90`)를 사용하세요.",
-  "seek.out_of_range": "시간이 범위를 벗어났습니다. 트랙 길이는 **{duration}**입니다."
+  "seek.out_of_range": "시간이 범위를 벗어났습니다. 트랙 길이는 **{duration}**입니다.",
+
+  "equalizer.preset_applied": "🎚️ 이퀄라이저 프리셋 **{name}**이(가) 적용되었습니다.",
+  "equalizer.custom_applied": "🎚️ 사용자 지정 이퀄라이저가 적용되었습니다 (서브베이스: **{sub_bass}dB**, 베이스: **{bass}dB**, 미드: **{mid}dB**, 트레블: **{treble}dB**).",
+  "equalizer.reset": "🎚️ 이퀄라이저가 플랫으로 초기화되었습니다.",
+  "equalizer.invalid_preset": "잘못된 프리셋 `{name}`입니다. 사용 가능: {presets}",
+  "equalizer.invalid_gain": "게인 값은 -10dB에서 +10dB 사이여야 합니다.",
+  "loudnorm.enabled": "📊 EBU R128 음량 정규화가 **활성화**되었습니다.",
+  "loudnorm.disabled": "📊 EBU R128 음량 정규화가 **비활성화**되었습니다.",
+  "loopab.started": "🔂 A-B 구간 반복이 활성화되었습니다: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 A-B 구간 반복이 비활성화되었습니다.",
+  "loopab.invalid_times": "잘못된 시간 범위: 종료 시간({end})은 시작 시간({start})보다 커야 합니다.",
+  "loopab.not_active": "현재 A-B 구간 반복이 활성화되어 있지 않습니다.",
+  "pan.set": "🎧 오디오 밸런스가 **{position}**(으)로 설정되었습니다.",
+  "stereo.set": "🎧 스테레오 음장이 **{mode}**(으)로 설정되었습니다."
 }

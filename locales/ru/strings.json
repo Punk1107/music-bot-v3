@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ Назад на {seconds}с (сейчас **{time}**).",
   "seek.replay": "🔄 Повторное воспроизведение **{title}** с начала.",
   "seek.invalid_format": "Неверный формат времени. Используйте `MM:SS`, `HH:MM:SS` или секунды (например, `1:30`, `90`).",
-  "seek.out_of_range": "Временная метка вне диапазона. Длина трека: **{duration}**."
+  "seek.out_of_range": "Временная метка вне диапазона. Длина трека: **{duration}**.",
+
+  "equalizer.preset_applied": "🎚️ Применен пресет эквалайзера: **{name}**",
+  "equalizer.custom_applied": "🎚️ Применен пользовательский эквалайзер (Саб-бас: **{sub_bass}dB**, Бас: **{bass}dB**, Средние: **{mid}dB**, Высокие: **{treble}dB**).",
+  "equalizer.reset": "🎚️ Эквалайзер сброшен в Flat.",
+  "equalizer.invalid_preset": "Недопустимый пресет `{name}`. Доступно: {presets}",
+  "equalizer.invalid_gain": "Значения усиления должны быть от -10dB до +10dB.",
+  "loudnorm.enabled": "📊 Нормализация громкости EBU R128 **включена**.",
+  "loudnorm.disabled": "📊 Нормализация громкости EBU R128 **выключена**.",
+  "loopab.started": "🔂 A-B зацикливание включено: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 A-B зацикливание выключено.",
+  "loopab.invalid_times": "Недопустимый диапазон времени: Время окончания ({end}) должно быть больше времени начала ({start}).",
+  "loopab.not_active": "A-B зацикливание сейчас не активно.",
+  "pan.set": "🎧 Аудиобаланс установлен на **{position}**.",
+  "stereo.set": "🎧 Стереосцена установлена на **{mode}**."
 }

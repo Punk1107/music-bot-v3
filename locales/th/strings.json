@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ กรอกลับ {seconds} วินาที (อยู่ที่ **{time}**)",
   "seek.replay": "🔄 เล่นเพลง **{title}** ซ้ำจากเริ่มต้นแล้ว",
   "seek.invalid_format": "รูปแบบเวลาไม่ถูกต้อง กรุณาใช้ `MM:SS`, `HH:MM:SS`, หรือวินาที (เช่น `1:30`, `90`)",
-  "seek.out_of_range": "เวลาที่ระบุอยู่นอกช่วงความยาวเพลง ความยาวเพลงคือ **{duration}**"
+  "seek.out_of_range": "เวลาที่ระบุอยู่นอกช่วงความยาวเพลง ความยาวเพลงคือ **{duration}**",
+
+  "equalizer.preset_applied": "🎚️ ใช้งานพรีเซ็ตอีควอไลเซอร์: **{name}** แล้ว",
+  "equalizer.custom_applied": "🎚️ ปรับอีควอไลเซอร์กำหนดเองแล้ว (Sub-bass: **{sub_bass}dB**, Bass: **{bass}dB**, Mid: **{mid}dB**, Treble: **{treble}dB**)",
+  "equalizer.reset": "🎚️ รีเซ็ตอีควอไลเซอร์เป็น Flat แล้ว",
+  "equalizer.invalid_preset": "ไม่พบพรีเซ็ต `{name}` พรีเซ็ตที่มี: {presets}",
+  "equalizer.invalid_gain": "ค่า Gain ต้องอยู่ระหว่าง -10dB ถึง +10dB",
+  "loudnorm.enabled": "📊 เปิดใช้งานระบบปรับสมดุลความดังอัจฉริยะ EBU R128 แล้ว",
+  "loudnorm.disabled": "📊 ปิดใช้งานระบบปรับสมดุลความดังอัจฉริยะ EBU R128 แล้ว",
+  "loopab.started": "🔂 เปิดใช้งานวนลูป A-B: **{start}** ➔ **{end}** แล้ว",
+  "loopab.disabled": "🔂 ปิดใช้งานวนลูป A-B แล้ว",
+  "loopab.invalid_times": "ช่วงเวลาไม่ถูกต้อง: เวลาสิ้นสุด ({end}) ต้องมากกว่าเวลาเริ่มต้น ({start})",
+  "loopab.not_active": "ไม่ได้เปิดใช้งานการวนลูป A-B อยู่ในขณะนี้",
+  "pan.set": "🎧 ตั้งค่าสมดุลเสียงซ้าย-ขวาเป็น **{position}** แล้ว",
+  "stereo.set": "🎧 ตั้งค่าเวทีเสียงกว้างเป็น **{mode}** แล้ว"
 }
