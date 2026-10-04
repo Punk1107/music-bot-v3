@@ -155,5 +155,11 @@
   "queue.perm_updated": "Warteschlangen-Berechtigung aktualisiert: **{level}**",
   "queue.duplicate_mode": "Duplikat-Einstellung aktualisiert auf: **{mode}**",
   "error.rate_limited": "Befehle werden zu schnell gesendet. Versuche es in **{retry_after}s** erneut.",
-  "error.voice_reconnect_failed": "Konnte nach {attempts} Versuchen nicht erneut mit **{channel}** verbinden."
+  "error.voice_reconnect_failed": "Konnte nach {attempts} Versuchen nicht erneut mit **{channel}** verbinden.",
+  "embed.volume": "🔊 Lautstärke",
+  "bookmark.saved": "Snapshot **`{name}`** mit **{count}** Titeln gespeichert.",
+  "admin.dj_set": "Nur Benutzer mit der Rolle {role} können jetzt Steuerungsbefehle verwenden.",
+  "admin.dj_cleared": "Alle Benutzer können den Bot jetzt steuern.",
+  "admin.request_channel_set": "Benutzer können jetzt Songtitel oder URLs direkt in {channel} eingeben.",
+  "admin.auto_playlist": "Die Warteschlange war leer. **{count}** Titel aus Ihrem aktuellen Verlauf hinzugefügt."
 }

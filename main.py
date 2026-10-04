@@ -48,7 +48,7 @@ from core.media_cache    import (                    # Tier-S+ F14 F15
     prewarm_queue_thumbnails, bg_refresh_metadata, prune_caches as prune_media_caches,
     cache_stats as media_cache_stats,
 )
-from core.i18n import get_locale, t
+from core.i18n import get_locale, get_locale_sync, t
 from core.lru_cache      import check_memory_pressure, combined_stats as lru_stats  # F31 F32
 from core.self_test      import run_self_test, SelfTestReport                        # F34
 from core.stability      import (                    # Stability suite
@@ -904,8 +904,9 @@ class MusicBot(commands.Bot):
                 if is_paused:
                     continue
 
+                loc = get_locale_sync(guild_id)
                 color = animated_embed_color(base_color, player.elapsed_seconds)
-                embed = now_playing_embed(player, color, self.user, paused=is_paused, theme=getattr(player, "embed_theme", "classic"))
+                embed = now_playing_embed(player, color, self.user, paused=is_paused, theme=getattr(player, "embed_theme", "classic"), locale=loc)
                 msg   = player.now_playing_msg
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)

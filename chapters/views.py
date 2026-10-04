@@ -61,6 +61,23 @@ class ChapterSelect(discord.ui.Select):
 
         locale = await get_locale(self.guild_id, self.bot.db)
 
+        member = interaction.user
+        if not isinstance(member, discord.Member) or not member.voice or not member.voice.channel:
+            await interaction.followup.send(
+                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)),
+                ephemeral=True,
+            )
+            return
+
+        guild = interaction.guild
+        vc = guild.voice_client if guild else None
+        if vc and vc.channel != member.voice.channel:
+            await interaction.followup.send(
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", locale, channel=vc.channel.name)),
+                ephemeral=True,
+            )
+            return
+
         chapter = self._chapters_map.get(self.values[0])
         if not chapter:
             await interaction.followup.send(

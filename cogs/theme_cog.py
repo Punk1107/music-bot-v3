@@ -112,7 +112,11 @@ class ThemeCog(commands.Cog, name="Theme"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
         from utils.error_handler import dj_required_embed
-        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
+        err = dj_required_embed(interaction)
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=err)
+        else:
+            await interaction.response.send_message(embed=err, ephemeral=True)
         return False
 
     @app_commands.command(name="theme", description="Set the embed visual theme for this server")
@@ -124,16 +128,16 @@ class ThemeCog(commands.Cog, name="Theme"):
         app_commands.Choice(name="🔮 Glass    — Frosted / gradient pastel feel",  value="glass"),
     ])
     async def theme(self, interaction: discord.Interaction, style: str) -> None:
-        await interaction.response.defer(ephemeral=False)  # visible so the preview is seen by all
         if not await self._check_dj(interaction):
             return
+
+        await interaction.response.defer(ephemeral=False)  # visible so the preview is seen by all
 
         try:
             chosen = EmbedTheme(style)
         except ValueError:
             await interaction.followup.send(
                 embed=error_embed("Invalid Theme", "Choose: classic, spotify, minimal, or glass."),
-                ephemeral=True,
             )
             return
 

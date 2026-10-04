@@ -155,5 +155,11 @@
   "queue.perm_updated": "队列添加权限已更新为：**{level}**",
   "queue.duplicate_mode": "重复歌曲处理模式已更新为：**{mode}**",
   "error.rate_limited": "指令发送过快，请在 **{retry_after} 秒** 后重试。",
-  "error.voice_reconnect_failed": "在重试 {attempts} 次后仍无法重新连接至 **{channel}**。"
+  "error.voice_reconnect_failed": "在重试 {attempts} 次后仍无法重新连接至 **{channel}**。",
+  "embed.volume": "🔊 音量",
+  "bookmark.saved": "已保存快照 **`{name}`**，共 **{count}** 首曲目。",
+  "admin.dj_set": "现在只有拥有 {role} 身份组的用户可以使用控制指令。",
+  "admin.dj_cleared": "所有用户现在都可以控制机器人。",
+  "admin.request_channel_set": "用户现在可以在 {channel} 中直接输入歌曲名称或链接。",
+  "admin.auto_playlist": "队列已空。已从您的近期播放记录中添加 **{count}** 首曲目。"
 }

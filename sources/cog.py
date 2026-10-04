@@ -121,14 +121,19 @@ class SCSearchSelect(discord.ui.Select):
         guild = self.bot.get_guild(self.guild_id)
         vc    = guild.voice_client if guild else None
         if not vc:
-            # Try to join the user's channel
-            try:
-                vc = await member.voice.channel.connect()
-                player.last_channel_id = vc.channel.id
-                player.text_channel    = interaction.channel
-            except Exception as exc:
-                logger.error("SourcesCog: voice connect failed: %s", exc)
-                return
+            # Join user's channel safely via MusicCog
+            if music_cog:
+                vc = await music_cog._ensure_voice(interaction)
+                if not vc:
+                    return
+            else:
+                try:
+                    vc = await member.voice.channel.connect()
+                    player.last_channel_id = vc.channel.id
+                    player.text_channel    = interaction.channel
+                except Exception as exc:
+                    logger.error("SourcesCog: voice connect failed: %s", exc)
+                    return
 
         if not vc.is_playing() and not vc.is_paused():
             asyncio.create_task(music_cog._play_next(self.guild_id))

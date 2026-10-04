@@ -328,14 +328,18 @@ class GuildPlayer:
 
     def cancel_sleep_timer(self) -> bool:
         """Cancel any running sleep timer. Returns True if one was cancelled."""
+        had_timer = False
         if self.sleep_timer_task and not self.sleep_timer_task.done():
-            self.sleep_timer_task.cancel()
-            self.sleep_timer_task = None
-            self.sleep_timer_end  = None
-            return True
+            try:
+                curr = asyncio.current_task()
+            except RuntimeError:
+                curr = None
+            if curr != self.sleep_timer_task:
+                self.sleep_timer_task.cancel()
+            had_timer = True
         self.sleep_timer_task = None
         self.sleep_timer_end  = None
-        return False
+        return had_timer
 
     def sleep_remaining_seconds(self) -> int:
         """Seconds remaining until sleep timer fires (0 if not active)."""
