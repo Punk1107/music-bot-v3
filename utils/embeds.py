@@ -179,7 +179,7 @@ def now_playing_embed(
         embed.add_field(name=t("embed.in_queue", locale),      value=q_val,    inline=True)
         embed.add_field(name=t("embed.requested_by", locale),  value=req_val,  inline=True)
         embed.add_field(name=t("btn.loop", locale),            value=loop_val, inline=True)
-        embed.add_field(name=f"🔊 {t('volume.set', locale, vol=int(player.volume * 100)).split('**')[1] if '**' in t('volume.set', locale, vol=int(player.volume * 100)) else vol_val}", value=vol_val, inline=True)
+        embed.add_field(name=t("embed.volume", locale),        value=vol_val, inline=True)
         embed.add_field(name=t("embed.progress", locale),      value=bar_line, inline=False)
         if player.effects:
             eff_str = " · ".join(e.display_name() for e in player.effects[:4])
@@ -400,43 +400,34 @@ def favorite_removed_embed(name: str) -> discord.Embed:
 
 # ── DJ mode embeds (V3 NEW) ───────────────────────────────────────────────────
 
-def dj_set_embed(role: discord.Role) -> discord.Embed:
+def dj_set_embed(role: discord.Role, locale: str = "en") -> discord.Embed:
     return discord.Embed(
         title       = "🎚️ DJ Role Set",
-        description = (
-            f"Only users with the {role.mention} role can now use control commands.\n"
-            f"*เฉพาะผู้มี role {role.mention} เท่านั้นที่ใช้คำสั่งควบคุมได้*"
-        ),
+        description = t("admin.dj_set", locale, role=role.mention),
         color       = role.color.value or 0x5865F2,
     )
 
 
-def dj_cleared_embed() -> discord.Embed:
-    return success_embed("DJ Role Cleared", "All users can now control the bot.")
+def dj_cleared_embed(locale: str = "en") -> discord.Embed:
+    return success_embed("DJ Role Cleared", t("admin.dj_cleared", locale))
 
 
 # ── Request channel embeds (V3 NEW) ───────────────────────────────────────────
 
-def request_channel_set_embed(channel: discord.TextChannel) -> discord.Embed:
+def request_channel_set_embed(channel: discord.TextChannel, locale: str = "en") -> discord.Embed:
     return discord.Embed(
         title       = "📻 Request Channel Set",
-        description = (
-            f"Users can now type song names or URLs directly in {channel.mention}.\n"
-            f"*ผู้ใช้สามารถพิมพ์ชื่อเพลงหรือ URL โดยตรงใน {channel.mention}*"
-        ),
+        description = t("admin.request_channel_set", locale, channel=channel.mention),
         color       = 0x5865F2,
     )
 
 
 # ── Auto-playlist embed (V3 NEW) ──────────────────────────────────────────────
 
-def auto_playlist_embed(track_count: int) -> discord.Embed:
+def auto_playlist_embed(track_count: int, locale: str = "en") -> discord.Embed:
     return discord.Embed(
         title       = "🎼 Auto-Playlist",
-        description = (
-            f"Queue was empty. Added **{track_count}** tracks from your recent history.\n"
-            f"*คิวหมดแล้ว เพิ่ม {track_count} เพลงจากประวัติการฟังล่าสุด*"
-        ),
+        description = t("admin.auto_playlist", locale, count=track_count),
         color       = 0x9B59B6,
     )
 
@@ -664,7 +655,7 @@ def bookmark_list_embed(
 def bookmark_saved_embed(name: str, count: int, color: int = 0x1ABC9C, locale: str = "en") -> discord.Embed:
     return discord.Embed(
         title       = f"📋  {t('bookmark.title', locale)}",
-        description = f"Snapshot **`{name}`** saved with **{count}** tracks.",
+        description = t("bookmark.saved", locale, name=name, count=count),
         color       = color,
     )
 

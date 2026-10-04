@@ -83,53 +83,54 @@ class MusicControlView(discord.ui.View):
 
             if cid == "mb_skip":
                 # Show queue count if non-empty, keep it short
-                child.label    = f"⏭ Skip" + (f" ({queue_size})" if queue_size else "")
+                skip_label = t("btn.skip", locale)
+                child.label    = f"{skip_label}" + (f" ({queue_size})" if queue_size else "")
                 child.disabled = not is_playing
 
             elif cid == "mb_shuffle":
-                child.label    = "🔀 Shuffle"
+                child.label    = t("btn.shuffle", locale)
                 child.disabled = queue_size < 2
 
             elif cid == "mb_stop":
-                child.label = "⏹ Stop"
+                child.label = t("btn.stop", locale)
 
             elif cid == "mb_rewind":
-                child.label    = "⏪ -15s"
+                child.label    = t("btn.rewind", locale)
                 child.disabled = not is_playing
 
             elif cid == "mb_forward":
-                child.label    = "⏩ +15s"
+                child.label    = t("btn.forward", locale)
                 child.disabled = not is_playing
 
             elif cid == "mb_vol_down":
-                child.label    = "🔇 -10%"
+                child.label    = t("btn.vol_down", locale)
                 child.disabled = player.volume <= 0.0
 
             elif cid == "mb_vol_up":
-                child.label    = "🔊 +10%"
+                child.label    = t("btn.vol_up", locale)
                 child.disabled = player.volume >= 2.0
 
             elif cid == "mb_favorite":
-                child.label = "❤️ Favorite"
+                child.label = t("btn.favorite", locale)
 
             elif cid == "mb_loop":
                 mode = player.loop_mode.value
                 if mode == "off":
-                    child.label = "🔁 Loop: Off"
+                    child.label = t("btn.loop_off", locale)
                     child.style = discord.ButtonStyle.secondary
                 elif mode == "track":
-                    child.label = "🔂 Loop: Track"
+                    child.label = t("btn.loop_track", locale)
                     child.style = discord.ButtonStyle.primary
                 else:
-                    child.label = "🔁 Loop: Queue"
+                    child.label = t("btn.loop_queue", locale)
                     child.style = discord.ButtonStyle.primary
 
             elif cid == "mb_pause":
                 if is_paused:
-                    child.label = "▶ Resume"
+                    child.label = t("btn.resume", locale)
                     child.style = discord.ButtonStyle.success
                 else:
-                    child.label = "⏸ Pause"
+                    child.label = t("btn.pause", locale)
                     child.style = discord.ButtonStyle.secondary
                 child.disabled = not is_playing
 
@@ -393,6 +394,7 @@ class QueueView(discord.ui.View):
 
     def _sync_nav(self) -> None:
         total = self._total_pages()
+        locale = get_locale_sync(self.guild_id)
         for child in self.children:
             if not hasattr(child, "custom_id"):
                 continue
@@ -400,6 +402,10 @@ class QueueView(discord.ui.View):
                 child.disabled = self.page <= 1
             elif child.custom_id == "q_next":
                 child.disabled = self.page >= total
+            elif child.custom_id == "q_shuffle":
+                child.label = t("btn.shuffle", locale)
+            elif child.custom_id == "q_clear":
+                child.label = t("btn.clear", locale)
 
     @discord.ui.button(label="◀", style=discord.ButtonStyle.secondary, custom_id="q_prev")
     async def prev_page(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -407,7 +413,8 @@ class QueueView(discord.ui.View):
         self._sync_nav()
         player = self.bot.get_player(self.guild_id)
         color  = 0x5865F2
-        embed  = queue_embed(player, self.page, ITEMS_PER_PAGE, color)
+        locale = get_locale_sync(self.guild_id)
+        embed  = queue_embed(player, self.page, ITEMS_PER_PAGE, color, locale=locale)
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="▶", style=discord.ButtonStyle.secondary, custom_id="q_next")
@@ -416,14 +423,16 @@ class QueueView(discord.ui.View):
         self._sync_nav()
         player = self.bot.get_player(self.guild_id)
         color  = 0x5865F2
-        embed  = queue_embed(player, self.page, ITEMS_PER_PAGE, color)
+        locale = get_locale_sync(self.guild_id)
+        embed  = queue_embed(player, self.page, ITEMS_PER_PAGE, color, locale=locale)
         await interaction.response.edit_message(embed=embed, view=self)
 
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.primary, custom_id="q_shuffle")
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         player = self.bot.get_player(self.guild_id)
         await player.shuffle()
-        embed = queue_embed(player, self.page, ITEMS_PER_PAGE)
+        locale = get_locale_sync(self.guild_id)
+        embed = queue_embed(player, self.page, ITEMS_PER_PAGE, locale=locale)
         self._sync_nav()
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -432,8 +441,10 @@ class QueueView(discord.ui.View):
         player = self.bot.get_player(self.guild_id)
         count  = await player.clear()
         await self.bot.db.clear_queue(self.guild_id)
+        locale = get_locale_sync(self.guild_id)
+        clear_title = t("btn.clear", locale).replace("🗑️ ", "").replace("🗑 ", "")
         await interaction.response.edit_message(
-            embed=success_embed("Queue Cleared", f"Removed {count} tracks."), view=None
+            embed=success_embed(clear_title, t("queue.cleared", locale, count=count)), view=None
         )
 
     async def on_timeout(self) -> None:

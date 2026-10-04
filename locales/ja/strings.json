@@ -155,5 +155,11 @@
   "queue.perm_updated": "キュー権限を更新しました: **{level}**",
   "queue.duplicate_mode": "重複曲の処理設定を更新しました: **{mode}**",
   "error.rate_limited": "コマンドの送信間隔が短すぎます。**{retry_after}秒後**に再試行してください。",
-  "error.voice_reconnect_failed": "{attempts}回試行しましたが **{channel}** に再接続できませんでした。"
+  "error.voice_reconnect_failed": "{attempts}回試行しましたが **{channel}** に再接続できませんでした。",
+  "embed.volume": "🔊 音量",
+  "bookmark.saved": "スナップショット **`{name}`** を保存しました（**{count}** 曲）。",
+  "admin.dj_set": "{role} ロールを持つユーザーのみがコントロールコマンドを使用できます。",
+  "admin.dj_cleared": "すべてのユーザーがボットを操作できるようになりました。",
+  "admin.request_channel_set": "ユーザーは {channel} に曲名やURLを直接入力できるようになりました。",
+  "admin.auto_playlist": "キューが空でした。最近の再生履歴から **{count}** 曲を追加しました。"
 }

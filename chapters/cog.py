@@ -151,10 +151,50 @@ class ChaptersCog(commands.Cog, name="Chapters"):
     async def cjump(self, interaction: discord.Interaction, timestamp: str) -> None:
         await self._do_jump(interaction, timestamp)
 
+    async def _check_permissions(self, interaction: discord.Interaction, locale: str) -> bool:
+        """Verify the user is connected to voice in the correct channel and has DJ/Admin permissions."""
+        member = interaction.user
+        if not isinstance(member, discord.Member):
+            return False
+
+        if not member.voice or not member.voice.channel:
+            await interaction.followup.send(
+                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)),
+                ephemeral=True,
+            )
+            return False
+
+        guild = interaction.guild
+        vc = guild.voice_client if guild else None
+        if vc and vc.channel != member.voice.channel:
+            await interaction.followup.send(
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", locale, channel=vc.channel.name)),
+                ephemeral=True,
+            )
+            return False
+
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if not cfg.dj_role_id:
+            return True
+        if member.guild_permissions.administrator:
+            return True
+        if any(r.id == cfg.dj_role_id for r in member.roles):
+            return True
+
+        await interaction.followup.send(
+            embed=error_embed("DJ Role Required", t("error.dj_required", locale)),
+            ephemeral=True,
+        )
+        return False
+
     async def _do_jump(self, interaction: discord.Interaction, timestamp: str) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         locale = await get_locale(interaction.guild_id, self.bot.db)
+
+        if not await self._check_permissions(interaction, locale):
+            return
+
         player = self.bot.get_player(interaction.guild_id)
 
         if not player.now_playing:

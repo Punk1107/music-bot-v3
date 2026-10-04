@@ -78,13 +78,14 @@ class LanguageCog(commands.Cog, name="Language"):
         except Exception:
             current_locale = "en"
 
-        await interaction.followup.send(
-            embed=error_embed(
-                "Permission Denied",
-                t("lang.permission_denied", current_locale),
-            ),
-            ephemeral=True,
+        err = error_embed(
+            "Permission Denied",
+            t("lang.permission_denied", current_locale),
         )
+        if interaction.response.is_done():
+            await interaction.followup.send(embed=err)
+        else:
+            await interaction.response.send_message(embed=err, ephemeral=True)
         return False
 
     # ── /language ─────────────────────────────────────────────────────────────
@@ -96,10 +97,10 @@ class LanguageCog(commands.Cog, name="Language"):
     @app_commands.describe(locale="Language to switch to")
     @app_commands.choices(locale=_LANGUAGE_CHOICES)
     async def language(self, interaction: discord.Interaction, locale: str) -> None:
-        await interaction.response.defer(ephemeral=False)
-
         if not await self._check_admin(interaction):
             return
+
+        await interaction.response.defer(ephemeral=False)
 
         if locale not in supported_locales():
             await interaction.followup.send(
@@ -107,7 +108,6 @@ class LanguageCog(commands.Cog, name="Language"):
                     "Invalid Locale",
                     f"Supported: `{', '.join(sorted(supported_locales()))}`",
                 ),
-                ephemeral=True,
             )
             return
 

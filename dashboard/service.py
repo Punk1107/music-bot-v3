@@ -248,6 +248,26 @@ class DashboardService:
 
     # ── Queue Controls ────────────────────────────────────────────────────────
 
+    async def _persist_queue(self, guild_id: int, player: GuildPlayer) -> None:
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                guild = self.bot.get_guild(guild_id)
+                channel_id = (guild.voice_client.channel.id if guild and guild.voice_client and guild.voice_client.channel else (player.last_channel_id or 0))
+                res = self.bot.db.save_queue(guild_id, channel_id, list(player.queue))
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as exc:
+                logger.warning("DashboardService: save_queue error for guild %d: %s", guild_id, exc)
+
+    async def _clear_db_queue(self, guild_id: int) -> None:
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                res = self.bot.db.clear_queue(guild_id)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as exc:
+                logger.warning("DashboardService: clear_queue error for guild %d: %s", guild_id, exc)
+
     async def move_queue(
         self, guild_id: int, from_index: int, to_index: int
     ) -> dict:
@@ -274,6 +294,8 @@ class DashboardService:
             player.undo_pop()
             return {"success": False, "error": "Failed to reorder queue"}
 
+        await self._persist_queue(guild_id, player)
+
         await self.broadcast_state(guild_id)
         return {
             "success": True,
@@ -293,6 +315,7 @@ class DashboardService:
         removed = await player.remove(index)
         if removed:
             player.undo_push("remove", extra=(index, removed))
+            await self._persist_queue(guild_id, player)
             await self.broadcast_state(guild_id)
             return {"success": True, "removed": removed.to_dict()}
         return {"success": False, "error": "Failed to remove track"}
@@ -300,7 +323,10 @@ class DashboardService:
     async def clear_queue(self, guild_id: int) -> dict:
         """Clear the entire queue."""
         player = self.bot.get_player(guild_id)
+        if len(player) > 0:
+            player.undo_push("clear")
         count = await player.clear()
+        await self._clear_db_queue(guild_id)
         await self.broadcast_state(guild_id)
         return {"success": True, "cleared_count": count}
 
@@ -312,6 +338,7 @@ class DashboardService:
 
         player.undo_push("shuffle")
         await player.shuffle()
+        await self._persist_queue(guild_id, player)
         await self.broadcast_state(guild_id)
         return {"success": True, "queue_size": len(player)}
 

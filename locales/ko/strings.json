@@ -155,5 +155,11 @@
   "queue.perm_updated": "대기열 추가 권한이 **{level}**(으)로 업데이트되었습니다.",
   "queue.duplicate_mode": "중복 곡 처리 방식이 **{mode}**(으)로 업데이트되었습니다.",
   "error.rate_limited": "명령어를 너무 빠르게 입력했습니다. **{retry_after}초** 후에 다시 시도하세요.",
-  "error.voice_reconnect_failed": "{attempts}회 시도 후에도 **{channel}** 채널에 재연결하지 못했습니다."
+  "error.voice_reconnect_failed": "{attempts}회 시도 후에도 **{channel}** 채널에 재연결하지 못했습니다.",
+  "embed.volume": "🔊 음량",
+  "bookmark.saved": "스냅샷 **`{name}`** 저장이 완료되었습니다 (**{count}**곡).",
+  "admin.dj_set": "{role} 역할을 가진 사용자만 제어 명령어를 사용할 수 있습니다.",
+  "admin.dj_cleared": "이제 모든 사용자가 봇을 제어할 수 있습니다.",
+  "admin.request_channel_set": "이제 사용자가 {channel}에 노래 제목이나 URL을 직접 입력할 수 있습니다.",
+  "admin.auto_playlist": "대기열이 비어 있어 최근 재생 기록에서 **{count}**곡을 추가했습니다."
 }

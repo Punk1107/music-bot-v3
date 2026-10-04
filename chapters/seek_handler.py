@@ -93,6 +93,14 @@ async def seek_to_chapter(
         return False
 
     # ── Build FFmpeg options with seek offset ─────────────────────────────────
+    from equalizer.presets import build_equalizer_filter
+    from pan.filter import build_pan_filter, build_stereo_enhance_filter
+
+    eq_filter = build_equalizer_filter(getattr(player, "equalizer_bands", None))
+    pan_filter = build_pan_filter(getattr(player, "pan_balance", 0.0))
+    stereo_filter = build_stereo_enhance_filter(getattr(player, "stereo_width", 1.0))
+    loudnorm_flag = getattr(player, "loudnorm", False)
+
     cfg_server = await bot.db.get_server_config(guild_id)
 
     audio_processor = AudioEffectsProcessor()
@@ -106,6 +114,10 @@ async def seek_to_chapter(
         crossfade_secs  = 0,        # no crossfade on manual seek
         silence_trim    = player.silence_trim,
         replay_gain     = player.replay_gain,
+        equalizer_filter= eq_filter,
+        loudnorm        = loudnorm_flag,
+        pan_filter      = pan_filter,
+        stereo_filter   = stereo_filter,
     )
 
     before_opts = ffmpeg_opts.get("before_options", "")

@@ -155,5 +155,11 @@
   "queue.perm_updated": "Permiso de cola actualizado: **{level}**",
   "queue.duplicate_mode": "Modo de duplicados actualizado a: **{mode}**",
   "error.rate_limited": "Envías comandos demasiado rápido. Inténtalo de nuevo en **{retry_after}s**.",
-  "error.voice_reconnect_failed": "No se pudo reconectar a **{channel}** tras {attempts} intentos."
+  "error.voice_reconnect_failed": "No se pudo reconectar a **{channel}** tras {attempts} intentos.",
+  "embed.volume": "🔊 Volumen",
+  "bookmark.saved": "Instantánea **`{name}`** guardada con **{count}** pistas.",
+  "admin.dj_set": "Ahora solo los usuarios con el rol {role} pueden usar comandos de control.",
+  "admin.dj_cleared": "Todos los usuarios ahora pueden controlar el bot.",
+  "admin.request_channel_set": "Los usuarios ahora pueden escribir nombres de canciones o URL directamente en {channel}.",
+  "admin.auto_playlist": "La cola estaba vacía. Se agregaron **{count}** pistas de su historial reciente."
 }

@@ -155,5 +155,11 @@
   "queue.perm_updated": "อัปเดตสิทธิ์การเพิ่มเพลงในคิวแล้ว: **{level}**",
   "queue.duplicate_mode": "อัปเดตการจัดการเพลงซ้ำเป็น: **{mode}**",
   "error.rate_limited": "คุณส่งคำสั่งเร็วเกินไป กรุณารออีก **{retry_after} วินาที**",
-  "error.voice_reconnect_failed": "ไม่สามารถเชื่อมต่อห้อง **{channel}** ได้หลังจากพยายาม {attempts} ครั้ง"
+  "error.voice_reconnect_failed": "ไม่สามารถเชื่อมต่อห้อง **{channel}** ได้หลังจากพยายาม {attempts} ครั้ง",
+  "embed.volume": "🔊 ระดับเสียง",
+  "bookmark.saved": "บันทึกบุ๊กมาร์ก **`{name}`** เรียบร้อยแล้ว มี **{count}** เพลง",
+  "admin.dj_set": "เฉพาะผู้มีบทบาท {role} เท่านั้นที่สามารถใช้คำสั่งควบคุมได้",
+  "admin.dj_cleared": "ผู้ใช้ทุกคนสามารถควบคุมบอทได้แล้ว",
+  "admin.request_channel_set": "ผู้ใช้สามารถพิมพ์ชื่อเพลงหรือ URL โดยตรงใน {channel}",
+  "admin.auto_playlist": "คิวว่างเปล่า เพิ่ม **{count}** เพลงจากประวัติล่าสุดของคุณแล้ว"
 }

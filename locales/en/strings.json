@@ -155,5 +155,11 @@
   "queue.perm_updated": "Queue permission updated: **{level}**",
   "queue.duplicate_mode": "Duplicate handling mode updated to: **{mode}**",
   "error.rate_limited": "You are sending commands too fast. Try again in **{retry_after}s**.",
-  "error.voice_reconnect_failed": "Could not reconnect to **{channel}** after {attempts} attempts."
+  "error.voice_reconnect_failed": "Could not reconnect to **{channel}** after {attempts} attempts.",
+  "embed.volume": "🔊 Volume",
+  "bookmark.saved": "Snapshot **`{name}`** saved with **{count}** tracks.",
+  "admin.dj_set": "Only users with the {role} role can now use control commands.",
+  "admin.dj_cleared": "All users can now control the bot.",
+  "admin.request_channel_set": "Users can now type song names or URLs directly in {channel}.",
+  "admin.auto_playlist": "Queue was empty. Added **{count}** tracks from your recent history."
 }

@@ -193,6 +193,7 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                     _vc.stop()
                 _player.reset()
                 _player.intentional_disconnect = True
+                await self.bot.db.clear_queue(guild_id)
                 if _vc and _vc.is_connected():
                     await _vc.disconnect(force=True)
                 # Notify

@@ -20,6 +20,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from core.i18n import get_locale, t
 from utils.embeds import (
     error_embed, success_embed, info_embed,
     dj_set_embed, dj_cleared_embed,
@@ -65,7 +66,8 @@ class AdminCog(commands.Cog, name="Admin"):
         cfg.dj_only    = True
         await self.bot.db.save_server_config(cfg)
 
-        await interaction.followup.send(embed=dj_set_embed(role), ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        await interaction.followup.send(embed=dj_set_embed(role, locale=locale), ephemeral=True)
 
     @djset_group.command(name="clear", description="Remove DJ role restriction (everyone can control the bot)")
     async def djset_clear(self, interaction: discord.Interaction) -> None:
@@ -81,7 +83,8 @@ class AdminCog(commands.Cog, name="Admin"):
         cfg.dj_only    = False
         await self.bot.db.save_server_config(cfg)
 
-        await interaction.followup.send(embed=dj_cleared_embed(), ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        await interaction.followup.send(embed=dj_cleared_embed(locale=locale), ephemeral=True)
 
     # ── /requestchannel ───────────────────────────────────────────────────────
 
@@ -109,7 +112,8 @@ class AdminCog(commands.Cog, name="Admin"):
         cfg.request_channel_id = channel.id
         await self.bot.db.save_server_config(cfg)
 
-        await interaction.followup.send(embed=request_channel_set_embed(channel), ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        await interaction.followup.send(embed=request_channel_set_embed(channel, locale=locale), ephemeral=True)
 
     @rc_group.command(name="clear", description="Remove the request channel")
     async def rc_clear(self, interaction: discord.Interaction) -> None:

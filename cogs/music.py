@@ -445,8 +445,9 @@ class MusicCog(commands.Cog, name="Music"):
                     await player.extend(seeds)
                     if player.text_channel:
                         try:
+                            loc = await get_locale(guild_id, self.bot.db)
                             await player.text_channel.send(
-                                embed=auto_playlist_embed(len(seeds)), delete_after=30
+                                embed=auto_playlist_embed(len(seeds), locale=loc), delete_after=30
                             )
                         except Exception:
                             pass
@@ -1007,6 +1008,11 @@ class MusicCog(commands.Cog, name="Music"):
                     if not vc.is_playing() and not vc.is_paused():
                         await self._play_next(interaction.guild_id)
                 return
+            else:
+                await interaction.followup.send(
+                    embed=error_embed("Not Found", t("error.no_results", locale, query=query)), ephemeral=True
+                )
+                return
 
         # ── Search query ──────────────────────────────────────────────────────
         is_safe, reason = validate_search_query(query)
@@ -1042,6 +1048,7 @@ class MusicCog(commands.Cog, name="Music"):
     @app_commands.describe(query="Search terms")
     async def search(self, interaction: discord.Interaction, query: str) -> None:
         await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
 
         is_safe, reason = validate_search_query(query)
         if not is_safe:
@@ -1052,13 +1059,13 @@ class MusicCog(commands.Cog, name="Music"):
             tracks = await self.bot.yt_breaker.call(self.bot.youtube.search, query, 10)
         except CircuitBreakerOpen:
             await interaction.followup.send(
-                embed=error_embed("Service Busy", "YouTube is temporarily unavailable."), ephemeral=True
+                embed=error_embed("Service Busy", t("error.circuit_open", locale)), ephemeral=True
             )
             return
 
         if not tracks:
             await interaction.followup.send(
-                embed=error_embed("No Results", f"No results for **{query}**."), ephemeral=True
+                embed=error_embed("No Results", t("error.no_results", locale, query=query)), ephemeral=True
             )
             return
 
@@ -1225,7 +1232,7 @@ class MusicCog(commands.Cog, name="Music"):
             vc.stop()
         player.reset()
         await self.bot.db.clear_queue(interaction.guild_id)
-        await interaction.followup.send(embed=success_embed("Stopped", t("leave.manual", locale)))
+        await interaction.followup.send(embed=success_embed(t("btn.stop", locale), t("leave.manual", locale)))
 
     @app_commands.command(name="nowplaying", description="Show the current track with progress bar")
     async def nowplaying(self, interaction: discord.Interaction) -> None:

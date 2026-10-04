@@ -155,5 +155,11 @@
   "queue.perm_updated": "Permissions de la file d'attente mises à jour : **{level}**",
   "queue.duplicate_mode": "Gestion des doublons mise à jour vers : **{mode}**",
   "error.rate_limited": "Vous envoyez des commandes trop vite. Réessayez dans **{retry_after}s**.",
-  "error.voice_reconnect_failed": "Impossible de se reconnecter à **{channel}** après {attempts} tentatives."
+  "error.voice_reconnect_failed": "Impossible de se reconnecter à **{channel}** après {attempts} tentatives.",
+  "embed.volume": "🔊 Volume",
+  "bookmark.saved": "Instantané **`{name}`** enregistré avec **{count}** pistes.",
+  "admin.dj_set": "Désormais, seuls les utilisateurs ayant le rôle {role} peuvent utiliser les commandes de contrôle.",
+  "admin.dj_cleared": "Tous les utilisateurs peuvent désormais contrôler le bot.",
+  "admin.request_channel_set": "Les utilisateurs peuvent désormais saisir des noms de chansons ou des URL directement dans {channel}.",
+  "admin.auto_playlist": "La file d'attente était vide. **{count}** pistes ajoutées depuis votre historique récent."
 }

@@ -157,12 +157,15 @@ class MetricsCollector:
 
         # DB latency
         try:
-            t0 = time.monotonic()
-            await asyncio.wait_for(
-                self._bot.db.get_server_config(0),
-                timeout=5.0,
-            )
-            snap.db_latency_ms = (time.monotonic() - t0) * 1000
+            if hasattr(self._bot.db, "ping"):
+                snap.db_latency_ms = await self._bot.db.ping(timeout=5.0)
+            else:
+                t0 = time.monotonic()
+                await asyncio.wait_for(
+                    self._bot.db.get_server_config(0),
+                    timeout=5.0,
+                )
+                snap.db_latency_ms = (time.monotonic() - t0) * 1000
         except Exception as exc:
             logger.debug("Metrics: DB latency probe error: %s", exc)
             snap.db_latency_ms = -1.0   # -1 indicates failure
