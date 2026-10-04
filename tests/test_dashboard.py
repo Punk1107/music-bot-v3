@@ -26,7 +26,7 @@ from dashboard.routes import DashboardRouter
 from dashboard.service import DashboardService
 from dashboard.templates import render_dashboard_html
 from dashboard.websocket import DashboardWebSocketManager
-from models.enums import LoopMode
+from models.enums import AudioEffect, LoopMode
 from models.track import Track
 
 
@@ -75,6 +75,18 @@ def mock_bot(dummy_track):
     # Mock seek service on bot
     bot.seek = MagicMock()
     bot.seek.seek_to = AsyncMock(return_value=True)
+    bot.seek.hot_reload = AsyncMock(return_value=True)
+
+    # Mock youtube on bot
+    bot.youtube = MagicMock()
+    bot.youtube.search = AsyncMock(return_value=[dummy_track])
+    bot.youtube.get_track = AsyncMock(return_value=dummy_track)
+    bot.youtube.is_youtube_url = MagicMock(return_value=False)
+    bot.youtube.is_playlist_url = MagicMock(return_value=False)
+    bot.spotify = MagicMock()
+    bot.spotify.is_spotify_url = MagicMock(return_value=False)
+    bot.http_session = MagicMock()
+    bot.get_cog = MagicMock(return_value=None)
 
     return bot
 
@@ -237,6 +249,54 @@ class TestDashboardService:
         assert clear_res["cleared_count"] == 5
         assert len(player) == 0
 
+    @pytest.mark.asyncio
+    async def test_set_loop_mode(self, mock_bot):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+
+        res = await service.set_loop_mode(111, "track")
+        assert res["success"] is True
+        assert player.loop_mode == LoopMode.TRACK
+
+        res_invalid = await service.set_loop_mode(111, "invalid_mode")
+        assert res_invalid["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_toggle_effect(self, mock_bot):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+
+        res = await service.toggle_effect(111, "bass_boost")
+        assert res["success"] is True
+        assert res["enabled"] is True
+        assert AudioEffect.BASS_BOOST in player.effects
+
+        # Toggle off
+        res_off = await service.toggle_effect(111, "bass_boost")
+        assert res_off["success"] is True
+        assert res_off["enabled"] is False
+        assert AudioEffect.BASS_BOOST not in player.effects
+
+    @pytest.mark.asyncio
+    async def test_search_and_add_to_queue(self, mock_bot, dummy_track):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+
+        # Search
+        results = await service.search_tracks("Test Song")
+        assert len(results) == 1
+        assert results[0]["title"] == "Test Song"
+
+        # Add to queue
+        add_res = await service.add_to_queue(111, "Test Song", play_next=False)
+        assert add_res["success"] is True
+        assert len(player) == 1
+
+        # Play next
+        add_next = await service.add_to_queue(111, "Test Song", play_next=True)
+        assert add_next["success"] is True
+        assert len(player) == 2
+
 
 # ── Test WebSocket Manager ────────────────────────────────────────────────────
 
@@ -352,6 +412,32 @@ class TestDashboardRoutes:
             assert player.queue[0].title == "Song 1"
 
     @pytest.mark.asyncio
+    async def test_api_advanced_controls(self, app, mock_bot):
+        async with TestClient(TestServer(app)) as client:
+            player = mock_bot.get_player(111)
+
+            # POST /loop
+            resp_loop = await client.post("/api/v1/guild/111/loop", json={"mode": "track"})
+            assert resp_loop.status == 200
+            assert player.loop_mode == LoopMode.TRACK
+
+            # POST /effects
+            resp_eff = await client.post("/api/v1/guild/111/effects", json={"effect": "vaporwave"})
+            assert resp_eff.status == 200
+            assert AudioEffect.VAPORWAVE in player.effects
+
+            # GET /dashboard/search
+            resp_search = await client.get("/api/v1/dashboard/search?q=test")
+            assert resp_search.status == 200
+            data = await resp_search.json()
+            assert "results" in data
+
+            # POST /queue/add
+            resp_add = await client.post("/api/v1/guild/111/queue/add", json={"query": "test query"})
+            assert resp_add.status == 200
+            assert len(player) >= 1
+
+    @pytest.mark.asyncio
     async def test_auth_with_api_secret(self, mock_bot):
         service = DashboardService(mock_bot)
         ws_mgr = DashboardWebSocketManager(service)
@@ -399,6 +485,17 @@ class TestOfflineCompliance:
         # Verify system font stack
         assert '-apple-system' in html
         assert 'BlinkMacSystemFont' in html
+
+    def test_new_ui_elements_in_template(self):
+        html = render_dashboard_html()
+        assert 'soundwave' in html
+        assert 'data-theme' in html
+        assert 'lyrics-drawer' in html
+        assert 'shortcuts-modal' in html
+        assert 'clear-modal' in html
+        assert 'effects-pills' in html
+        assert 'search-input' in html
+        assert 'item-playnext' in html
 
 
 # ── Test Discord Cog ──────────────────────────────────────────────────────────

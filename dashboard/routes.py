@@ -213,6 +213,52 @@ class DashboardRouter:
         status = 200 if res.get("success") else 400
         return web.json_response(res, status=status)
 
+    async def api_loop(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        mode = body.get("mode") or request.rel_url.query.get("mode", "off")
+        res = await self.service.set_loop_mode(gid, str(mode))
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_effects(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        effect = body.get("effect") or request.rel_url.query.get("effect", "")
+        res = await self.service.toggle_effect(gid, str(effect))
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_search(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        q = request.rel_url.query.get("q", "").strip()
+        limit_raw = request.rel_url.query.get("limit", "5")
+        try:
+            limit = int(limit_raw)
+        except ValueError:
+            limit = 5
+        results = await self.service.search_tracks(q, limit=limit)
+        return web.json_response({"results": results, "count": len(results)})
+
+    async def api_queue_add(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        query = body.get("query", "").strip()
+        play_next = bool(body.get("play_next", False))
+        res = await self.service.add_to_queue(gid, query, play_next=play_next)
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_lyrics(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        res = await self.service.get_lyrics(gid)
+        status = 200 if res.get("success") else 404
+        return web.json_response(res, status=status)
+
     # ── Router Registration ───────────────────────────────────────────────────
 
     def register_routes(self, app: web.Application) -> None:
@@ -224,7 +270,9 @@ class DashboardRouter:
 
         # Dashboard REST API
         app.router.add_get("/api/v1/dashboard/guilds", self.api_get_guilds)
+        app.router.add_get("/api/v1/dashboard/search", self.api_search)
         app.router.add_get("/api/v1/guild/{id}/state", self.api_get_guild_state)
+        app.router.add_get("/api/v1/guild/{id}/lyrics", self.api_lyrics)
 
         # Player Controls
         app.router.add_post("/api/v1/guild/{id}/pause", self.api_pause)
@@ -232,8 +280,11 @@ class DashboardRouter:
         app.router.add_post("/api/v1/guild/{id}/skip", self.api_skip)
         app.router.add_post("/api/v1/guild/{id}/volume", self.api_volume)
         app.router.add_post("/api/v1/guild/{id}/seek", self.api_seek)
+        app.router.add_post("/api/v1/guild/{id}/loop", self.api_loop)
+        app.router.add_post("/api/v1/guild/{id}/effects", self.api_effects)
 
         # Queue Management
+        app.router.add_post("/api/v1/guild/{id}/queue/add", self.api_queue_add)
         app.router.add_post("/api/v1/guild/{id}/queue/move", self.api_queue_move)
         app.router.add_delete("/api/v1/guild/{id}/queue/{index}", self.api_queue_remove)
         app.router.add_post("/api/v1/guild/{id}/queue/clear", self.api_queue_clear)

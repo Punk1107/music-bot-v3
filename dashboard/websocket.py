@@ -170,6 +170,25 @@ class DashboardWebSocketManager:
             result = await self.service.clear_queue(guild_id)
         elif action == "shuffle_queue":
             result = await self.service.shuffle_queue(guild_id)
+        elif action == "loop":
+            mode = data.get("mode", "off")
+            result = await self.service.set_loop_mode(guild_id, mode)
+        elif action in ("toggle_effect", "effect"):
+            effect = data.get("effect", "")
+            result = await self.service.toggle_effect(guild_id, effect)
+        elif action == "add_to_queue":
+            query = data.get("query", "")
+            play_next = bool(data.get("play_next", False))
+            result = await self.service.add_to_queue(guild_id, query, play_next=play_next)
+        elif action == "play_next":
+            query = data.get("query", "")
+            result = await self.service.add_to_queue(guild_id, query, play_next=True)
+        elif action == "search":
+            query = data.get("query", "")
+            limit = int(data.get("limit", 5))
+            results = await self.service.search_tracks(query, limit=limit)
+            await ws.send_json({"type": "search_results", "query": query, "results": results})
+            return
         else:
             await ws.send_json({"type": "error", "message": f"Unknown action: {action}"})
             return

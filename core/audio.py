@@ -34,7 +34,7 @@ _EFFECT_FILTERS: dict[AudioEffect, str] = {
     AudioEffect.CHORUS:         "chorus=0.7:0.9:55:0.4:0.25:2",
     AudioEffect.REVERB:         "aecho=0.8:0.9:1000:0.3",
     AudioEffect.ECHO:           "aecho=0.8:0.88:60:0.4",
-    AudioEffect.DISTORTION:     "afftfilt=real='hypot(re,im)*sin(0)'",
+    AudioEffect.DISTORTION:     "acrusher=level_in=1:level_out=1:bits=8:mode=log:aa=1",
     AudioEffect.MONO:           "pan=mono|c0=0.5*c0+0.5*c1",
     AudioEffect.STEREO_ENHANCE: "extrastereo=m=2.5",
     AudioEffect.COMPRESSOR:     "acompressor=threshold=0.089:ratio=9:attack=200:release=1000",
@@ -111,31 +111,17 @@ class AudioEffectsProcessor:
         pan_filter:       Optional[str]     = None,  # F2.8 Left-Right Audio Balance
         stereo_filter:    Optional[str]     = None,  # F2.8 Stereo Enhancer / Wide Soundstage
         to_seconds:       Optional[int]     = None,  # F2.7 Loop A-B end cutoff timestamp
+        track_duration:   Optional[int]     = None,  # Total track duration for crossfade
     ) -> dict:
         """
         Return a dict with keys `before_options` and `options` suitable for
         discord.py's FFmpegPCMAudio constructor.
-
-        Args:
-            effects:          Active effects to chain.
-            volume:           0.0 - 2.0 playback volume.
-            quality:          Target audio quality.
-            seek_sec:         Start position in seconds (for seek/resume).
-            speed:            Playback speed multiplier (0.5-2.0). Default 1.0.
-            pitch_semitones:  Semitone shift (-6 to +6). Default 0.
-            crossfade_secs:   Duration (s) of fade-out at track end. 0 = disabled.
-            silence_trim:     Remove leading/trailing silence if True.
-            replay_gain:      Normalize loudness across tracks if True.
-            equalizer_filter: FFmpeg equalizer filter string (e.g. equalizer=f=60:...).
-            loudnorm:         EBU R128 loudness normalization if True.
-            pan_filter:       FFmpeg stereo panning filter string (pan=stereo|...).
-            stereo_filter:    FFmpeg stereo widening filter string (extrastereo=m=...).
-            to_seconds:       End position in seconds.
         """
         # Merge both seek aliases
         seek_sec = seek_sec or seek_seconds
 
         before_opts: list[str] = [
+            "-nostdin",
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "5",
@@ -192,9 +178,10 @@ class AudioEffectsProcessor:
         vol_clamped = max(0.0, min(2.0, volume))
         filters.append(f"volume={vol_clamped:.2f}")
 
-        # F23: Crossfade fade-out -- add afade=t=out at end of filter chain
-        if crossfade_secs > 0:
-            filters.append(f"afade=t=out:st=0:d={crossfade_secs}")
+        # F23: Crossfade fade-out -- only apply at track end if duration is known
+        if crossfade_secs > 0 and track_duration and track_duration > crossfade_secs:
+            fade_start = max(0, int(track_duration - crossfade_secs))
+            filters.append(f"afade=t=out:st={fade_start}:d={crossfade_secs}")
 
         filter_str = ",".join(filters)
         # Note: do NOT add -b:a here. discord.FFmpegPCMAudio appends its own
