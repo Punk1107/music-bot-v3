@@ -33,9 +33,10 @@ class PanCog(commands.Cog, name="Pan"):
         if not isinstance(member, discord.Member):
             return False
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not member.voice or not member.voice.channel:
             await interaction.followup.send(
-                embed=error_embed("Not in Voice", "Join a voice channel first."),
+                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)),
                 ephemeral=True,
             )
             return False
@@ -44,7 +45,7 @@ class PanCog(commands.Cog, name="Pan"):
         vc = guild.voice_client if guild else None
         if vc and vc.channel != member.voice.channel:
             await interaction.followup.send(
-                embed=error_embed("Wrong Channel", f"Join **{vc.channel.name}** to use controls."),
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", locale, channel=vc.channel.name)),
                 ephemeral=True,
             )
             return False

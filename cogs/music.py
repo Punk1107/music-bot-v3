@@ -318,7 +318,7 @@ class MusicCog(commands.Cog, name="Music"):
             return None
 
         channel = guild.get_channel(player.last_channel_id)
-        if not channel or not isinstance(channel, discord.VoiceChannel):
+        if not channel or not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             return None
 
         for attempt in range(1, config.RECONNECT_ATTEMPTS + 1):
@@ -778,6 +778,7 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
         query = query.strip()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
 
         # ── Spotify URL ──────────────────────────────────────────────────────
         if self.bot.spotify.is_spotify_url(query):
@@ -790,7 +791,7 @@ class MusicCog(commands.Cog, name="Music"):
             )
             if not tracks:
                 await interaction.followup.send(
-                    embed=error_embed("Spotify Error", "Could not resolve Spotify URL."), ephemeral=True
+                    embed=error_embed("Spotify Error", t("error.no_results", locale, query=query)), ephemeral=True
                 )
                 return
             vc = await self._ensure_voice(interaction)
@@ -804,7 +805,7 @@ class MusicCog(commands.Cog, name="Music"):
                 random.shuffle(tracks)
             await player.extend(tracks)
             asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
-            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle))
+            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
             return
@@ -815,7 +816,7 @@ class MusicCog(commands.Cog, name="Music"):
             tracks = await self.bot.youtube.get_playlist(query, cfg.max_playlist_tracks)
             if not tracks:
                 await interaction.followup.send(
-                    embed=error_embed("Playlist Error", "Could not extract playlist."), ephemeral=True
+                    embed=error_embed("Playlist Error", t("error.no_results", locale, query=query)), ephemeral=True
                 )
                 return
             vc = await self._ensure_voice(interaction)
@@ -829,7 +830,7 @@ class MusicCog(commands.Cog, name="Music"):
                 random.shuffle(tracks)
             await player.extend(tracks)
             asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
-            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle))
+            await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
             return
@@ -846,12 +847,12 @@ class MusicCog(commands.Cog, name="Music"):
                 track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, query)
             except CircuitBreakerOpen:
                 await interaction.followup.send(
-                    embed=error_embed("Service Busy", "YouTube API is temporarily unavailable."), ephemeral=True
+                    embed=error_embed("Service Busy", t("error.circuit_open", locale)), ephemeral=True
                 )
                 return
             if not track:
                 await interaction.followup.send(
-                    embed=error_embed("Not Found", "Could not retrieve that video."), ephemeral=True
+                    embed=error_embed("Not Found", t("error.no_results", locale, query=query)), ephemeral=True
                 )
                 return
             await self.play_track(interaction, track)
@@ -874,13 +875,13 @@ class MusicCog(commands.Cog, name="Music"):
             tracks = await self.bot.yt_breaker.call(self.bot.youtube.search, query, 1)
         except CircuitBreakerOpen:
             await interaction.followup.send(
-                embed=error_embed("Service Busy", "YouTube API is temporarily unavailable."), ephemeral=True
+                embed=error_embed("Service Busy", t("error.circuit_open", locale)), ephemeral=True
             )
             return
 
         if not tracks:
             await interaction.followup.send(
-                embed=error_embed("No Results", f"No results for **{query}**."), ephemeral=True
+                embed=error_embed("No Results", t("error.no_results", locale, query=query)), ephemeral=True
             )
             return
         await self.play_track(interaction, tracks[0])
@@ -986,7 +987,7 @@ class MusicCog(commands.Cog, name="Music"):
         # ── Feature 1.3: SoundCloud & Bandcamp ───────────────────────────────────
         sources_cog = self.bot.cogs.get("Sources")
         if sources_cog and sources_cog.router.is_supported(query):
-            resolved = await sources_cog.router.resolve(query, self.bot.http_session)
+            resolved = await sources_cog.router.resolve(query, max_tracks=50)
             if resolved:
                 vc = await self._ensure_voice(interaction)
                 if not vc:
@@ -1072,10 +1073,25 @@ class MusicCog(commands.Cog, name="Music"):
     async def pause(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
         vc = interaction.guild.voice_client
         if vc and vc.is_playing():
             vc.pause()
             await interaction.followup.send(embed=success_embed("Paused", t("now_playing.paused", locale)), ephemeral=True)
+            if player.now_playing_msg:
+                try:
+                    color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                    embed = now_playing_embed(
+                        player, color, self.bot.user,
+                        paused=True,
+                        theme=getattr(player, "embed_theme", "classic"),
+                        locale=locale,
+                    )
+                    from utils.views import MusicControlView
+                    view = MusicControlView(self.bot, interaction.guild_id)
+                    await player.now_playing_msg.edit(embed=embed, view=view)
+                except Exception:
+                    pass
         else:
             await interaction.followup.send(embed=error_embed("Not Playing", t("error.not_playing", locale)), ephemeral=True)
 
@@ -1083,10 +1099,25 @@ class MusicCog(commands.Cog, name="Music"):
     async def resume(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
         vc = interaction.guild.voice_client
         if vc and vc.is_paused():
             vc.resume()
             await interaction.followup.send(embed=success_embed("Resumed", t("now_playing.playing", locale)), ephemeral=True)
+            if player.now_playing_msg:
+                try:
+                    color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                    embed = now_playing_embed(
+                        player, color, self.bot.user,
+                        paused=False,
+                        theme=getattr(player, "embed_theme", "classic"),
+                        locale=locale,
+                    )
+                    from utils.views import MusicControlView
+                    view = MusicControlView(self.bot, interaction.guild_id)
+                    await player.now_playing_msg.edit(embed=embed, view=view)
+                except Exception:
+                    pass
         else:
             await interaction.followup.send(embed=error_embed("Not Paused", t("error.not_playing", locale)), ephemeral=True)
 

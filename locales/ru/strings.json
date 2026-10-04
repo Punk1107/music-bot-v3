@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 Плейлист добавлен",
   "error.wrong_channel": "Присоединитесь к **{channel}** для управления.",
   "error.not_connected": "Бот не подключен к голосовому каналу.",
-  "error.permission_denied": "У вас нет прав на использование этой команды."
+  "error.permission_denied": "У вас нет прав на использование этой команды.",
+  "btn.clear": "🗑️ Очистить очередь"
 }

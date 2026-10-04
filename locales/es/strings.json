@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 Lista añadida",
   "error.wrong_channel": "Únete a **{channel}** para usar los controles.",
   "error.not_connected": "No estoy en un canal de voz.",
-  "error.permission_denied": "No tienes permiso para usar este comando."
+  "error.permission_denied": "No tienes permiso para usar este comando.",
+  "btn.clear": "🗑️ Limpiar cola"
 }

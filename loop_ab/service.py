@@ -97,22 +97,31 @@ class LoopABService:
                 # Account for speed when calculating sleep duration
                 segment_duration = max(0.5, float(end_sec - start_sec))
                 speed = player.playback_speed if player.playback_speed > 0 else 1.0
-                sleep_secs = segment_duration / speed
+                target_playback_secs = segment_duration / speed
 
-                # Sleep until the end timestamp is reached
-                await asyncio.sleep(sleep_secs)
+                # Count down only while actually playing (hold while paused)
+                elapsed_played = 0.0
+                aborted = False
+                while elapsed_played < target_playback_secs:
+                    guild = self.bot.get_guild(guild_id)
+                    vc = guild.voice_client if guild else None
+                    if not vc or not vc.is_connected() or not (vc.is_playing() or vc.is_paused()):
+                        aborted = True
+                        break
 
-                # Post-sleep validations:
-                # 1. Has loop been cancelled or changed during sleep?
-                if player.loop_ab_range != (start_sec, end_sec):
-                    break
+                    player = self.bot.get_player(guild_id)
+                    if player.loop_ab_range != (start_sec, end_sec) or player._play_seq != captured_seq:
+                        aborted = True
+                        break
 
-                # 2. Is track or sequence still valid?
-                if player._play_seq != captured_seq:
-                    logger.debug(
-                        "guild %d: loop_worker sequence mismatch (%d != %d) — stopping worker.",
-                        guild_id, captured_seq, player._play_seq,
-                    )
+                    if vc.is_playing():
+                        tick = min(0.25, target_playback_secs - elapsed_played)
+                        await asyncio.sleep(tick)
+                        elapsed_played += tick
+                    else:
+                        await asyncio.sleep(0.25)
+
+                if aborted:
                     break
 
                 guild = self.bot.get_guild(guild_id)

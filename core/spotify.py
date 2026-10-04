@@ -42,10 +42,11 @@ class SpotifyExtractor:
     """
 
     def __init__(self) -> None:
-        self._token:     Optional[str] = None
-        self._token_lock: asyncio.Lock = asyncio.Lock()
-        self._sem        = asyncio.Semaphore(5)
-        self._available  = bool(config.SPOTIFY_CLIENT_ID and config.SPOTIFY_CLIENT_SECRET)
+        self._token:            Optional[str] = None
+        self._token_expires_at: float         = 0.0
+        self._token_lock:       asyncio.Lock  = asyncio.Lock()
+        self._sem                             = asyncio.Semaphore(5)
+        self._available                       = bool(config.SPOTIFY_CLIENT_ID and config.SPOTIFY_CLIENT_SECRET)
 
     def is_available(self) -> bool:
         return self._available
@@ -58,7 +59,9 @@ class SpotifyExtractor:
 
     async def _get_token(self, session: aiohttp.ClientSession) -> Optional[str]:
         async with self._token_lock:
-            if self._token:
+            import time
+            now = time.monotonic()
+            if self._token and now < self._token_expires_at:
                 return self._token
             try:
                 resp = await session.post(
@@ -69,6 +72,8 @@ class SpotifyExtractor:
                 )
                 data = await resp.json()
                 self._token = data.get("access_token")
+                expires_in = data.get("expires_in", 3600)
+                self._token_expires_at = time.monotonic() + max(0, expires_in - 60)
                 return self._token
             except Exception as exc:
                 logger.error("Spotify auth failed: %s", exc)
@@ -77,6 +82,7 @@ class SpotifyExtractor:
     async def _invalidate_token(self) -> None:
         async with self._token_lock:
             self._token = None
+            self._token_expires_at = 0.0
 
     # ── API requests ─────────────────────────────────────────────────────────
 

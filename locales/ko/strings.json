@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 재생목록 추가됨",
   "error.wrong_channel": "컨트롤을 사용하려면 **{channel}** 채널에 참여하세요.",
   "error.not_connected": "음성 채널에 연결되어 있지 않습니다.",
-  "error.permission_denied": "이 명령어를 사용할 권한이 없습니다."
+  "error.permission_denied": "이 명령어를 사용할 권한이 없습니다.",
+  "btn.clear": "🗑️ 대기열 비우기"
 }

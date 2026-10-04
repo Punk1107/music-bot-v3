@@ -469,7 +469,14 @@ class DashboardService:
             from lyrics.service import LyricsService
             lyrics_svc = LyricsService()
             result = await lyrics_svc.get_lyrics(track.url, self.bot.http_session)
-            if not result or not result.lines:
+            if not result:
+                return {
+                    "success": False,
+                    "error": "No lyrics found for this track",
+                    "title": track.title,
+                }
+            lines, is_auto = result
+            if not lines:
                 return {
                     "success": False,
                     "error": "No lyrics found for this track",
@@ -479,13 +486,14 @@ class DashboardService:
                 "success": True,
                 "title": track.title,
                 "uploader": track.uploader,
+                "is_auto": is_auto,
                 "lines": [
                     {
-                        "start": line.start_seconds,
-                        "end": line.end_seconds,
+                        "start": line.start_sec,
+                        "timestamp": line.timestamp_str,
                         "text": line.text,
                     }
-                    for line in result.lines
+                    for line in lines
                 ],
             }
         except Exception as exc:

@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 Playlist ajoutée",
   "error.wrong_channel": "Rejoignez **{channel}** pour utiliser les commandes.",
   "error.not_connected": "Je ne suis pas dans un salon vocal.",
-  "error.permission_denied": "Vous n'avez pas la permission d'utiliser cette commande."
+  "error.permission_denied": "Vous n'avez pas la permission d'utiliser cette commande.",
+  "btn.clear": "🗑️ Vider la file"
 }

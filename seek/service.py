@@ -89,7 +89,7 @@ class SeekService:
         cfg_server = await self.bot.db.get_server_config(guild_id)
         ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
             effects=player.effects,
-            volume=player.volume,
+            volume=1.0,  # Unity gain; live volume is handled by PCMVolumeTransformer
             quality=cfg_server.audio_quality,
             seek_seconds=target_sec,
             speed=player.playback_speed,

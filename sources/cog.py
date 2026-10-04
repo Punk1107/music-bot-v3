@@ -24,6 +24,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from sources.router import MultiSourceRouter, SourceKind, classify
+from core.i18n import t, get_locale
 from utils.embeds import error_embed, success_embed, info_embed, playlist_added_embed
 from utils.formatters import truncate, format_duration
 
@@ -73,10 +74,11 @@ class SCSearchSelect(discord.ui.Select):
         track = self.tracks[idx]
 
         # Ensure user is in a voice channel
+        locale = await get_locale(self.guild_id, self.bot.db)
         member = interaction.guild.get_member(interaction.user.id)
         if not member or not member.voice or not member.voice.channel:
             await interaction.followup.send(
-                embed=error_embed("Not in Voice", "You must be in a voice channel."),
+                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)),
                 ephemeral=True,
             )
             return
@@ -98,13 +100,13 @@ class SCSearchSelect(discord.ui.Select):
         pos    = await player.enqueue(track)
 
         embed = discord.Embed(
-            title       = "🔊  Added from SoundCloud",
+            title       = f"🔊  {t('embed.added_to_queue', locale)}",
             description = f"**{discord.utils.escape_markdown(track.title)}**\n"
                           f"by *{discord.utils.escape_markdown(track.uploader)}*",
             color       = 0xFF5500,   # SoundCloud orange
         )
-        embed.add_field(name="⏱ Duration", value=track.duration_str, inline=True)
-        embed.add_field(name="📋 Position", value=f"#{pos}",         inline=True)
+        embed.add_field(name=t("embed.duration", locale), value=track.duration_str, inline=True)
+        embed.add_field(name=t("embed.position", locale), value=f"#{pos}",         inline=True)
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
 
@@ -227,8 +229,10 @@ class SourcesCog(commands.Cog, name="Sources"):
         if not self.router.is_supported(query):
             return False
 
-        await interaction.response.defer()
+        if not interaction.response.is_done():
+            await interaction.response.defer()
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         kind = classify(query)
 
         # Resolve tracks
@@ -269,28 +273,26 @@ class SourcesCog(commands.Cog, name="Sources"):
         player = self.bot.get_player(interaction.guild_id)
 
         # Attribute and enqueue
-        for t in tracks:
-            t.requested_by_id   = interaction.user.id
-            t.requested_by_name = interaction.user.display_name
+        for t_item in tracks:
+            t_item.requested_by_id   = interaction.user.id
+            t_item.requested_by_name = interaction.user.display_name
 
         if len(tracks) == 1:
             await player.enqueue(tracks[0])
             embed = discord.Embed(
-                title       = "🔊  Added to Queue",
+                title       = f"🔊  {t('embed.added_to_queue', locale)}",
                 description = f"**{discord.utils.escape_markdown(tracks[0].title)}**\n"
                               f"*{discord.utils.escape_markdown(tracks[0].uploader)}*",
                 color       = 0xFF5500 if is_soundcloud_source(kind) else 0x1DA0C3,
             )
             if tracks[0].thumbnail:
                 embed.set_thumbnail(url=tracks[0].thumbnail)
-            embed.add_field(name="⏱ Duration", value=tracks[0].duration_str, inline=True)
+            embed.add_field(name=t("embed.duration", locale), value=tracks[0].duration_str, inline=True)
         else:
             if shuffle and len(tracks) > 1:
                 random.shuffle(tracks)
             await player.extend(tracks)
-            src = "SoundCloud" if is_soundcloud_source(kind) else "Bandcamp"
-            embed = playlist_added_embed(len(tracks), shuffled=shuffle)
-            embed.title = f"🔊  {src}: Added {len(tracks)} tracks"
+            embed = playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale)
 
         await interaction.followup.send(embed=embed)
 
