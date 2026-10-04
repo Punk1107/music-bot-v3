@@ -95,31 +95,41 @@ class AudioEffectsProcessor:
 
     def build_ffmpeg_options(
         self,
-        effects:         list[AudioEffect] = (),
-        volume:          float             = 1.0,
-        quality:         AudioQuality      = AudioQuality.HIGH,
-        seek_sec:        int               = 0,
-        seek_seconds:    int               = 0,    # alias for seek_sec (Feature 11)
-        speed:           float             = 1.0,  # F21 Playback Speed
-        pitch_semitones: int               = 0,    # F22 Pitch Shift
-        crossfade_secs:  int               = 0,    # F23 Crossfade fade-out duration
-        silence_trim:    bool              = False, # F24 Silence Trim
-        replay_gain:     bool              = False, # F25 Replay Gain / Normalize
+        effects:          list[AudioEffect] = (),
+        volume:           float             = 1.0,
+        quality:          AudioQuality      = AudioQuality.HIGH,
+        seek_sec:         int               = 0,
+        seek_seconds:     int               = 0,     # alias for seek_sec (Feature 11)
+        speed:            float             = 1.0,   # F21 Playback Speed
+        pitch_semitones:  int               = 0,     # F22 Pitch Shift
+        crossfade_secs:   int               = 0,     # F23 Crossfade fade-out duration
+        silence_trim:     bool              = False, # F24 Silence Trim
+        replay_gain:      bool              = False, # F25 Replay Gain / Normalize
+        equalizer_filter: Optional[str]     = None,  # F2.5 Frequency Equalizer
+        loudnorm:         bool              = False, # F2.6 EBU R128 Loudness Normalization
+        pan_filter:       Optional[str]     = None,  # F2.8 Left-Right Audio Balance
+        stereo_filter:    Optional[str]     = None,  # F2.8 Stereo Enhancer / Wide Soundstage
+        to_seconds:       Optional[int]     = None,  # F2.7 Loop A-B end cutoff timestamp
     ) -> dict:
         """
         Return a dict with keys `before_options` and `options` suitable for
         discord.py's FFmpegPCMAudio constructor.
 
         Args:
-            effects:         Active effects to chain.
-            volume:          0.0 - 2.0 playback volume.
-            quality:         Target audio quality.
-            seek_sec:        Start position in seconds (for seek/resume).
-            speed:           Playback speed multiplier (0.5-2.0). Default 1.0.
-            pitch_semitones: Semitone shift (-6 to +6). Default 0.
-            crossfade_secs:  Duration (s) of fade-out at track end. 0 = disabled.
-            silence_trim:    Remove leading/trailing silence if True.
-            replay_gain:     Normalize loudness across tracks if True.
+            effects:          Active effects to chain.
+            volume:           0.0 - 2.0 playback volume.
+            quality:          Target audio quality.
+            seek_sec:         Start position in seconds (for seek/resume).
+            speed:            Playback speed multiplier (0.5-2.0). Default 1.0.
+            pitch_semitones:  Semitone shift (-6 to +6). Default 0.
+            crossfade_secs:   Duration (s) of fade-out at track end. 0 = disabled.
+            silence_trim:     Remove leading/trailing silence if True.
+            replay_gain:      Normalize loudness across tracks if True.
+            equalizer_filter: FFmpeg equalizer filter string (e.g. equalizer=f=60:...).
+            loudnorm:         EBU R128 loudness normalization if True.
+            pan_filter:       FFmpeg stereo panning filter string (pan=stereo|...).
+            stereo_filter:    FFmpeg stereo widening filter string (extrastereo=m=...).
+            to_seconds:       End position in seconds.
         """
         # Merge both seek aliases
         seek_sec = seek_sec or seek_seconds
@@ -152,14 +162,29 @@ class AudioEffectsProcessor:
         if speed_chain:
             filters.append(speed_chain)
 
+        # F2.5: Frequency Equalizer
+        if equalizer_filter:
+            filters.append(equalizer_filter)
+
+        # F2.8: Audio Pan (balance)
+        if pan_filter:
+            filters.append(pan_filter)
+
+        # F2.8: Stereo Widening / Soundstage Enhance
+        if stereo_filter:
+            filters.append(stereo_filter)
+
         # Existing audio effects
         for eff in effects:
             f = _EFFECT_FILTERS.get(eff)
             if f:
                 filters.append(f)
 
-        # F25: Replay Gain / Normalize
-        if replay_gain:
+        # F2.6: EBU R128 Loudnorm (takes priority over legacy dynaudnorm)
+        if loudnorm:
+            filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+        elif replay_gain:
+            # F25: Legacy Replay Gain / Normalize
             filters.append("dynaudnorm=f=75:g=25:p=0.95")
 
         # Volume filter (always last so it applies cleanly)
@@ -174,7 +199,11 @@ class AudioEffectsProcessor:
         # Note: do NOT add -b:a here. discord.FFmpegPCMAudio appends its own
         # output pipeline (-f s16le -ar 48000 -ac 2) internally. Adding -b:a
         # conflicts with that PCM output format and causes silent playback.
-        options_parts = ["-vn", f"-af {filter_str}"]
+        options_parts = ["-vn"]
+        if filter_str:
+            options_parts.append(f"-af {filter_str}")
+        if to_seconds is not None and to_seconds > 0:
+            options_parts.append(f"-to {int(to_seconds)}")
 
         return {
             "before_options": " ".join(before_opts),

@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ Reculé de {seconds}s (à **{time}**).",
   "seek.replay": "🔄 Relecture de **{title}** depuis le début.",
   "seek.invalid_format": "Format de temps invalide. Utilisez `MM:SS`, `HH:MM:SS` ou des secondes (ex. `1:30`, `90`).",
-  "seek.out_of_range": "Le repère temporel est hors limites. La durée de la piste est de **{duration}**."
+  "seek.out_of_range": "Le repère temporel est hors limites. La durée de la piste est de **{duration}**.",
+
+  "equalizer.preset_applied": "🎚️ Préréglage de l'égaliseur appliqué : **{name}**",
+  "equalizer.custom_applied": "🎚️ Égaliseur personnalisé appliqué (Sous-basses : **{sub_bass}dB**, Basses : **{bass}dB**, Médiums : **{mid}dB**, Aigus : **{treble}dB**).",
+  "equalizer.reset": "🎚️ Égaliseur réinitialisé à plat (Flat).",
+  "equalizer.invalid_preset": "Préréglage `{name}` invalide. Disponibles : {presets}",
+  "equalizer.invalid_gain": "Les valeurs de gain doivent être comprises entre -10dB et +10dB.",
+  "loudnorm.enabled": "📊 Normalisation de l'intensité sonore EBU R128 **activée**.",
+  "loudnorm.disabled": "📊 Normalisation de l'intensité sonore EBU R128 **désactivée**.",
+  "loopab.started": "🔂 Boucle A-B activée : **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 Boucle A-B désactivée.",
+  "loopab.invalid_times": "Plage horaire invalide : L'heure de fin ({end}) doit être supérieure à l'heure de début ({start}).",
+  "loopab.not_active": "La boucle A-B n'est pas active actuellement.",
+  "pan.set": "🎧 Balance audio réglée sur **{position}**.",
+  "stereo.set": "🎧 Scène sonore stéréo réglée sur **{mode}**."
 }

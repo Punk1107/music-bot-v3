@@ -149,6 +149,15 @@ class GuildPlayer:
         self.silence_trim:      bool  = False # F24
         self.replay_gain:       bool  = False # F25
 
+        # ── Filtergraph Round 2: Features 2.5–2.8 ─────────────────────────────
+        self.equalizer_bands:   dict[str, float]          = {}     # F2.5: {"sub_bass": 0, "bass": 0, "mid": 0, "treble": 0}
+        self.equalizer_preset:  Optional[str]             = None   # F2.5: preset name
+        self.loudnorm:          bool                      = False  # F2.6: EBU R128 Loudnorm
+        self.loop_ab_range:     Optional[tuple[int, int]] = None   # F2.7: (start_sec, end_sec)
+        self.loop_ab_task:      Optional[asyncio.Task]    = None   # F2.7: timer task
+        self.pan_balance:       float                     = 0.0    # F2.8: -1.0 to 1.0 (0.0 = center)
+        self.stereo_width:      float                     = 1.0    # F2.8: 1.0 = normal
+
         # ── Tier B: Embed Theme (F27) ─────────────────────────────────
         self.embed_theme: str = "classic"  # matches EmbedTheme values
 
@@ -237,8 +246,16 @@ class GuildPlayer:
             self._queue.clear()
             return count
 
+    def cancel_loop_ab(self) -> None:
+        """Cancel running Loop A-B timer task (Feature 2.7)."""
+        if self.loop_ab_task and not self.loop_ab_task.done():
+            self.loop_ab_task.cancel()
+        self.loop_ab_task = None
+        self.loop_ab_range = None
+
     async def finish_track(self) -> None:
         """Mark current track finished (stores to history for LOOP:TRACK)."""
+        self.cancel_loop_ab()
         if self.now_playing:
             self._history_track = self.now_playing
         # Advance sequence so stale after_play callbacks are rejected (Bug 3)
@@ -439,6 +456,13 @@ class GuildPlayer:
         self.crossfade_seconds     = 0
         self.silence_trim          = False
         self.replay_gain           = False
+        # Filtergraph Round 2: reset EQ, loudnorm, pan, stereo, loop_ab
+        self.cancel_loop_ab()
+        self.equalizer_bands       = {}
+        self.equalizer_preset      = None
+        self.loudnorm              = False
+        self.pan_balance           = 0.0
+        self.stereo_width          = 1.0
         # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
         # and replace the playing lock (may be locked from a concurrent call).
         self._play_seq     += 1

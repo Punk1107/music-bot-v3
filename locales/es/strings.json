@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ Rebobinado {seconds}s (en **{time}**).",
   "seek.replay": "🔄 Reproduciendo **{title}** desde el principio.",
   "seek.invalid_format": "Formato de tiempo no válido. Usa `MM:SS`, `HH:MM:SS` o segundos (ej. `1:30`, `90`).",
-  "seek.out_of_range": "La marca de tiempo está fuera de rango. La duración de la pista es **{duration}**."
+  "seek.out_of_range": "La marca de tiempo está fuera de rango. La duración de la pista es **{duration}**.",
+
+  "equalizer.preset_applied": "🎚️ Preajuste de ecualizador aplicado: **{name}**",
+  "equalizer.custom_applied": "🎚️ Ecualizador personalizado aplicado (Subgraves: **{sub_bass}dB**, Graves: **{bass}dB**, Medios: **{mid}dB**, Agudos: **{treble}dB**).",
+  "equalizer.reset": "🎚️ Ecualizador restablecido a plano (Flat).",
+  "equalizer.invalid_preset": "Preajuste `{name}` no válido. Disponibles: {presets}",
+  "equalizer.invalid_gain": "Los valores de ganancia deben estar entre -10dB y +10dB.",
+  "loudnorm.enabled": "📊 Normalización de volumen EBU R128 **activada**.",
+  "loudnorm.disabled": "📊 Normalización de volumen EBU R128 **desactivada**.",
+  "loopab.started": "🔂 Bucle A-B activado: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 Bucle A-B desactivado.",
+  "loopab.invalid_times": "Intervalo de tiempo no válido: La hora de finalización ({end}) debe ser mayor que la de inicio ({start}).",
+  "loopab.not_active": "El bucle A-B no está activo actualmente.",
+  "pan.set": "🎧 Balance de audio ajustado a **{position}**.",
+  "stereo.set": "🎧 Escenario sonoro estéreo ajustado a **{mode}**."
 }

@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ {seconds} 秒巻き戻しました (**{time}**)。",
   "seek.replay": "🔄 **{title}** を最初から再生します。",
   "seek.invalid_format": "無効な時間形式です。`MM:SS`、`HH:MM:SS`、または秒（例: `1:30`、`90`）を使用してください。",
-  "seek.out_of_range": "指定した時間が範囲外です。トラックの長さは **{duration}** です。"
+  "seek.out_of_range": "指定した時間が範囲外です。トラックの長さは **{duration}** です。",
+
+  "equalizer.preset_applied": "🎚️ イコライザープリセット **{name}** を適用しました。",
+  "equalizer.custom_applied": "🎚️ カスタムイコライザーを適用しました (重低音: **{sub_bass}dB**, 低音: **{bass}dB**, 中音: **{mid}dB**, 高音: **{treble}dB**)。",
+  "equalizer.reset": "🎚️ イコライザーをフラットにリセットしました。",
+  "equalizer.invalid_preset": "プリセット `{name}` は無効です。利用可能: {presets}",
+  "equalizer.invalid_gain": "ゲイン値は -10dB から +10dB の間である必要があります。",
+  "loudnorm.enabled": "📊 EBU R128 ラウドネスノーマライゼーションが**有効**になりました。",
+  "loudnorm.disabled": "📊 EBU R128 ラウドネスノーマライゼーションが**無効**になりました。",
+  "loopab.started": "🔂 A-B ループが有効になりました: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 A-B ループが無効になりました。",
+  "loopab.invalid_times": "無効な時間範囲: 終了時間 ({end}) は開始時間 ({start}) より後である必要があります。",
+  "loopab.not_active": "現在 A-B ループは有効ではありません。",
+  "pan.set": "🎧 オーディオバランスを **{position}** に設定しました。",
+  "stereo.set": "🎧 ステレオ音場を **{mode}** に設定しました。"
 }

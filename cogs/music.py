@@ -508,6 +508,14 @@ class MusicCog(commands.Cog, name="Music"):
             return None
 
         # ── Build FFmpeg options ───────────────────────────────────────────────
+        from equalizer.presets import build_equalizer_filter
+        from pan.filter import build_pan_filter, build_stereo_enhance_filter
+
+        eq_filter = build_equalizer_filter(getattr(player, "equalizer_bands", None))
+        pan_filter = build_pan_filter(getattr(player, "pan_balance", 0.0))
+        stereo_filter = build_stereo_enhance_filter(getattr(player, "stereo_width", 1.0))
+        loudnorm_flag = getattr(player, "loudnorm", False)
+
         cfg_server = await self.bot.db.get_server_config(guild_id)
 
         # Feature 11: Resume offset — if track has a stored position, seek to it
@@ -525,6 +533,10 @@ class MusicCog(commands.Cog, name="Music"):
             crossfade_secs  = player.crossfade_seconds,     # F23
             silence_trim    = player.silence_trim,           # F24
             replay_gain     = player.replay_gain,            # F25
+            equalizer_filter= eq_filter,
+            loudnorm        = loudnorm_flag,
+            pan_filter      = pan_filter,
+            stereo_filter   = stereo_filter,
         )
 
         # ── Start playback ────────────────────────────────────────────────────

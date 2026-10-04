@@ -159,6 +159,13 @@ class TestFormatParameters:
         ("seek.rewind",      {"seconds": 15, "time": "1:00"}),
         ("seek.replay",      {"title": "Test Song"}),
         ("seek.out_of_range", {"duration": "3:45"}),
+        ("equalizer.preset_applied", {"name": "Pop"}),
+        ("equalizer.custom_applied", {"sub_bass": "+2.0", "bass": "+1.0", "mid": "+2.0", "treble": "+3.0"}),
+        ("equalizer.invalid_preset", {"name": "invalid", "presets": "pop, rock"}),
+        ("loopab.started", {"start": "0:30", "end": "1:15"}),
+        ("loopab.invalid_times", {"start": "1:15", "end": "0:30"}),
+        ("pan.set", {"position": "Center (0%)"}),
+        ("stereo.set", {"mode": "Wide (1.5x)"}),
     ]
 
     @pytest.mark.parametrize("locale", sorted(EXPECTED_LOCALES))

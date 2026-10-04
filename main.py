@@ -59,6 +59,7 @@ from core.startup_validator import validate_pre_login  # Pre-login validation
 from webserver           import WebServer
 from autoplay.service    import AutoplayService      # Feature 1.4: Smart Autoplay
 from seek.service        import SeekService          # Features 2.1-2.4: Seek & Hot-Reload
+from loop_ab.service     import LoopABService        # Feature 2.7: Loop A-B Segment Repeat
 
 
 setup_logging()
@@ -88,6 +89,10 @@ _COGS = [
     "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /jump)
     "autoplay.cog",          # Feature 1.4: Smart Autoplay from YouTube Related Videos (/autoplay)
     "seek.cog",              # Features 2.1-2.4: Seek, Fast-Forward, Rewind, Replay (/seek /forward /rewind /replay)
+    "equalizer.cog",         # Feature 2.5: Frequency Equalizer (/equalizer /eq)
+    "loudnorm.cog",          # Feature 2.6: EBU R128 Smart Loudness Normalization (/loudnorm)
+    "loop_ab.cog",           # Feature 2.7: Loop A-B Segment Repeat (/loopab)
+    "pan.cog",               # Feature 2.8: Audio Pan & Stereo Widening (/pan /stereowide)
 ]
 
 
@@ -123,6 +128,7 @@ class MusicBot(commands.Bot):
         self.autoplay:       AutoplayService     = AutoplayService(self.youtube)  # Feature 1.4
         self.autoplay_service: AutoplayService   = self.autoplay
         self.seek:           SeekService         = SeekService(self)              # Features 2.1-2.4
+        self.loop_ab:        LoopABService       = LoopABService(self)            # Feature 2.7
 
         # ── Circuit breakers ──────────────────────────────────────────────────
         self.yt_breaker = CircuitBreaker(

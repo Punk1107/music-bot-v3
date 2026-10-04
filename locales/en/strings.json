@@ -77,5 +77,19 @@
   "seek.rewind": "⏪ Rewound {seconds}s (at **{time}**).",
   "seek.replay": "🔄 Replaying **{title}** from the beginning.",
   "seek.invalid_format": "Invalid time format. Use `MM:SS`, `HH:MM:SS`, or seconds (e.g. `1:30`, `90`).",
-  "seek.out_of_range": "Timestamp is out of range. Track duration is **{duration}**."
+  "seek.out_of_range": "Timestamp is out of range. Track duration is **{duration}**.",
+
+  "equalizer.preset_applied": "🎚️ Applied equalizer preset: **{name}**",
+  "equalizer.custom_applied": "🎚️ Custom equalizer applied (Sub-bass: **{sub_bass}dB**, Bass: **{bass}dB**, Mid: **{mid}dB**, Treble: **{treble}dB**).",
+  "equalizer.reset": "🎚️ Equalizer reset to Flat.",
+  "equalizer.invalid_preset": "Invalid preset `{name}`. Available: {presets}",
+  "equalizer.invalid_gain": "Gain values must be between -10dB and +10dB.",
+  "loudnorm.enabled": "📊 EBU R128 Loudness Normalization **enabled**.",
+  "loudnorm.disabled": "📊 EBU R128 Loudness Normalization **disabled**.",
+  "loopab.started": "🔂 A-B Loop enabled: **{start}** ➔ **{end}**",
+  "loopab.disabled": "🔂 A-B Loop disabled.",
+  "loopab.invalid_times": "Invalid time range: End time ({end}) must be greater than start time ({start}).",
+  "loopab.not_active": "A-B Loop is not currently active.",
+  "pan.set": "🎧 Audio balance set to **{position}**.",
+  "stereo.set": "🎧 Stereo soundstage set to **{mode}**."
 }
