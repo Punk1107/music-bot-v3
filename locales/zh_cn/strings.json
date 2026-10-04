@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 歌单已加入",
   "error.wrong_channel": "请加入 **{channel}** 以使用控制功能。",
   "error.not_connected": "未连接至语音频道。",
-  "error.permission_denied": "您没有权限使用此命令。"
+  "error.permission_denied": "您没有权限使用此命令。",
+  "btn.clear": "🗑️ 清空队列"
 }

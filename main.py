@@ -48,6 +48,7 @@ from core.media_cache    import (                    # Tier-S+ F14 F15
     prewarm_queue_thumbnails, bg_refresh_metadata, prune_caches as prune_media_caches,
     cache_stats as media_cache_stats,
 )
+from core.i18n import get_locale, t
 from core.lru_cache      import check_memory_pressure, combined_stats as lru_stats  # F31 F32
 from core.self_test      import run_self_test, SelfTestReport                        # F34
 from core.stability      import (                    # Stability suite
@@ -547,8 +548,9 @@ class MusicBot(commands.Bot):
                             logger.info("guild %d: Auto-leaving — alone for 90s", gid)
                             if _player.text_channel:
                                 try:
+                                    loc = await get_locale(gid, self.db)
                                     await _player.text_channel.send(
-                                        "👋 ออกจากห้องเนื่องจากไม่มีคนอยู่ด้วย",
+                                        t("leave.alone", loc),
                                         delete_after=20,
                                     )
                                 except Exception:
@@ -814,8 +816,9 @@ class MusicBot(commands.Bot):
                 logger.info("Auto-disconnecting guild %d (idle for %.0fs)", guild_id, elapsed)
                 if player.text_channel:
                     try:
+                        loc = await get_locale(guild_id, self.db)
                         await player.text_channel.send(
-                            "💤 Disconnected due to inactivity.\n*ออกจากห้องเนื่องจากไม่มีการใช้งาน*",
+                            t("leave.idle", loc),
                             delete_after=30,
                         )
                     except Exception:

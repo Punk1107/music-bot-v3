@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 เพิ่มเพลย์ลิสต์แล้ว",
   "error.wrong_channel": "กรุณาเข้าห้อง **{channel}** เพื่อใช้งานปุ่มควบคุม",
   "error.not_connected": "บ็อตไม่ได้อยู่ในห้องเสียง",
-  "error.permission_denied": "คุณไม่มีสิทธิ์ในการใช้คำสั่งนี้"
+  "error.permission_denied": "คุณไม่มีสิทธิ์ในการใช้คำสั่งนี้",
+  "btn.clear": "🗑️ ล้างคิว"
 }

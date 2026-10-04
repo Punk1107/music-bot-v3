@@ -77,46 +77,55 @@ def command_error_embed(title: str, description: str) -> discord.Embed:
     return embed
 
 
-def playback_error_embed(error_str: str) -> discord.Embed:
+def playback_error_embed(error_str: str, locale: str = "en") -> discord.Embed:
     title, emoji, desc_en, desc_th = classify_error(error_str)
+    if locale == "th":
+        desc = desc_th
+    elif locale == "en":
+        desc = desc_en
+    else:
+        desc = f"{desc_en}\n\n*{desc_th}*"
     embed = discord.Embed(
         title       = f"{emoji} {title}",
-        description = f"{desc_en}\n\n*{desc_th}*",
+        description = desc,
         color       = discord.Color.orange(),
     )
     return embed
 
 
-def voice_connection_error_embed(channel_name: str, attempts: int) -> discord.Embed:
+def voice_connection_error_embed(channel_name: str, attempts: int, locale: str = "en") -> discord.Embed:
+    if locale == "th":
+        desc = f"ไม่สามารถเชื่อมต่อ **{channel_name}** ได้หลังจากพยายาม {attempts} ครั้ง"
+    else:
+        desc = f"Could not reconnect to **{channel_name}** after {attempts} attempts."
     embed = discord.Embed(
         title       = "🔌 Voice Reconnect Failed",
-        description = (
-            f"Could not reconnect to **{channel_name}** after {attempts} attempts.\n"
-            f"*ไม่สามารถเชื่อมต่อ **{channel_name}** ได้หลังจาก {attempts} ครั้ง*"
-        ),
+        description = desc,
         color       = discord.Color.red(),
     )
     return embed
 
 
-def dj_required_embed() -> discord.Embed:
+def dj_required_embed(locale: str = "en") -> discord.Embed:
+    if locale == "th":
+        desc = "เฉพาะผู้มี **DJ role** หรือผู้ดูแลระบบเท่านั้นที่สามารถใช้คำสั่งนี้ได้"
+    else:
+        desc = "Only users with the **DJ role** can use this command."
     return discord.Embed(
         title       = "🎚️ DJ Permission Required",
-        description = (
-            "Only users with the **DJ role** can use this command.\n"
-            "*เฉพาะผู้มี DJ role เท่านั้นที่สามารถใช้คำสั่งนี้ได้*"
-        ),
+        description = desc,
         color       = discord.Color.orange(),
     )
 
 
-def rate_limited_embed(retry_after: float) -> discord.Embed:
+def rate_limited_embed(retry_after: float, locale: str = "en") -> discord.Embed:
+    if locale == "th":
+        desc = f"คุณส่งคำสั่งเร็วเกินไป ลองอีกครั้งใน **{retry_after:.1f} วินาที**"
+    else:
+        desc = f"You are sending commands too fast. Try again in **{retry_after:.1f}s**."
     return discord.Embed(
         title       = "⏳ Slow Down!",
-        description = (
-            f"You are sending commands too fast. Try again in **{retry_after:.1f}s**.\n"
-            f"*คุณส่งคำสั่งเร็วเกินไป ลองอีกครั้งใน {retry_after:.1f} วินาที*"
-        ),
+        description = desc,
         color       = discord.Color.yellow(),
     )
 

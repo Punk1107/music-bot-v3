@@ -352,7 +352,10 @@ class GuildPlayer:
         if not self.play_start_time or not self.now_playing:
             return 0
         delta = datetime.now(timezone.utc) - self.play_start_time
-        return min(int(delta.total_seconds()), self.now_playing.duration)
+        elapsed = max(0, int(delta.total_seconds()))
+        if self.now_playing.duration and self.now_playing.duration > 0:
+            return min(elapsed, self.now_playing.duration)
+        return elapsed
 
     @property
     def remaining_seconds(self) -> int:

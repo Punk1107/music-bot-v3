@@ -66,7 +66,12 @@ class EffectsCog(commands.Cog, name="Effects"):
             return
         player = self.bot.get_player(interaction.guild_id)
         player.volume = level / 100
-        self._restart_audio(interaction.guild_id)
+        guild = interaction.guild
+        vc = guild.voice_client if guild else None
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = player.volume
+        else:
+            self._restart_audio(interaction.guild_id)
         await interaction.followup.send(
             embed=success_embed("Volume Set", t("volume.set", locale, vol=level)), ephemeral=True
         )

@@ -32,6 +32,9 @@ class RateLimiter:
         while dq and now - dq[0] > self.window:
             dq.popleft()
 
+        if len(self._windows) > 1000:
+            self.cleanup()
+
         if len(dq) >= self.max_calls:
             return True
 
@@ -44,7 +47,23 @@ class RateLimiter:
         dq  = self._windows.get(key)
         if not dq:
             return 0.0
-        return max(0.0, self.window - (time.monotonic() - dq[0]))
+        now = time.monotonic()
+        while dq and now - dq[0] > self.window:
+            dq.popleft()
+        if not dq:
+            self._windows.pop(key, None)
+            return 0.0
+        return max(0.0, self.window - (now - dq[0]))
+
+    def cleanup(self) -> None:
+        """Evict keys that have no active timestamps in their window."""
+        now = time.monotonic()
+        expired_keys = [
+            k for k, dq in self._windows.items()
+            if not dq or now - dq[-1] > self.window
+        ]
+        for k in expired_keys:
+            self._windows.pop(k, None)
 
     def reset(self, guild_id: int, user_id: int) -> None:
         """Manually clear rate limit for a (guild, user)."""

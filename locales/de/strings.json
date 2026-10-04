@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 Playlist hinzugefügt",
   "error.wrong_channel": "Tritt **{channel}** bei, um die Steuerung zu nutzen.",
   "error.not_connected": "Ich bin in keinem Sprachkanal.",
-  "error.permission_denied": "Du hast keine Berechtigung für diesen Befehl."
+  "error.permission_denied": "Du hast keine Berechtigung für diesen Befehl.",
+  "btn.clear": "🗑️ Warteschlange leeren"
 }

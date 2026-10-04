@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 プレイリストを追加しました",
   "error.wrong_channel": "操作するには **{channel}** に参加してください。",
   "error.not_connected": "ボイスチャンネルに接続していません。",
-  "error.permission_denied": "このコマンドを実行する権限がありません。"
+  "error.permission_denied": "このコマンドを実行する権限がありません。",
+  "btn.clear": "🗑️ キューをクリア"
 }

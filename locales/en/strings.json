@@ -119,5 +119,6 @@
   "embed.playlist_added": "📋 Playlist Added",
   "error.wrong_channel": "Join **{channel}** to use controls.",
   "error.not_connected": "I'm not in a voice channel.",
-  "error.permission_denied": "You do not have permission to use this command."
+  "error.permission_denied": "You do not have permission to use this command.",
+  "btn.clear": "🗑️ Clear"
 }
