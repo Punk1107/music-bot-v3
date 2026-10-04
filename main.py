@@ -86,7 +86,7 @@ _COGS = [
     # ── New Features (isolated folders) ──────────────────────────────────────
     "sources.cog",           # Feature 1.3: SoundCloud & Bandcamp native (load before music)
     "lyrics.cog",            # Feature 1.1: Synced lyrics from YouTube subtitles (/lyrics)
-    "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /jump)
+    "chapters.cog",          # Feature 1.2: Chapter detection & seamless jump (/chapters /chapter_jump /cjump)
     "autoplay.cog",          # Feature 1.4: Smart Autoplay from YouTube Related Videos (/autoplay)
     "seek.cog",              # Features 2.1-2.4: Seek, Fast-Forward, Rewind, Replay (/seek /forward /rewind /replay)
     "equalizer.cog",         # Feature 2.5: Frequency Equalizer (/equalizer /eq)

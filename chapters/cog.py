@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-chapters/cog.py — /chapters and /jump slash commands for Music Bot V3 Feature 1.2.
+chapters/cog.py — /chapters and /chapter_jump slash commands for Music Bot V3 Feature 1.2.
 
 Commands:
-  /chapters        — List all chapters with an interactive jump Dropdown
-  /jump <time>     — Jump directly to a timestamp (e.g. "3:45" or "225")
+  /chapters                — List all chapters with an interactive jump Dropdown
+  /chapter_jump <time>     — Jump directly to a timestamp (e.g. "3:45" or "225")
+  /cjump <time>            — Shorthand alias for /chapter_jump
 """
 
 from __future__ import annotations
@@ -134,14 +135,25 @@ class ChaptersCog(commands.Cog, name="Chapters"):
         )
         await interaction.followup.send(embed=embed, view=view)
 
-    # ── /jump ─────────────────────────────────────────────────────────────────
+    # ── /chapter_jump & /cjump ────────────────────────────────────────────────
 
     @app_commands.command(
-        name        = "jump",
+        name        = "chapter_jump",
         description = "Jump to a specific timestamp in the current track (e.g. 3:45 or 225)",
     )
     @app_commands.describe(timestamp="Timestamp to jump to: HH:MM:SS, MM:SS, or seconds (e.g. 3:45)")
-    async def jump(self, interaction: discord.Interaction, timestamp: str) -> None:
+    async def chapter_jump(self, interaction: discord.Interaction, timestamp: str) -> None:
+        await self._do_jump(interaction, timestamp)
+
+    @app_commands.command(
+        name        = "cjump",
+        description = "Quick shortcut to jump to a specific timestamp in the current track",
+    )
+    @app_commands.describe(timestamp="Timestamp to jump to: HH:MM:SS, MM:SS, or seconds (e.g. 3:45)")
+    async def cjump(self, interaction: discord.Interaction, timestamp: str) -> None:
+        await self._do_jump(interaction, timestamp)
+
+    async def _do_jump(self, interaction: discord.Interaction, timestamp: str) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
 
         player = self.bot.get_player(interaction.guild_id)
