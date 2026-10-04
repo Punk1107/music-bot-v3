@@ -23,6 +23,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from core.i18n import get_locale, t
 from utils.embeds import error_embed, success_embed
 
 if TYPE_CHECKING:
@@ -81,6 +82,7 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if not await self._check_dj(interaction):
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         old    = player.playback_speed
         player.playback_speed = rate
@@ -88,12 +90,11 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if abs(rate - old) > 0.001:
             self._restart_audio(interaction.guild_id)
 
-        speed_label = f"{rate}x"
         emoji = "🐢" if rate < 1.0 else ("🚀" if rate > 1.0 else "▶️")
         embed = discord.Embed(
             title       = f"{emoji}  Playback Speed",
             description = (
-                f"Speed set to **{speed_label}**\n"
+                f"{t('speed.set', locale, rate=rate)}\n"
                 f"*Pitch is unchanged — pure `atempo` FFmpeg chain*"
             ),
             color       = 0x5865F2,
@@ -118,6 +119,7 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if not await self._check_dj(interaction):
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         old    = player.pitch_semitones
         player.pitch_semitones = semitones
@@ -125,12 +127,11 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if semitones != old:
             self._restart_audio(interaction.guild_id)
 
-        sign  = "+" if semitones > 0 else ""
         emoji = "🎵" if semitones == 0 else ("🔼" if semitones > 0 else "🔽")
         embed = discord.Embed(
             title       = f"{emoji}  Pitch Shift",
             description = (
-                f"Pitch set to **{sign}{semitones} semitone(s)**\n"
+                f"{t('pitch.set', locale, semitones=semitones)}\n"
                 f"*Speed stays constant via `asetrate + atempo` correction*"
             ),
             color       = 0xFF6B81,
@@ -152,15 +153,16 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if not await self._check_dj(interaction):
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         player.crossfade_seconds = seconds
 
         if seconds == 0:
-            desc  = "Crossfade **disabled**. Tracks switch instantly."
+            desc  = t("crossfade.off", locale)
             color = 0x2F3136
         else:
             desc  = (
-                f"Crossfade set to **{seconds}s**.\n"
+                f"{t('crossfade.set', locale, secs=seconds)}\n"
                 f"Each track fades out over `{seconds}s`, and the next fades in — applied via `afade` FFmpeg filter."
             )
             color = 0x1DB954

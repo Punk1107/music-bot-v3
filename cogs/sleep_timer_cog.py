@@ -19,6 +19,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from core.i18n import get_locale, t
 from utils.embeds import error_embed, success_embed, info_embed
 
 if TYPE_CHECKING:
@@ -71,13 +72,13 @@ def _format_remaining(seconds: int) -> str:
 
 # ── Embeds ────────────────────────────────────────────────────────────────────
 
-def _sleep_set_embed(seconds: int, end_time: datetime) -> discord.Embed:
+def _sleep_set_embed(seconds: int, end_time: datetime, locale: str = "en") -> discord.Embed:
     remaining = _format_remaining(seconds)
     ts = int(end_time.timestamp())
     embed = discord.Embed(
         title       = "😴  Sleep Timer Set",
         description = (
-            f"Bot will stop playback in **{remaining}**.\n"
+            f"{t('sleep.set', locale, duration=remaining)}\n"
             f"Fires at <t:{ts}:T> (<t:{ts}:R>)"
         ),
         color       = 0x5865F2,
@@ -100,10 +101,10 @@ def _sleep_status_embed(seconds: int, end_time: datetime) -> discord.Embed:
     return embed
 
 
-def _sleep_fired_embed() -> discord.Embed:
+def _sleep_fired_embed(locale: str = "en") -> discord.Embed:
     return discord.Embed(
         title       = "😴  Sleep Timer Fired",
-        description = "Playback has been stopped as scheduled. おやすみ 🌙",
+        description = t("sleep.fired", locale),
         color       = 0x2F3136,
     )
 
@@ -139,6 +140,7 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
         if not await self._check_dj(interaction):
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
 
         # Cancel case
@@ -147,12 +149,12 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
             was_active = player.cancel_sleep_timer()
             if was_active:
                 await interaction.followup.send(
-                    embed=success_embed("Sleep Timer Cancelled", "Timer has been cleared."),
+                    embed=success_embed("Sleep Timer Cancelled", t("sleep.cancelled", locale)),
                     ephemeral=True,
                 )
             else:
                 await interaction.followup.send(
-                    embed=info_embed("No Timer Active", "There is no sleep timer running."),
+                    embed=info_embed("No Timer Active", t("sleep.no_timer", locale)),
                     ephemeral=True,
                 )
             return
@@ -196,7 +198,8 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                 # Notify
                 if _player.text_channel:
                     try:
-                        await _player.text_channel.send(embed=_sleep_fired_embed())
+                        loc = await get_locale(guild_id, self.bot.db)
+                        await _player.text_channel.send(embed=_sleep_fired_embed(loc))
                     except Exception:
                         pass
             except asyncio.CancelledError:
@@ -209,18 +212,19 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
         player.sleep_timer_task = asyncio.create_task(_timer_task())
 
         await interaction.followup.send(
-            embed=_sleep_set_embed(total_secs, end_time),
+            embed=_sleep_set_embed(total_secs, end_time, locale=locale),
             ephemeral=True,
         )
 
     @app_commands.command(name="sleepstatus", description="Show remaining time on the sleep timer")
     async def sleepstatus(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         remaining = player.sleep_remaining_seconds()
         if remaining <= 0 or not player.sleep_timer_end:
             await interaction.followup.send(
-                embed=info_embed("No Timer Active", "Start one with `/sleep <duration>`."),
+                embed=info_embed("No Timer Active", t("sleep.no_timer", locale)),
                 ephemeral=True,
             )
             return

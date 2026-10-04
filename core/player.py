@@ -120,10 +120,11 @@ class GuildPlayer:
         # ── History (last played, for loop:track) ─────────────────────────────
         self._history_track: Optional[Track] = None
 
-        # ── Tier-S: Vote Skip (Feature 1) ─────────────────────────────────
-        # Set of user_ids that have voted to skip the current track.
-        # Reset automatically when the track finishes or is skipped.
-        self.skip_votes: set[int] = set()
+        # ── Tier-S: Vote Skip (Feature 1) & Voice Voting (Feature 3.3) ──
+        # Sets of user_ids that have voted for skip, clear, or shuffle.
+        self.skip_votes:    set[int] = set()
+        self.clear_votes:   set[int] = set()
+        self.shuffle_votes: set[int] = set()
 
         # ── Tier A: Sleep Timer (F16) ───────────────────────────────────
         self.sleep_timer_task: Optional[asyncio.Task] = None
@@ -187,6 +188,21 @@ class GuildPlayer:
         """Bulk-add tracks. Returns new queue length."""
         async with self.queue_lock:
             self._queue.extend(tracks)
+            return len(self._queue)
+
+    async def enqueue_next(self, track: Track) -> int:
+        """Insert one track at the head of the queue (plays next) using deque.appendleft.
+        Returns new queue length."""
+        async with self.queue_lock:
+            self._queue.appendleft(track)
+            return len(self._queue)
+
+    async def extend_next(self, tracks: list[Track]) -> int:
+        """Insert multiple tracks at the head of the queue (plays next) preserving original order.
+        Returns new queue length."""
+        async with self.queue_lock:
+            for track in reversed(tracks):
+                self._queue.appendleft(track)
             return len(self._queue)
 
     async def dequeue(self) -> Optional[Track]:
@@ -368,10 +384,14 @@ class GuildPlayer:
             eta += (track.duration or 0)
         return max(0, eta)
 
-    def skip_vote_threshold(self, voice_member_count: int) -> int:
-        """Minimum votes needed to skip (ceil of 50% of voice members)."""
+    def vote_threshold(self, voice_member_count: int) -> int:
+        """Minimum votes needed for a democratic action (ceil of 50% of voice members)."""
         import math
         return max(1, math.ceil(voice_member_count * 0.5))
+
+    def skip_vote_threshold(self, voice_member_count: int) -> int:
+        """Minimum votes needed to skip (ceil of 50% of voice members)."""
+        return self.vote_threshold(voice_member_count)
 
     # ── Tier-S: Queue Jump (Feature 8) ───────────────────────────────────────
 
@@ -446,7 +466,9 @@ class GuildPlayer:
         self.volume                = 1.0
         self.idle_since            = datetime.now(timezone.utc)
         self.auto_playlist_mode    = False
-        self.skip_votes            = set()
+        self.skip_votes.clear()
+        self.clear_votes.clear()
+        self.shuffle_votes.clear()
         self.auto_paused           = False
         self.undo_stack.clear()
         self._transaction          = None

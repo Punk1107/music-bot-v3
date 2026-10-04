@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from core.database import DatabaseManager
@@ -315,6 +315,13 @@ async def get_locale(guild_id: int, db=None) -> str:
 
     _locale_cache[guild_id] = locale
     return locale
+
+
+def get_locale_sync(guild_id: Optional[int]) -> str:
+    """Return the cached canonical locale code for a guild synchronously (default 'en')."""
+    if guild_id and guild_id in _locale_cache:
+        return _locale_cache[guild_id]
+    return _DEFAULT_LOCALE
 
 
 def set_locale_cache(guild_id: int, locale: str) -> None:
