@@ -11,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from models.enums import AudioEffect, AudioQuality
+from core.i18n import get_locale, t
 from utils.embeds import error_embed, success_embed, info_embed
 from utils.error_handler import dj_required_embed
 
@@ -57,16 +58,17 @@ class EffectsCog(commands.Cog, name="Effects"):
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
             return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not 0 <= level <= 200:
             await interaction.followup.send(
-                embed=error_embed("Invalid Volume", "Volume must be between 0 and 200."), ephemeral=True
+                embed=error_embed("Invalid Volume", t("volume.invalid", locale)), ephemeral=True
             )
             return
         player = self.bot.get_player(interaction.guild_id)
         player.volume = level / 100
         self._restart_audio(interaction.guild_id)
         await interaction.followup.send(
-            embed=success_embed("Volume Set", f"🔊 Volume set to **{level}%**"), ephemeral=True
+            embed=success_embed("Volume Set", t("volume.set", locale, vol=level)), ephemeral=True
         )
 
     @app_commands.command(name="effects", description="Toggle one of 18 audio effects")
@@ -84,17 +86,20 @@ class EffectsCog(commands.Cog, name="Effects"):
             )
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         if eff in player.effects:
             player.effects.remove(eff)
             action = "disabled"
+            desc = f"{eff.display_name()} has been disabled."
         else:
             player.effects.append(eff)
             action = "enabled"
+            desc = t("effects.applied", locale, effect=eff.display_name())
 
         self._restart_audio(interaction.guild_id)
         await interaction.followup.send(
-            embed=success_embed(f"Effect {action.capitalize()}", f"{eff.display_name()} has been {action}."),
+            embed=success_embed(f"Effect {action.capitalize()}", desc),
             ephemeral=True,
         )
 
@@ -113,10 +118,11 @@ class EffectsCog(commands.Cog, name="Effects"):
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
             return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         player.effects.clear()
         self._restart_audio(interaction.guild_id)
-        await interaction.followup.send(embed=success_embed("Effects Cleared", "All effects disabled."), ephemeral=True)
+        await interaction.followup.send(embed=success_embed("Effects Cleared", t("effects.cleared", locale)), ephemeral=True)
 
     @app_commands.command(name="effects_list", description="Show all 18 effects with current status")
     async def effects_list(self, interaction: discord.Interaction) -> None:

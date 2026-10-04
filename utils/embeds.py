@@ -21,6 +21,7 @@ from utils.formatters import (
     format_duration, format_views, make_progress_bar,
     make_knob_progress_bar, truncate, number_emoji
 )
+from core.i18n import t
 
 if TYPE_CHECKING:
     from core.player import GuildPlayer
@@ -69,39 +70,40 @@ def track_added_embed(
     color:      int = 0x5865F2,
     requester:  Optional[discord.User] = None,
     eta_secs:   Optional[int] = None,
+    locale:     str = "en",
+    is_next:    bool = False,
 ) -> discord.Embed:
     """
-    Track-added card with 3-column inline fields matching the screenshot layout:
-
-      🎵 Added to Queue
-      **[Title](url)**
-
-      ⏱ Duration  |  📋 Position  |  👤 Uploader
-      3:31              #1            marr team official
-      🕐 Starts in: 5m 20s
-
-      Footer: avatar · Requested by …
+    Track-added card with 3-column inline fields. Supports i18n & playnext indicator.
     """
+    if is_next:
+        title_text = f"⏭️  {t('queue.playnext_added', locale, title='', pos=position).replace('**', '').replace('()', '').strip()}"
+        desc_text = f"**[{truncate(track.title, 80)}]({track.url})**" if track.url else f"**{truncate(track.title, 80)}**"
+    else:
+        title_text = f"🎵  {t('embed.added_to_queue', locale)}"
+        desc_text = f"**[{truncate(track.title, 80)}]({track.url})**" if track.url else f"**{truncate(track.title, 80)}**"
+
     embed = discord.Embed(
-        title       = "🎵  Added to Queue",
-        description = f"{truncate(track.title, 80)}",
+        title       = title_text,
+        description = desc_text,
         color       = color,
     )
 
-    embed.add_field(name="⏱ Duration",  value=f"{track.duration_str}",                  inline=True)
-    embed.add_field(name="📋 Position", value=f"#{position}",                            inline=True)
-    embed.add_field(name="👤 Uploader", value=truncate(track.uploader or "Unknown", 35), inline=True)
+    embed.add_field(name=t("embed.duration", locale),  value=f"{track.duration_str}",                  inline=True)
+    embed.add_field(name=t("embed.position", locale),  value=f"#{position}",                            inline=True)
+    embed.add_field(name=t("embed.uploader", locale),  value=truncate(track.uploader or "Unknown", 35), inline=True)
 
     if eta_secs is not None and eta_secs > 0:
         embed.add_field(
-            name="🕐 Starts in",
+            name=t("embed.starts_in", locale),
             value=format_duration(eta_secs),
             inline=False,
         )
 
     if requester:
+        req_label = t("embed.requested_by", locale)
         embed.set_footer(
-            text     = f"Requested by {requester.display_name}",
+            text     = f"{req_label} {requester.display_name}",
             icon_url = requester.display_avatar.url,
         )
     if track.thumbnail:
@@ -109,13 +111,22 @@ def track_added_embed(
     return embed
 
 
-def playlist_added_embed(count: int, color: int = 0x5865F2, shuffled: bool = False) -> discord.Embed:
-    shuffle_tag = "  🔀 Shuffled" if shuffled else ""
+def playlist_added_embed(
+    count: int,
+    color: int = 0x5865F2,
+    shuffled: bool = False,
+    locale: str = "en",
+) -> discord.Embed:
+    shuffle_tag = " • 🔀 Shuffled" if shuffled else ""
+    if locale == "en":
+        desc = f"**{count}** tracks have been added to the queue.{shuffle_tag}"
+    else:
+        desc = f"**{count}** {t('embed.in_queue', locale)}{shuffle_tag}"
     embed = discord.Embed(
-        description = f"**{count}** tracks have been added to the queue.{shuffle_tag}",
+        description = desc,
         color       = color,
     )
-    embed.set_author(name="📋  PLAYLIST ADDED")
+    embed.set_author(name=f"📋  {t('embed.playlist_added', locale)}")
     return embed
 
 
@@ -127,19 +138,14 @@ def now_playing_embed(
     bot_user: Optional[discord.ClientUser] = None,
     paused:   bool = False,
     theme:    str  = "classic",
+    locale:   str  = "en",
 ) -> discord.Embed:
     """
-    Themed now-playing embed (F27).
-
-    theme options:
-      classic — Dynamic colour from thumbnail. Full field layout. (default)
-      spotify — Spotify green. Large artwork. Minimal text.
-      minimal — Dark background. No fields. Ultra-clean.
-      glass   — Frosted pastel. Slightly different typography.
+    Themed now-playing embed (F27) with i18n localization support.
     """
     track = player.now_playing
     if not track:
-        return info_embed("Nothing Playing", "The queue is empty.")
+        return info_embed(t("error.not_playing", locale), t("queue.empty", locale))
 
     # ── Shared data ───────────────────────────────────────────────────────────
     fraction = player.progress_fraction()
@@ -149,7 +155,7 @@ def now_playing_embed(
     dur_val  = format_duration(track.duration) if track.duration else "?"
     view_val = format_views(track.view_count)  if track.view_count else "—"
     q_size   = len(player)
-    q_val    = f"{q_size} track{'s' if q_size != 1 else ''}"
+    q_val    = f"{q_size} {t('embed.in_queue', locale)}"
     req_val  = f"@{track.requested_by_name}" if track.requested_by_name else "—"
     loop_val = player.loop_mode.value.capitalize()
     vol_val  = f"{int(player.volume * 100)}%"
@@ -171,19 +177,19 @@ def now_playing_embed(
             description = f"🔵  {truncate(track.uploader or 'Unknown', 40)}",
             color       = color,
         )
-        embed.add_field(name="⏱ Duration",      value=dur_val,  inline=True)
-        embed.add_field(name="👁 Views",         value=view_val, inline=True)
-        embed.add_field(name="📋 In Queue",      value=q_val,    inline=True)
-        embed.add_field(name="👤 Requested by",  value=req_val,  inline=True)
-        embed.add_field(name="🔁 Loop",          value=loop_val, inline=True)
-        embed.add_field(name="🔊 Volume",        value=vol_val,  inline=True)
-        embed.add_field(name="▶️ Progress",      value=bar_line, inline=False)
+        embed.add_field(name=t("embed.duration", locale),      value=dur_val,  inline=True)
+        embed.add_field(name=t("embed.views", locale),         value=view_val, inline=True)
+        embed.add_field(name=t("embed.in_queue", locale),      value=q_val,    inline=True)
+        embed.add_field(name=t("embed.requested_by", locale),  value=req_val,  inline=True)
+        embed.add_field(name=t("btn.loop", locale),            value=loop_val, inline=True)
+        embed.add_field(name=f"🔊 {t('volume.set', locale, vol=int(player.volume * 100)).split('**')[1] if '**' in t('volume.set', locale, vol=int(player.volume * 100)) else vol_val}", value=vol_val, inline=True)
+        embed.add_field(name=t("embed.progress", locale),      value=bar_line, inline=False)
         if player.effects:
             eff_str = " · ".join(e.display_name() for e in player.effects[:4])
-            embed.add_field(name="🎛 Effects", value=eff_str, inline=False)
+            embed.add_field(name=t("embed.effects", locale), value=eff_str, inline=False)
         if extras:
-            embed.add_field(name="🎚 Enhancements", value="  ".join(extras), inline=False)
-        embed.set_footer(text="Music Bot V3  •  Now Playing", icon_url=footer_icon)
+            embed.add_field(name=t("embed.enhancements", locale), value="  ".join(extras), inline=False)
+        embed.set_footer(text=t("now_playing.footer", locale), icon_url=footer_icon)
         if track.thumbnail:
             embed.set_thumbnail(url=track.thumbnail)
 
@@ -191,7 +197,7 @@ def now_playing_embed(
     elif theme == "spotify":
         from models.enums import EmbedTheme
         sp_color = EmbedTheme.SPOTIFY.accent_color()
-        status   = "⏸ Paused" if paused else "▶ Now Playing"
+        status   = t("now_playing.paused", locale) if paused else t("now_playing.playing", locale)
         embed = discord.Embed(
             title       = truncate(track.title, 80),
             url         = track.url or None,
@@ -206,7 +212,7 @@ def now_playing_embed(
         embed.add_field(name="📋", value=q_val,    inline=True)
         if extras:
             embed.add_field(name="🎚", value="  ".join(extras), inline=True)
-        embed.set_footer(text=f"Requested by {req_val}  •  Music Bot V3", icon_url=footer_icon)
+        embed.set_footer(text=f"{t('embed.requested_by', locale)} {req_val}  •  Music Bot V3", icon_url=footer_icon)
         if track.thumbnail:
             embed.set_image(url=track.thumbnail)  # large artwork for Spotify feel
 
@@ -230,7 +236,7 @@ def now_playing_embed(
     elif theme == "glass":
         from models.enums import EmbedTheme
         gl_color = EmbedTheme.GLASS.accent_color()
-        status   = "⏸ Paused" if paused else "♪  Now Playing"
+        status   = t("now_playing.paused", locale) if paused else t("now_playing.playing", locale)
         embed = discord.Embed(
             title       = f"♪  {truncate(track.title, 75)}",
             url         = track.url or None,
@@ -254,7 +260,7 @@ def now_playing_embed(
 
     else:
         # Fallback to classic
-        return now_playing_embed(player, color, bot_user, paused, theme="classic")
+        return now_playing_embed(player, color, bot_user, paused, theme="classic", locale=locale)
 
     return embed
 
@@ -294,6 +300,7 @@ def queue_embed(
     page:     int = 1,
     per_page: int = 10,
     color:    int = 0x5865F2,
+    locale:   str = "en",
 ) -> discord.Embed:
     queue       = player.queue
     total       = len(queue)
@@ -313,8 +320,9 @@ def queue_embed(
         elapsed  = format_duration(player.elapsed_seconds)
         total_t  = format_duration(player.now_playing.duration)
         mini_bar = make_progress_bar(player.progress_fraction(), player.now_playing.url, width=14)
+        np_label = t("now_playing.playing", locale)
         lines.append(
-            f"**▶  Now Playing**\n"
+            f"**{np_label}**\n"
             f"[{truncate(player.now_playing.title, 55)}]({player.now_playing.url})\n"
             f"`{elapsed}` {mini_bar} `{total_t}`\n"
             f"{_div}"
@@ -329,10 +337,11 @@ def queue_embed(
                 f"`{i:>2}.` [{truncate(track.title, 50)}]({track.url})  `{track.duration_str}`{req}{fav}"
             )
     else:
-        lines.append("*Queue is empty.*")
+        lines.append(f"*{t('queue.empty', locale)}*")
 
+    in_q_label = t("embed.in_queue", locale)
     embed = discord.Embed(
-        title       = f"📋  Queue  —  {total} track{'s' if total != 1 else ''}  ·  {total_dur_str}",
+        title       = f"📋  Queue  —  {total} {in_q_label}  ·  {total_dur_str}",
         description = "\n".join(lines),
         color       = color,
     )
@@ -494,28 +503,42 @@ def stats_embed(
     return embed
 
 
-# ── Vote Skip embed (Tier-S Feature 1) ────────────────────────────────────────────────
+# ── Voice Voting embeds (Feature 1 & Feature 3.3) ──────────────────────────────
 
-def vote_skip_embed(
-    track_title: str,
+def vote_action_embed(
+    action_type: str,     # "skip", "clear", "shuffle"
+    details:     str,
     votes:       set[int],
     threshold:   int,
-    voters:      list[str],   # display names of voters
+    voters:      list[str],
     color:       int = 0xF39C12,
+    locale:      str = "en",
 ) -> discord.Embed:
-    """Live vote-skip progress embed with ASCII progress bar."""
+    """Live interactive vote progress embed with ASCII progress bar."""
     filled   = round((len(votes) / max(1, threshold)) * 10)
     filled   = min(filled, 10)
     bar      = "█" * filled + "░" * (10 - filled)
     pct      = int(len(votes) / max(1, threshold) * 100)
 
-    lines = [
-        f"**Track:** {truncate(track_title, 60)}",
-        "",
-        f"**Skip Votes**  `{len(votes)}/{threshold}`",
+    title_map = {
+        "skip": t("vote.skip_title", locale),
+        "clear": t("vote.clear_title", locale),
+        "shuffle": t("vote.shuffle_title", locale),
+    }
+    title = title_map.get(action_type, t(f"vote.{action_type}_title", locale))
+
+    lines = []
+    if details:
+        lines.append(details)
+        lines.append("")
+
+    votes_text = t("vote.votes_needed", locale, votes=len(votes), threshold=threshold, action=action_type.capitalize())
+    lines.extend([
+        f"**{votes_text}**",
         f"`{bar}` {pct}%",
         "",
-    ]
+    ])
+
     if voters:
         voter_lines = [f"✅ {name}" for name in voters[:10]]
         remaining   = threshold - len(voters)
@@ -524,12 +547,55 @@ def vote_skip_embed(
         lines.append("**Votes:**\n" + "\n".join(voter_lines))
 
     embed = discord.Embed(
-        title       = "⏭️  Vote Skip",
+        title       = title,
         description = "\n".join(lines),
         color       = color,
     )
-    embed.set_footer(text=f"React to vote • Expires in 60s")
+    embed.set_footer(text="Click button to vote • Expires in 60s")
     return embed
+
+
+def vote_skip_embed(
+    track_title: str,
+    votes:       set[int],
+    threshold:   int,
+    voters:      list[str],   # display names of voters
+    color:       int = 0xF39C12,
+    locale:      str = "en",
+) -> discord.Embed:
+    """Live vote-skip progress embed with ASCII progress bar."""
+    details = f"**Track:** {truncate(track_title, 60)}"
+    return vote_action_embed("skip", details, votes, threshold, voters, color=color, locale=locale)
+
+
+def vote_clear_embed(
+    queue_size:  int = 0,
+    votes:       set[int] = None,
+    threshold:   int = 1,
+    voters:      list[str] = None,
+    color:       int = 0xE74C3C,
+    locale:      str = "en",
+) -> discord.Embed:
+    """Live vote-clear progress embed."""
+    votes = votes or set()
+    voters = voters or []
+    details = f"**Queue Size:** {queue_size} tracks"
+    return vote_action_embed("clear", details, votes, threshold, voters, color=color, locale=locale)
+
+
+def vote_shuffle_embed(
+    queue_size:  int = 0,
+    votes:       set[int] = None,
+    threshold:   int = 1,
+    voters:      list[str] = None,
+    color:       int = 0x3498DB,
+    locale:      str = "en",
+) -> discord.Embed:
+    """Live vote-shuffle progress embed."""
+    votes = votes or set()
+    voters = voters or []
+    details = f"**Queue Size:** {queue_size} tracks"
+    return vote_action_embed("shuffle", details, votes, threshold, voters, color=color, locale=locale)
 
 
 # ── Queue History embed (Tier-S Feature 4) ────────────────────────────────────────────

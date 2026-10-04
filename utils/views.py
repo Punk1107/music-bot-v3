@@ -19,14 +19,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-from typing import TYPE_CHECKING, Optional
-
+from typing import TYPE_CHECKING, Optional, Callable, Any
 import discord
 
+from core.i18n import t, get_locale_sync
 from utils.embeds import (
     error_embed, success_embed, info_embed, queue_embed,
     now_playing_embed, favorite_added_embed,
-    vote_skip_embed, history_embed, queue_search_embed,
+    vote_skip_embed, vote_clear_embed, vote_shuffle_embed,
+    history_embed, queue_search_embed,
 )
 from utils.formatters import truncate, format_duration
 
@@ -44,7 +45,7 @@ class MusicControlView(discord.ui.View):
     """
     Persistent playback-control bar shown under the now-playing embed.
 
-    Row 0: ⏸/▶ Pause/Resume | ⏭⏭ Skip | 🔁 Loop | ✖ Shuffle | ⏹ Stop
+    Row 0: ⏸/▶ Pause/Resume | ⏭ Skip | 🔁 Loop | 🔀 Shuffle | ⏹ Stop
     Row 1: ⏪ -15s | ⏩ +15s | 🔇 Vol-10% | 🔊 Vol+10% | ❤️ Favorite
     """
 
@@ -63,6 +64,7 @@ class MusicControlView(discord.ui.View):
     def _sync_buttons(self) -> None:
         player     = self.bot.get_player(self.guild_id)
         queue_size = len(player)
+        locale     = get_locale_sync(self.guild_id)
 
         # Detect actual voice client state
         guild = self.bot.get_guild(self.guild_id)
@@ -78,70 +80,81 @@ class MusicControlView(discord.ui.View):
             cid = child.custom_id
 
             if cid == "mb_skip":
-                skip_label     = f"⏭ Skip" + (f" ({queue_size})" if queue_size else "")
-                child.label    = skip_label
+                skip_base   = t("btn.skip", locale)
+                skip_label  = f"{skip_base}" + (f" ({queue_size})" if queue_size else "")
+                child.label = skip_label
                 child.disabled = not is_playing
 
             elif cid == "mb_shuffle":
+                child.label    = t("btn.shuffle", locale)
                 child.disabled = queue_size < 2
+
+            elif cid == "mb_stop":
+                child.label = t("btn.stop", locale)
+
+            elif cid == "mb_rewind":
+                child.label    = t("btn.rewind", locale)
+                child.disabled = not is_playing
+
+            elif cid == "mb_forward":
+                child.label    = t("btn.forward", locale)
+                child.disabled = not is_playing
+
+            elif cid == "mb_vol_down":
+                child.label    = t("btn.vol_down", locale)
+                child.disabled = player.volume <= 0.0
+
+            elif cid == "mb_vol_up":
+                child.label    = t("btn.vol_up", locale)
+                child.disabled = player.volume >= 2.0
+
+            elif cid == "mb_favorite":
+                child.label = t("btn.favorite", locale)
 
             elif cid == "mb_loop":
                 mode = player.loop_mode.value
                 if mode == "off":
-                    child.label = "🔁 Loop: Off"
+                    child.label = t("btn.loop_off", locale)
                     child.style = discord.ButtonStyle.secondary
                 elif mode == "track":
-                    child.label = "🔂 Loop: Track"
+                    child.label = t("btn.loop_track", locale)
                     child.style = discord.ButtonStyle.primary
                 else:
-                    child.label = "🔁 Loop: Queue"
+                    child.label = t("btn.loop_queue", locale)
                     child.style = discord.ButtonStyle.primary
-
-            elif cid == "mb_vol_down":
-                child.disabled = player.volume <= 0.0
-
-            elif cid == "mb_vol_up":
-                child.disabled = player.volume >= 2.0
-
-            elif cid in ("mb_rewind", "mb_forward"):
-                child.disabled = not is_playing
 
             elif cid == "mb_pause":
                 if is_paused:
-                    child.label = "▶ Resume"
+                    child.label = t("btn.resume", locale)
                     child.style = discord.ButtonStyle.success
                 else:
-                    child.label = "⏸ Pause"
+                    child.label = t("btn.pause", locale)
                     child.style = discord.ButtonStyle.secondary
                 child.disabled = not is_playing
 
     async def _check(self, interaction: discord.Interaction) -> bool:
         """Verify user is in the same voice channel."""
+        locale = get_locale_sync(self.guild_id)
         vc = self._vc(interaction)
         if not vc:
             await interaction.response.send_message(
-                embed=error_embed("Not Connected", "I'm not in a voice channel."), ephemeral=True
+                embed=error_embed("Not Connected", t("error.not_connected", locale)), ephemeral=True
             )
             return False
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", "Join a voice channel first."), ephemeral=True
+                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)), ephemeral=True
             )
             return False
         if interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", f"Join **{vc.channel.name}** to use controls."), ephemeral=True
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", locale, channel=vc.channel.name)), ephemeral=True
             )
             return False
         return True
 
     async def _refresh_message(self, interaction: discord.Interaction) -> None:
-        """Synchronise controls and edit the interaction message.
-
-        ``discord.ui.View`` already has a synchronous private ``_refresh``
-        hook. Shadowing it with a coroutine causes an un-awaited coroutine
-        warning while Discord deserialises a View.
-        """
+        """Synchronise controls and edit the interaction message."""
         self._sync_buttons()
         try:
             await interaction.response.edit_message(view=self)
@@ -161,10 +174,11 @@ class MusicControlView(discord.ui.View):
     async def pause_resume(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
+        locale = get_locale_sync(self.guild_id)
         vc = self._vc(interaction)
         if not vc:
             await interaction.response.send_message(
-                embed=error_embed("Not Connected", "Not in a voice channel."), ephemeral=True
+                embed=error_embed("Not Connected", t("error.not_connected", locale)), ephemeral=True
             )
             return
         if vc.is_playing():
@@ -175,21 +189,19 @@ class MusicControlView(discord.ui.View):
             now_paused = False
         else:
             await interaction.response.send_message(
-                embed=error_embed("Nothing Playing", "There is nothing to pause or resume."), ephemeral=True
+                embed=error_embed("Nothing Playing", t("error.not_playing", locale)), ephemeral=True
             )
             return
-        # Update the now-playing embed immediately so ⏸/▶ icon reflects the
-        # new state. _np_refresh skips editing while paused, so without this
-        # the progress-bar prefix stays stale until the next play.
+
         player = self.bot.get_player(self.guild_id)
         if player.now_playing and player.now_playing_msg:
             try:
-                from utils.embeds import now_playing_embed
                 color = getattr(player, "_cached_base_color", None) or 0x5865F2
                 embed = now_playing_embed(
                     player, color, self.bot.user,
                     paused=now_paused,
                     theme=getattr(player, "embed_theme", "classic"),
+                    locale=locale,
                 )
                 self._sync_buttons()
                 await interaction.response.edit_message(embed=embed, view=self)
@@ -204,7 +216,6 @@ class MusicControlView(discord.ui.View):
             return
         await interaction.response.defer()
         player = self.bot.get_player(self.guild_id)
-        # Cancel prefetch before stopping so no orphaned FFmpeg task races _play_next
         player.cancel_prefetch()
         vc = self._vc(interaction)
         if vc and (vc.is_playing() or vc.is_paused()):
@@ -223,28 +234,27 @@ class MusicControlView(discord.ui.View):
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
+        locale = get_locale_sync(self.guild_id)
         player = self.bot.get_player(self.guild_id)
         await player.shuffle()
         await interaction.response.send_message(
-            embed=success_embed("Shuffled", "Queue has been shuffled."), ephemeral=True
+            embed=success_embed("Shuffled", t("queue.shuffled", locale, count=len(player))), ephemeral=True
         )
 
     @discord.ui.button(label="⏹ Stop", style=discord.ButtonStyle.danger, custom_id="mb_stop", row=0)
     async def stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
+        locale = get_locale_sync(self.guild_id)
         vc = self._vc(interaction)
         player = self.bot.get_player(self.guild_id)
-        # Cancel prefetch before stopping
         player.cancel_prefetch()
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
         player.reset()
-        # Bug 9: also clear the persisted DB queue (the slash /stop already does
-        # this; the button was missing the call, causing restored queue on restart)
         asyncio.create_task(self.bot.db.clear_queue(self.guild_id))
         await interaction.response.send_message(
-            embed=success_embed("Stopped", "Playback stopped and queue cleared."), ephemeral=True
+            embed=success_embed("Stopped", t("leave.manual", locale)), ephemeral=True
         )
 
     # ── Row 1: Seek + Volume + Favorite ───────────────────────────────────────
@@ -487,12 +497,13 @@ class FavoritesView(discord.ui.View):
 
 # ─────────────────────────── Vote Skip View (Tier-S #1) ────────────────────────────
 
+# ─────────────────────────── Voice Voting Views (Feature 1 & Feature 3.3) ────────────────────────────
+
 class VoteSkipView(discord.ui.View):
     """
-    Interactive vote-skip panel.
+    Interactive vote-skip panel (Feature 1).
     - Shows real-time vote count + ASCII progress bar.
     - Auto-expires after 60 seconds.
-    - DJ/Admin bypass triggers immediate skip.
     """
 
     def __init__(
@@ -501,13 +512,21 @@ class VoteSkipView(discord.ui.View):
         guild_id:  int,
         threshold: int,
         track_title: str,
+        locale:    str = "en",
     ) -> None:
         super().__init__(timeout=60)
         self.bot         = bot
         self.guild_id    = guild_id
         self.threshold   = threshold
         self.track_title = track_title
+        self.locale      = locale
         self._message: Optional[discord.Message] = None
+        for child in self.children:
+            if hasattr(child, "custom_id"):
+                if child.custom_id == "vs_vote":
+                    child.label = t("btn.vote_skip", self.locale)
+                elif child.custom_id == "vs_cancel":
+                    child.label = t("btn.cancel_vote", self.locale)
 
     def set_message(self, msg: discord.Message) -> None:
         self._message = msg
@@ -528,6 +547,7 @@ class VoteSkipView(discord.ui.View):
             votes       = player.skip_votes,
             threshold   = self.threshold,
             voters      = self._voter_names(guild) if guild else [],
+            locale      = self.locale,
         )
         try:
             await interaction.response.edit_message(embed=embed, view=self)
@@ -542,35 +562,34 @@ class VoteSkipView(discord.ui.View):
         guild   = self.bot.get_guild(self.guild_id)
         vc      = guild.voice_client if guild else None
 
-        # Must be in the same voice channel
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", "Join the voice channel to vote."), ephemeral=True
+                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
             )
             return
         if vc and interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", f"Join **{vc.channel.name}** to vote."), ephemeral=True
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
             )
             return
 
         if user_id in player.skip_votes:
             await interaction.response.send_message(
-                embed=error_embed("Already Voted", "You already voted to skip this track."), ephemeral=True
+                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
             )
             return
 
         player.skip_votes.add(user_id)
         await self._refresh(interaction)
 
-        # Check threshold
         if len(player.skip_votes) >= self.threshold:
             self.stop()
+            player.skip_votes.clear()
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             if self._message:
                 await self._message.edit(
-                    embed=success_embed("Skipped! ⏭", f"Vote threshold reached ({self.threshold}/{self.threshold})."),
+                    embed=success_embed("Skipped! ⏭", t("vote.threshold_reached", self.locale, threshold=self.threshold)),
                     view=None,
                 )
 
@@ -581,7 +600,7 @@ class VoteSkipView(discord.ui.View):
 
         if user_id not in player.skip_votes:
             await interaction.response.send_message(
-                embed=error_embed("Not Voted", "You haven't voted to skip."), ephemeral=True
+                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -589,18 +608,278 @@ class VoteSkipView(discord.ui.View):
         await self._refresh(interaction)
 
     async def on_timeout(self) -> None:
-        """Bug 5: disable buttons, edit message, clear references."""
+        player = self.bot.get_player(self.guild_id) if self.bot else None
+        if player:
+            player.skip_votes.clear()
         for child in self.children:
             child.disabled = True
         if self._message:
             try:
                 await self._message.edit(
-                    embed=info_embed("Vote Expired", "The vote-skip poll expired without enough votes."),
+                    embed=info_embed("Vote Expired", t("vote.expired", self.locale)),
                     view=None,
                 )
             except Exception:
                 pass
-        # Clear references to prevent memory leak
+        self._message = None
+        self.bot      = None  # type: ignore[assignment]
+
+
+class VoteClearView(discord.ui.View):
+    """
+    Interactive vote-clear panel (Feature 3.3).
+    - Real-time vote count + ASCII progress bar.
+    - Clears queue upon reaching threshold.
+    """
+
+    def __init__(
+        self,
+        bot:       "MusicBot",
+        guild_id:  int,
+        threshold: int,
+        queue_size: int = 0,
+        locale:    str = "en",
+    ) -> None:
+        super().__init__(timeout=60)
+        self.bot        = bot
+        self.guild_id   = guild_id
+        self.threshold  = threshold
+        self.queue_size = queue_size
+        self.locale     = locale
+        self._message: Optional[discord.Message] = None
+        for child in self.children:
+            if hasattr(child, "custom_id"):
+                if child.custom_id == "vc_vote":
+                    child.label = t("btn.vote_clear", self.locale)
+                elif child.custom_id == "vc_cancel":
+                    child.label = t("btn.cancel_vote", self.locale)
+
+    def set_message(self, msg: discord.Message) -> None:
+        self._message = msg
+
+    def _voter_names(self, guild: discord.Guild) -> list[str]:
+        player = self.bot.get_player(self.guild_id)
+        names = []
+        for uid in player.clear_votes:
+            member = guild.get_member(uid)
+            names.append(member.display_name if member else f"User#{uid}")
+        return names
+
+    async def _refresh(self, interaction: discord.Interaction) -> None:
+        player = self.bot.get_player(self.guild_id)
+        guild  = self.bot.get_guild(self.guild_id)
+        embed  = vote_clear_embed(
+            queue_size  = self.queue_size,
+            votes       = player.clear_votes,
+            threshold   = self.threshold,
+            voters      = self._voter_names(guild) if guild else [],
+            locale      = self.locale,
+        )
+        try:
+            await interaction.response.edit_message(embed=embed, view=self)
+        except discord.InteractionResponded:
+            if self._message:
+                await self._message.edit(embed=embed, view=self)
+
+    @discord.ui.button(label="🗑️ Vote Clear", style=discord.ButtonStyle.danger, custom_id="vc_vote")
+    async def vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+        guild   = self.bot.get_guild(self.guild_id)
+        vc      = guild.voice_client if guild else None
+
+        if not interaction.user.voice:
+            await interaction.response.send_message(
+                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
+            )
+            return
+        if vc and interaction.user.voice.channel != vc.channel:
+            await interaction.response.send_message(
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
+            )
+            return
+
+        if user_id in player.clear_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
+            )
+            return
+
+        player.clear_votes.add(user_id)
+        await self._refresh(interaction)
+
+        if len(player.clear_votes) >= self.threshold:
+            self.stop()
+            player.clear_votes.clear()
+            player.undo_push("clear")
+            count = await player.clear()
+            await self.bot.db.clear_queue(self.guild_id)
+            if self._message:
+                await self._message.edit(
+                    embed=success_embed(
+                        "Queue Cleared! 🗑️",
+                        t("vote.clear_success", self.locale, threshold=self.threshold)
+                    ),
+                    view=None,
+                )
+
+    @discord.ui.button(label="❌ Cancel Vote", style=discord.ButtonStyle.secondary, custom_id="vc_cancel")
+    async def cancel_vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+
+        if user_id not in player.clear_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
+            )
+            return
+
+        player.clear_votes.discard(user_id)
+        await self._refresh(interaction)
+
+    async def on_timeout(self) -> None:
+        player = self.bot.get_player(self.guild_id) if self.bot else None
+        if player:
+            player.clear_votes.clear()
+        for child in self.children:
+            child.disabled = True
+        if self._message:
+            try:
+                await self._message.edit(
+                    embed=info_embed("Vote Expired", t("vote.expired", self.locale)),
+                    view=None,
+                )
+            except Exception:
+                pass
+        self._message = None
+        self.bot      = None  # type: ignore[assignment]
+
+
+class VoteShuffleView(discord.ui.View):
+    """
+    Interactive vote-shuffle panel (Feature 3.3).
+    - Real-time vote count + ASCII progress bar.
+    - Shuffles queue upon reaching threshold.
+    """
+
+    def __init__(
+        self,
+        bot:       "MusicBot",
+        guild_id:  int,
+        threshold: int,
+        queue_size: int = 0,
+        locale:    str = "en",
+    ) -> None:
+        super().__init__(timeout=60)
+        self.bot        = bot
+        self.guild_id   = guild_id
+        self.threshold  = threshold
+        self.queue_size = queue_size
+        self.locale     = locale
+        self._message: Optional[discord.Message] = None
+        for child in self.children:
+            if hasattr(child, "custom_id"):
+                if child.custom_id == "vsh_vote":
+                    child.label = t("btn.vote_shuffle", self.locale)
+                elif child.custom_id == "vsh_cancel":
+                    child.label = t("btn.cancel_vote", self.locale)
+
+    def set_message(self, msg: discord.Message) -> None:
+        self._message = msg
+
+    def _voter_names(self, guild: discord.Guild) -> list[str]:
+        player = self.bot.get_player(self.guild_id)
+        names = []
+        for uid in player.shuffle_votes:
+            member = guild.get_member(uid)
+            names.append(member.display_name if member else f"User#{uid}")
+        return names
+
+    async def _refresh(self, interaction: discord.Interaction) -> None:
+        player = self.bot.get_player(self.guild_id)
+        guild  = self.bot.get_guild(self.guild_id)
+        embed  = vote_shuffle_embed(
+            queue_size  = self.queue_size,
+            votes       = player.shuffle_votes,
+            threshold   = self.threshold,
+            voters      = self._voter_names(guild) if guild else [],
+            locale      = self.locale,
+        )
+        try:
+            await interaction.response.edit_message(embed=embed, view=self)
+        except discord.InteractionResponded:
+            if self._message:
+                await self._message.edit(embed=embed, view=self)
+
+    @discord.ui.button(label="🔀 Vote Shuffle", style=discord.ButtonStyle.primary, custom_id="vsh_vote")
+    async def vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+        guild   = self.bot.get_guild(self.guild_id)
+        vc      = guild.voice_client if guild else None
+
+        if not interaction.user.voice:
+            await interaction.response.send_message(
+                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
+            )
+            return
+        if vc and interaction.user.voice.channel != vc.channel:
+            await interaction.response.send_message(
+                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
+            )
+            return
+
+        if user_id in player.shuffle_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
+            )
+            return
+
+        player.shuffle_votes.add(user_id)
+        await self._refresh(interaction)
+
+        if len(player.shuffle_votes) >= self.threshold:
+            self.stop()
+            player.shuffle_votes.clear()
+            player.undo_push("shuffle")
+            await player.shuffle()
+            if self._message:
+                await self._message.edit(
+                    embed=success_embed(
+                        "Queue Shuffled! 🔀",
+                        t("vote.shuffle_success", self.locale, threshold=self.threshold)
+                    ),
+                    view=None,
+                )
+
+    @discord.ui.button(label="❌ Cancel Vote", style=discord.ButtonStyle.secondary, custom_id="vsh_cancel")
+    async def cancel_vote(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player  = self.bot.get_player(self.guild_id)
+        user_id = interaction.user.id
+
+        if user_id not in player.shuffle_votes:
+            await interaction.response.send_message(
+                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
+            )
+            return
+
+        player.shuffle_votes.discard(user_id)
+        await self._refresh(interaction)
+
+    async def on_timeout(self) -> None:
+        player = self.bot.get_player(self.guild_id) if self.bot else None
+        if player:
+            player.shuffle_votes.clear()
+        for child in self.children:
+            child.disabled = True
+        if self._message:
+            try:
+                await self._message.edit(
+                    embed=info_embed("Vote Expired", t("vote.expired", self.locale)),
+                    view=None,
+                )
+            except Exception:
+                pass
         self._message = None
         self.bot      = None  # type: ignore[assignment]
 

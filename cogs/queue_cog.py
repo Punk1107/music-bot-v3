@@ -26,12 +26,17 @@ from discord import app_commands
 from discord.ext import commands
 
 from models.enums import DuplicateMode, QueuePermission
+from core.i18n import get_locale, t
 from utils.embeds import (
     error_embed, success_embed, info_embed, queue_embed,
     history_embed, queue_search_embed,
     queue_lock_embed, queue_permission_embed, duplicate_mode_embed,
+    vote_clear_embed, vote_shuffle_embed,
 )
-from utils.views import QueueView, HistoryView, QueueSearchResultView
+from utils.views import (
+    QueueView, HistoryView, QueueSearchResultView,
+    VoteClearView, VoteShuffleView,
+)
 from utils.error_handler import dj_required_embed
 from utils.color_thief import get_dominant_color
 from utils.formatters import format_duration, truncate
@@ -62,6 +67,17 @@ class QueueCog(commands.Cog, name="Queue"):
         await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
         return False
 
+    async def _has_dj(self, interaction: discord.Interaction) -> bool:
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if not cfg.dj_role_id:
+            return True
+        member = interaction.user
+        if getattr(member, "guild_permissions", None) and member.guild_permissions.administrator:
+            return True
+        if any(r.id == cfg.dj_role_id for r in getattr(member, "roles", [])):
+            return True
+        return False
+
     def _is_admin(self, interaction: discord.Interaction) -> bool:
         return interaction.user.guild_permissions.administrator
 
@@ -71,46 +87,212 @@ class QueueCog(commands.Cog, name="Queue"):
     @app_commands.describe(page="Page number (default: 1)")
     async def queue_cmd(self, interaction: discord.Interaction, page: int = 1) -> None:
         await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         now    = player.now_playing
         color  = await get_dominant_color(now.thumbnail if now else None, self.bot.http_session)
-        embed  = queue_embed(player, page, color=color)
+        embed  = queue_embed(player, page, color=color, locale=locale)
         view   = QueueView(self.bot, interaction.guild_id, page)
         await interaction.followup.send(embed=embed, view=view)
 
     @app_commands.command(name="shuffle", description="Shuffle the queue")
     async def shuffle(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        if not await self._check_dj(interaction):
-            return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         if len(player) < 2:
             await interaction.followup.send(
-                embed=error_embed("Not Enough Tracks", "Need at least 2 tracks to shuffle."), ephemeral=True
+                embed=error_embed("Not Enough Tracks", t("queue.not_enough", locale)), ephemeral=True
             )
             return
-        player.undo_push("shuffle")    # F19: snapshot before mutation
-        await player.shuffle()
-        await interaction.followup.send(embed=success_embed("Shuffled 🔀", f"Shuffled {len(player)} tracks."))
+
+        is_dj = await self._has_dj(interaction)
+        if is_dj:
+            player.undo_push("shuffle")    # F19: snapshot before mutation
+            await player.shuffle()
+            await interaction.followup.send(embed=success_embed(t("btn.shuffle", locale), t("queue.shuffled", locale, count=len(player))))
+            return
+
+        await self._start_vote_shuffle(interaction, player, locale)
+
+    @app_commands.command(name="voteshuffle", description="Start a vote to shuffle the queue")
+    async def voteshuffle(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
+        if len(player) < 2:
+            await interaction.followup.send(
+                embed=error_embed("Not Enough Tracks", t("queue.not_enough", locale)), ephemeral=True
+            )
+            return
+        await self._start_vote_shuffle(interaction, player, locale)
+
+    async def _start_vote_shuffle(self, interaction: discord.Interaction, player, locale: str) -> None:
+        vc = interaction.guild.voice_client
+        if not vc:
+            await interaction.followup.send(
+                embed=error_embed(t("error.not_connected", locale), t("error.not_connected", locale)),
+                ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        voice_members = [m for m in (vc.channel.members if vc and vc.channel else []) if not m.bot]
+        threshold = player.vote_threshold(len(voice_members))
+
+        if member.id in player.shuffle_votes:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Already Voted",
+                    f"{t('vote.already_voted', locale)} `{len(player.shuffle_votes)}/{threshold}`",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player.shuffle_votes.add(member.id)
+
+        if len(player.shuffle_votes) >= threshold:
+            player.shuffle_votes.clear()
+            player.undo_push("shuffle")
+            await player.shuffle()
+            await interaction.followup.send(
+                embed=success_embed(
+                    t("btn.shuffle", locale),
+                    t("vote.threshold_reached", locale, threshold=threshold),
+                )
+            )
+            return
+
+        voter_names = []
+        guild = self.bot.get_guild(interaction.guild_id)
+        for uid in player.shuffle_votes:
+            m = guild.get_member(uid) if guild else None
+            voter_names.append(m.display_name if m else f"User#{uid}")
+
+        view = VoteShuffleView(
+            bot=self.bot,
+            guild_id=interaction.guild_id,
+            threshold=threshold,
+            queue_size=len(player),
+            locale=locale,
+        )
+        embed = vote_shuffle_embed(
+            queue_size=len(player),
+            votes=player.shuffle_votes,
+            threshold=threshold,
+            voters=voter_names,
+            locale=locale,
+        )
+        msg = await interaction.followup.send(embed=embed, view=view)
+        view.set_message(msg)
 
     @app_commands.command(name="clear", description="Clear the entire queue")
     async def clear(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer()
-        if not await self._check_dj(interaction):
-            return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
-        player.undo_push("clear")       # F19: snapshot before mutation
-        count  = await player.clear()
-        await self.bot.db.clear_queue(interaction.guild_id)
-        await interaction.followup.send(embed=success_embed("Queue Cleared", f"Removed {count} tracks."))
+        if len(player) == 0:
+            await interaction.followup.send(
+                embed=info_embed("Queue Empty", t("queue.empty", locale)),
+                ephemeral=True,
+            )
+            return
+
+        is_dj = await self._has_dj(interaction)
+        if is_dj:
+            player.undo_push("clear")       # F19: snapshot before mutation
+            count  = await player.clear()
+            await self.bot.db.clear_queue(interaction.guild_id)
+            await interaction.followup.send(embed=success_embed(t("btn.clear", locale), t("queue.cleared", locale, count=count)))
+            return
+
+        await self._start_vote_clear(interaction, player, locale)
+
+    @app_commands.command(name="voteclear", description="Start a vote to clear the queue")
+    async def voteclear(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
+        if len(player) == 0:
+            await interaction.followup.send(
+                embed=info_embed("Queue Empty", t("queue.empty", locale)),
+                ephemeral=True,
+            )
+            return
+        await self._start_vote_clear(interaction, player, locale)
+
+    async def _start_vote_clear(self, interaction: discord.Interaction, player, locale: str) -> None:
+        vc = interaction.guild.voice_client
+        if not vc:
+            await interaction.followup.send(
+                embed=error_embed(t("error.not_connected", locale), t("error.not_connected", locale)),
+                ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        voice_members = [m for m in (vc.channel.members if vc and vc.channel else []) if not m.bot]
+        threshold = player.vote_threshold(len(voice_members))
+
+        if member.id in player.clear_votes:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Already Voted",
+                    f"{t('vote.already_voted', locale)} `{len(player.clear_votes)}/{threshold}`",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player.clear_votes.add(member.id)
+
+        if len(player.clear_votes) >= threshold:
+            player.clear_votes.clear()
+            player.undo_push("clear")
+            await player.clear()
+            await self.bot.db.clear_queue(interaction.guild_id)
+            await interaction.followup.send(
+                embed=success_embed(
+                    t("btn.clear", locale),
+                    t("vote.threshold_reached", locale, threshold=threshold),
+                )
+            )
+            return
+
+        voter_names = []
+        guild = self.bot.get_guild(interaction.guild_id)
+        for uid in player.clear_votes:
+            m = guild.get_member(uid) if guild else None
+            voter_names.append(m.display_name if m else f"User#{uid}")
+
+        view = VoteClearView(
+            bot=self.bot,
+            guild_id=interaction.guild_id,
+            threshold=threshold,
+            queue_size=len(player),
+            locale=locale,
+        )
+        embed = vote_clear_embed(
+            queue_size=len(player),
+            votes=player.clear_votes,
+            threshold=threshold,
+            voters=voter_names,
+            locale=locale,
+        )
+        msg = await interaction.followup.send(embed=embed, view=view)
+        view.set_message(msg)
 
     @app_commands.command(name="loop", description="Cycle loop mode: Off → Track → Queue")
     async def loop(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player        = self.bot.get_player(interaction.guild_id)
         player.loop_mode = player.loop_mode.next()
+        mode_btn_key = f"btn.loop_{player.loop_mode.value.lower()}"
+        mode_label = t(mode_btn_key, locale)
         await interaction.followup.send(
-            embed=success_embed("Loop Mode", player.loop_mode.label()), ephemeral=True
+            embed=success_embed(t("btn.loop", locale), mode_label), ephemeral=True
         )
 
     @app_commands.command(name="remove", description="Remove a track by position")
@@ -119,12 +301,13 @@ class QueueCog(commands.Cog, name="Queue"):
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
             return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player  = self.bot.get_player(interaction.guild_id)
         player.undo_push("remove", extra=position)  # F19: snapshot before mutation
         removed = await player.remove(position - 1)
         if removed:
             await interaction.followup.send(
-                embed=success_embed("Removed", f"Removed **{removed.short_title}** from position {position}."),
+                embed=success_embed("Removed", t("queue.removed", locale, title=removed.short_title, pos=position)),
                 ephemeral=True,
             )
             vc = interaction.guild.voice_client
@@ -136,7 +319,7 @@ class QueueCog(commands.Cog, name="Queue"):
             # Pop the undo entry since nothing was removed
             player.undo_pop()
             await interaction.followup.send(
-                embed=error_embed("Invalid Position", f"No track at position {position}."), ephemeral=True
+                embed=error_embed("Invalid Position", t("queue.invalid_pos", locale, pos=position)), ephemeral=True
             )
 
     @app_commands.command(name="move", description="Move a track to a new position")
@@ -148,12 +331,13 @@ class QueueCog(commands.Cog, name="Queue"):
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
             return
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player  = self.bot.get_player(interaction.guild_id)
         player.undo_push("move", extra=(from_pos, to_pos))  # F19: snapshot before mutation
         ok = await player.move(from_pos - 1, to_pos - 1)
         if ok:
             await interaction.followup.send(
-                embed=success_embed("Moved", f"Track moved from position {from_pos} → {to_pos}."),
+                embed=success_embed("Moved", t("queue.moved", locale, from_pos=from_pos, to_pos=to_pos)),
                 ephemeral=True,
             )
         else:

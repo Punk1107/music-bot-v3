@@ -15,6 +15,7 @@ Tier A+ additions (F21-F25):
 from __future__ import annotations
 
 import math
+from typing import Optional
 
 from models.enums import AudioEffect, AudioQuality
 
