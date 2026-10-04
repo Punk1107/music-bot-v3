@@ -26,6 +26,7 @@ from discord.ext import commands
 
 from models.enums import AudioEffect, AudioQuality, LoopMode
 from utils.embeds import error_embed, success_embed, info_embed
+from core.i18n import get_locale, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -179,7 +180,7 @@ class PresetsCog(commands.Cog, name="Presets"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
         from utils.error_handler import dj_required_embed
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     def _is_admin(self, interaction: discord.Interaction) -> bool:
@@ -222,6 +223,8 @@ class PresetsCog(commands.Cog, name="Presets"):
     ) -> None:
         await interaction.response.defer(ephemeral=True)
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+
         if action in ("load", "save", "delete") and not await self._check_dj(interaction):
             return
 
@@ -237,7 +240,7 @@ class PresetsCog(commands.Cog, name="Presets"):
                 lines.append(f"**{label}** (`{k}`)  {source}")
 
             embed = discord.Embed(
-                title       = "🎛️  Available Presets",
+                title       = t("preset.list_title", locale),
                 description = "\n".join(lines) if lines else "No presets found.",
                 color       = 0x5865F2,
             )
@@ -250,7 +253,7 @@ class PresetsCog(commands.Cog, name="Presets"):
             name_lower = name.strip().lower()
             if not name_lower:
                 await interaction.followup.send(
-                    embed=error_embed("Missing Name", "Provide a preset name. Use `/preset list` to see options."),
+                    embed=error_embed("Missing Name", t("preset.name_required", locale)),
                     ephemeral=True,
                 )
                 return
@@ -262,7 +265,7 @@ class PresetsCog(commands.Cog, name="Presets"):
                 await interaction.followup.send(
                     embed=error_embed(
                         "Preset Not Found",
-                        f"No preset named `{name_lower}`.\nAvailable: {available}",
+                        f"{t('preset.not_found', locale, name=name_lower)}\nAvailable: {available}",
                     ),
                     ephemeral=True,
                 )
@@ -281,7 +284,7 @@ class PresetsCog(commands.Cog, name="Presets"):
 
             self._restart_audio(interaction.guild_id)
             embed = _preset_embed(name_lower, preset, is_active=True)
-            embed.title = f"✅  Preset Applied: {preset.get('_label', name_lower.title())}"
+            embed.title = t("preset.applied", locale, name=preset.get('_label', name_lower.title()))
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
@@ -290,7 +293,7 @@ class PresetsCog(commands.Cog, name="Presets"):
             name_lower = name.strip().lower()
             if not name_lower:
                 await interaction.followup.send(
-                    embed=error_embed("Missing Name", "Provide a name for your preset."),
+                    embed=error_embed("Missing Name", t("preset.name_required", locale)),
                     ephemeral=True,
                 )
                 return
@@ -298,7 +301,7 @@ class PresetsCog(commands.Cog, name="Presets"):
                 await interaction.followup.send(
                     embed=error_embed(
                         "Reserved Name",
-                        f"`{name_lower}` is a built-in preset name. Choose a different name.",
+                        t("preset.reserved_name", locale, name=name_lower),
                     ),
                     ephemeral=True,
                 )
@@ -313,7 +316,7 @@ class PresetsCog(commands.Cog, name="Presets"):
             await self.bot.db.save_server_config(cfg)
 
             embed = _preset_embed(name_lower, preset_data)
-            embed.title = f"💾  Preset Saved: `{name_lower}`"
+            embed.title = t("preset.saved", locale, name=name_lower)
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
 
@@ -321,7 +324,7 @@ class PresetsCog(commands.Cog, name="Presets"):
         if action == "delete":
             if not self._is_admin(interaction):
                 await interaction.followup.send(
-                    embed=error_embed("Permission Denied", "Only **Admins** can delete presets."),
+                    embed=error_embed("Permission Denied", t("preset.admin_required", locale)),
                     ephemeral=True,
                 )
                 return
@@ -329,13 +332,13 @@ class PresetsCog(commands.Cog, name="Presets"):
             name_lower = name.strip().lower()
             if name_lower in _BUILTIN_PRESETS:
                 await interaction.followup.send(
-                    embed=error_embed("Cannot Delete", "Built-in presets cannot be deleted."),
+                    embed=error_embed("Cannot Delete", t("preset.cannot_delete", locale)),
                     ephemeral=True,
                 )
                 return
             if name_lower not in cfg.guild_presets:
                 await interaction.followup.send(
-                    embed=error_embed("Not Found", f"No custom preset named `{name_lower}`."),
+                    embed=error_embed("Not Found", t("preset.not_found", locale, name=name_lower)),
                     ephemeral=True,
                 )
                 return
@@ -343,7 +346,7 @@ class PresetsCog(commands.Cog, name="Presets"):
             del cfg.guild_presets[name_lower]
             await self.bot.db.save_server_config(cfg)
             await interaction.followup.send(
-                embed=success_embed("Preset Deleted", f"Custom preset `{name_lower}` has been removed."),
+                embed=success_embed("Preset Deleted", t("preset.deleted", locale, name=name_lower)),
                 ephemeral=True,
             )
 

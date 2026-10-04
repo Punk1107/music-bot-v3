@@ -24,6 +24,7 @@ from chapters.seek_handler import seek_to_chapter
 from chapters.views import ChapterDropdownView, build_chapters_embed
 from utils.embeds import error_embed, info_embed
 from utils.color_thief import get_dominant_color
+from core.i18n import get_locale, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -70,11 +71,12 @@ class ChaptersCog(commands.Cog, name="Chapters"):
     async def chapters(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True)
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
 
         if not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Nothing Playing", "There is no track currently playing."),
+                embed=error_embed("Nothing Playing", t("error.not_playing", locale)),
                 ephemeral=True,
             )
             return
@@ -86,8 +88,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             await interaction.followup.send(
                 embed=error_embed(
                     "Not Supported",
-                    "Chapter detection is only available for YouTube videos.\n"
-                    "SoundCloud and Bandcamp tracks do not have chapters.",
+                    t("chapters.not_supported", locale),
                 ),
                 ephemeral=True,
             )
@@ -104,7 +105,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
-                embed=error_embed("Timed Out", "Chapter detection timed out. Please try again."),
+                embed=error_embed("Timed Out", t("chapters.timeout", locale)),
                 ephemeral=True,
             )
             return
@@ -113,10 +114,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             await interaction.followup.send(
                 embed=info_embed(
                     "No Chapters Found",
-                    f"**{discord.utils.escape_markdown(track.title)}**\n\n"
-                    "This video has no chapters.\n"
-                    "Chapters must either be set by the video creator or "
-                    "listed as timestamps in the video description.",
+                    f"**{discord.utils.escape_markdown(track.title)}**\n\n{t('chapters.none_found', locale)}",
                 ),
             )
             return
@@ -156,11 +154,12 @@ class ChaptersCog(commands.Cog, name="Chapters"):
     async def _do_jump(self, interaction: discord.Interaction, timestamp: str) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
 
         if not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Nothing Playing", "No track is currently playing."),
+                embed=error_embed("Nothing Playing", t("error.not_playing", locale)),
                 ephemeral=True,
             )
             return
@@ -170,8 +169,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             await interaction.followup.send(
                 embed=error_embed(
                     "Invalid Timestamp",
-                    "Please provide a valid timestamp.\n"
-                    "Examples: `3:45`, `01:23:00`, `225`",
+                    t("chapters.invalid_ts", locale),
                 ),
                 ephemeral=True,
             )
@@ -184,7 +182,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             await interaction.followup.send(
                 embed=error_embed(
                     "Out of Range",
-                    f"Timestamp `{timestamp}` exceeds the track duration ({track.duration_str}).",
+                    t("chapters.out_of_range", locale, duration=track.duration_str),
                 ),
                 ephemeral=True,
             )
@@ -207,7 +205,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
 
         if success:
             embed = discord.Embed(
-                title       = f"⏩  Jumped to `{_format_ts(target_sec)}`",
+                title       = t("chapters.jumped", locale, time=_format_ts(target_sec)),
                 description = f"Now playing: **{discord.utils.escape_markdown(track.title)}**\n"
                               f"Seeked to: `{_format_ts(target_sec)}`",
                 color       = 0x2ED573,
@@ -215,7 +213,7 @@ class ChaptersCog(commands.Cog, name="Chapters"):
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await interaction.followup.send(
-                embed=error_embed("Seek Failed", "Could not seek to that timestamp. Please try again."),
+                embed=error_embed("Seek Failed", t("chapters.seek_failed", locale)),
                 ephemeral=True,
             )
 

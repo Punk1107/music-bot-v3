@@ -25,6 +25,7 @@ from utils.embeds import (
     error_embed, success_embed, info_embed,
     bookmark_list_embed, bookmark_saved_embed, bookmark_loaded_embed,
 )
+from core.i18n import get_locale, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -119,10 +120,11 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     async def _save(self, interaction: discord.Interaction, name: str) -> None:
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         name = name.strip()[:50]
         if not name:
             await interaction.followup.send(
-                embed=error_embed("Name Required", "Provide a name for the bookmark (e.g. `/bsave Study Playlist`)."),
+                embed=error_embed("Name Required", t("bookmark.name_required", locale)),
                 ephemeral=True,
             )
             return
@@ -132,7 +134,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
 
         if not queue and not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Empty Queue", "There are no tracks to bookmark."), ephemeral=True
+                embed=error_embed("Empty Queue", t("bookmark.empty_queue", locale)), ephemeral=True
             )
             return
 
@@ -147,30 +149,30 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         )
         if ok:
             await interaction.followup.send(
-                embed=bookmark_saved_embed(name, len(snapshot)), ephemeral=True
+                embed=bookmark_saved_embed(name, len(snapshot), locale=locale), ephemeral=True
             )
         else:
             await interaction.followup.send(
                 embed=error_embed(
                     "Save Failed",
-                    "A bookmark with that name already exists, or you've reached the 20-bookmark limit.\n"
-                    "Use `/bdelete <name>` to remove an old bookmark first.",
+                    t("bookmark.save_failed", locale),
                 ),
                 ephemeral=True,
             )
 
     async def _load(self, interaction: discord.Interaction, name: str, mode: str) -> None:
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         name = name.strip()
         if not name:
             await interaction.followup.send(
-                embed=error_embed("Name Required", "Provide the bookmark name to load."), ephemeral=True
+                embed=error_embed("Name Required", t("bookmark.name_required", locale)), ephemeral=True
             )
             return
 
         tracks = await self.bot.db.load_bookmark(interaction.user.id, interaction.guild_id, name)
         if tracks is None:
             await interaction.followup.send(
-                embed=error_embed("Not Found", f"No bookmark named **`{name}`**. Use `/blist` to see yours."),
+                embed=error_embed("Not Found", t("bookmark.not_found", locale, name=name)),
                 ephemeral=True,
             )
             return
@@ -181,9 +183,9 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         if mode == "replace":
             await player.clear()
 
-        for t in tracks:
-            t.requested_by_id   = interaction.user.id
-            t.requested_by_name = interaction.user.display_name
+        for t_track in tracks:
+            t_track.requested_by_id   = interaction.user.id
+            t_track.requested_by_name = interaction.user.display_name
 
         await player.extend(tracks)
 
@@ -193,7 +195,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
             )
 
         await interaction.followup.send(
-            embed=bookmark_loaded_embed(name, len(tracks), mode), ephemeral=True
+            embed=bookmark_loaded_embed(name, len(tracks), mode, locale=locale), ephemeral=True
         )
 
         # Start playback if bot is in voice and nothing playing
@@ -208,21 +210,22 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def _delete(self, interaction: discord.Interaction, name: str) -> None:
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         name = name.strip()
         if not name:
             await interaction.followup.send(
-                embed=error_embed("Name Required", "Provide the bookmark name to delete."), ephemeral=True
+                embed=error_embed("Name Required", t("bookmark.name_required", locale)), ephemeral=True
             )
             return
 
         ok = await self.bot.db.delete_bookmark(interaction.user.id, interaction.guild_id, name)
         if ok:
             await interaction.followup.send(
-                embed=success_embed("Bookmark Deleted 🗑", f"Deleted bookmark **`{name}`**."), ephemeral=True
+                embed=success_embed("Bookmark Deleted 🗑", t("bookmark.deleted", locale, name=name)), ephemeral=True
             )
         else:
             await interaction.followup.send(
-                embed=error_embed("Not Found", f"No bookmark named **`{name}`**."), ephemeral=True
+                embed=error_embed("Not Found", t("bookmark.not_found", locale, name=name)), ephemeral=True
             )
 
 

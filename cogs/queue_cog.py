@@ -64,7 +64,7 @@ class QueueCog(commands.Cog, name="Queue"):
             return True
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     async def _has_dj(self, interaction: discord.Interaction) -> bool:
@@ -343,7 +343,7 @@ class QueueCog(commands.Cog, name="Queue"):
         else:
             player.undo_pop()  # nothing moved — discard snapshot
             await interaction.followup.send(
-                embed=error_embed("Invalid Position", "Check both positions are within queue range."), ephemeral=True
+                embed=error_embed("Invalid Position", t("queue.invalid_pos", locale, pos=from_pos)), ephemeral=True
             )
 
     # ── Feature 2: Queue Lock ─────────────────────────────────────────────────
@@ -352,15 +352,16 @@ class QueueCog(commands.Cog, name="Queue"):
     @app_commands.describe(locked="true = lock, false = unlock")
     async def queuelock(self, interaction: discord.Interaction, locked: bool) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not self._is_admin(interaction):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Only **Admins** can lock the queue."), ephemeral=True
+                embed=error_embed("Permission Denied", t("queue.lock_admin_only", locale)), ephemeral=True
             )
             return
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         cfg.queue_locked = locked
         await self.bot.db.save_server_config(cfg)
-        await interaction.followup.send(embed=queue_lock_embed(locked), ephemeral=True)
+        await interaction.followup.send(embed=queue_lock_embed(locked, locale=locale), ephemeral=True)
 
     # ── Feature 3: Queue Permission ───────────────────────────────────────────
 
@@ -374,9 +375,10 @@ class QueueCog(commands.Cog, name="Queue"):
     ])
     async def queueperm(self, interaction: discord.Interaction, level: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not self._is_admin(interaction):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Only **Admins** can change queue permissions."), ephemeral=True
+                embed=error_embed("Permission Denied", t("queue.perm_admin_only", locale)), ephemeral=True
             )
             return
         try:
@@ -389,7 +391,7 @@ class QueueCog(commands.Cog, name="Queue"):
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         cfg.queue_add_permission = perm
         await self.bot.db.save_server_config(cfg)
-        await interaction.followup.send(embed=queue_permission_embed(level), ephemeral=True)
+        await interaction.followup.send(embed=queue_permission_embed(level, locale=locale), ephemeral=True)
 
     # ── Feature 4: Queue History ──────────────────────────────────────────────
 
@@ -440,7 +442,8 @@ class QueueCog(commands.Cog, name="Queue"):
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         cfg.duplicate_mode = dup_mode
         await self.bot.db.save_server_config(cfg)
-        await interaction.followup.send(embed=duplicate_mode_embed(mode), ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        await interaction.followup.send(embed=duplicate_mode_embed(mode, locale=locale), ephemeral=True)
 
     # ── Feature 7: Queue Search ───────────────────────────────────────────────
 
@@ -466,15 +469,21 @@ class QueueCog(commands.Cog, name="Queue"):
 
         # Jump callback
         async def do_jump(inter: discord.Interaction, pos: int) -> None:
+            loc = await get_locale(inter.guild_id, self.bot.db)
             target = await player.jump_to(pos - 1)
             if not target:
-                await inter.followup.send(embed=error_embed("Jump Failed", "Position no longer valid."), ephemeral=True)
+                await inter.followup.send(embed=error_embed("Jump Failed", t("queue.jump_failed", loc)), ephemeral=True)
                 return
             vc = inter.guild.voice_client
-            if vc and (vc.is_playing() or vc.is_paused()):
-                vc.stop()  # triggers _play_next via after_play callback
+            if vc:
+                if vc.is_playing() or vc.is_paused():
+                    vc.stop()  # triggers _play_next via after_play callback
+                else:
+                    music_cog = self.bot.get_cog("Music")
+                    if music_cog:
+                        asyncio.create_task(music_cog._play_next(inter.guild_id))
             await inter.followup.send(
-                embed=success_embed("Jumped ↪", f"Jumping to **{target.short_title}**."), ephemeral=True
+                embed=success_embed("Jumped ↪", t("queue.jumped", loc, title=target.short_title, pos=pos)), ephemeral=True
             )
 
         # Remove callback
@@ -500,21 +509,27 @@ class QueueCog(commands.Cog, name="Queue"):
         if not await self._check_dj(interaction):
             return
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
         target = await player.jump_to(position - 1)
 
         if not target:
             await interaction.followup.send(
-                embed=error_embed("Invalid Position", f"No track at position {position}."), ephemeral=True
+                embed=error_embed("Invalid Position", t("queue.invalid_pos", locale, pos=position)), ephemeral=True
             )
             return
 
         vc = interaction.guild.voice_client
-        if vc and (vc.is_playing() or vc.is_paused()):
-            vc.stop()  # after_play fires _play_next which picks up the jumped-to track
+        if vc:
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()  # after_play fires _play_next which picks up the jumped-to track
+            else:
+                music_cog = self.bot.get_cog("Music")
+                if music_cog:
+                    asyncio.create_task(music_cog._play_next(interaction.guild_id))
 
         await interaction.followup.send(
-            embed=success_embed("Jumped ↪", f"Jumping to **{target.short_title}** (was position #{position})."),
+            embed=success_embed("Jumped ↪", t("queue.jumped", locale, title=target.short_title, pos=position)),
             ephemeral=True,
         )
 
@@ -689,9 +704,10 @@ class QueueCog(commands.Cog, name="Queue"):
         player = self.bot.get_player(interaction.guild_id)
         entry  = player.undo_pop()
 
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not entry:
             await interaction.followup.send(
-                embed=error_embed("Nothing to Undo", "The undo stack is empty."),
+                embed=error_embed("Nothing to Undo", t("undo.empty", locale)),
                 ephemeral=True,
             )
             return
@@ -713,10 +729,7 @@ class QueueCog(commands.Cog, name="Queue"):
             "move":    "↕ Move",
         }
         label = op_labels.get(entry.operation, entry.operation.title())
-        desc  = (
-            f"Undid **{label}** — restored **{len(entry.snapshot)}** track(s).\n"
-            f"*(Undo stack: {len(player.undo_stack)} entries remaining)*"
-        )
+        desc  = t("undo.success", locale, op=label, count=len(entry.snapshot))
         embed = discord.Embed(
             title       = "↩️  Undo Successful",
             description = desc,

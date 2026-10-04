@@ -118,10 +118,7 @@ def playlist_added_embed(
     locale: str = "en",
 ) -> discord.Embed:
     shuffle_tag = " • 🔀 Shuffled" if shuffled else ""
-    if locale == "en":
-        desc = f"**{count}** tracks have been added to the queue.{shuffle_tag}"
-    else:
-        desc = f"**{count}** {t('embed.in_queue', locale)}{shuffle_tag}"
+    desc = f"{t('queue.playlist_added_count', locale, count=count)}{shuffle_tag}"
     embed = discord.Embed(
         description = desc,
         color       = color,
@@ -446,19 +443,21 @@ def auto_playlist_embed(track_count: int) -> discord.Embed:
 
 # ── Smart Autoplay embed (Feature 1.4) ────────────────────────────────────────
 
-def smart_autoplay_embed(next_track: "Track", seed_track: "Track") -> discord.Embed:
+def smart_autoplay_embed(next_track: "Track", seed_track: "Track", locale: str = "en") -> discord.Embed:
     """Notification shown when Smart Autoplay picks a related video."""
+    up_next_text = t("autoplay.up_next", locale, title=discord.utils.escape_markdown(next_track.title[:60]))
     embed = discord.Embed(
         title       = "📻  Smart Autoplay",
         description = (
             f"[{discord.utils.escape_markdown(next_track.title[:70])}]({next_track.url})\n"
-            f"*Based on:* {discord.utils.escape_markdown(seed_track.title[:60])}"
+            f"*{up_next_text}*\n"
+            f"*Seed:* {discord.utils.escape_markdown(seed_track.title[:60])}"
         ),
         color       = 0x1DB954,  # Spotify-green — signals a recommendation
     )
     if next_track.thumbnail:
         embed.set_thumbnail(url=next_track.thumbnail)
-    embed.set_footer(text="Smart Autoplay  •  Related Videos  •  /autoplay off to disable")
+    embed.set_footer(text="Smart Autoplay  •  Related Videos  •  /autoplay off")
     return embed
 
 
@@ -662,19 +661,19 @@ def bookmark_list_embed(
     return embed
 
 
-def bookmark_saved_embed(name: str, count: int, color: int = 0x1ABC9C) -> discord.Embed:
+def bookmark_saved_embed(name: str, count: int, color: int = 0x1ABC9C, locale: str = "en") -> discord.Embed:
     return discord.Embed(
-        title       = "📋  Bookmark Saved",
+        title       = f"📋  {t('bookmark.title', locale)}",
         description = f"Snapshot **`{name}`** saved with **{count}** tracks.",
         color       = color,
     )
 
 
-def bookmark_loaded_embed(name: str, count: int, mode: str, color: int = 0x1ABC9C) -> discord.Embed:
+def bookmark_loaded_embed(name: str, count: int, mode: str, color: int = 0x1ABC9C, locale: str = "en") -> discord.Embed:
     action = "replaced" if mode == "replace" else "appended to"
     return discord.Embed(
-        title       = "📋  Bookmark Loaded",
-        description = f"**{count}** tracks from **`{name}`** {action} the queue.",
+        title       = f"📋  {t('bookmark.title', locale)}",
+        description = t("bookmark.loaded", locale, count=count, name=name, mode=action),
         color       = color,
     )
 
@@ -703,21 +702,21 @@ def queue_search_embed(
 
 # ── Queue Admin embeds (Features 2, 3, 6) ──────────────────────────────────────────────
 
-def queue_lock_embed(locked: bool) -> discord.Embed:
+def queue_lock_embed(locked: bool, locale: str = "en") -> discord.Embed:
     if locked:
         return discord.Embed(
             title       = "🔒  Queue Locked",
-            description = "Only **DJ** and **Admin** can add tracks to the queue.",
+            description = t("queue.lock_locked", locale),
             color       = 0xFF4757,
         )
     return discord.Embed(
         title       = "🔓  Queue Unlocked",
-        description = "All users can now add tracks to the queue.",
+        description = t("queue.lock_unlocked", locale),
         color       = 0x2ED573,
     )
 
 
-def queue_permission_embed(level: str) -> discord.Embed:
+def queue_permission_embed(level: str, locale: str = "en") -> discord.Embed:
     labels = {
         "everyone": "🌐 Everyone",
         "verified": "✅ Verified members",
@@ -726,12 +725,12 @@ def queue_permission_embed(level: str) -> discord.Embed:
     }
     return discord.Embed(
         title       = "📝  Queue Permission Updated",
-        description = f"Who can add tracks: **{labels.get(level, level)}**",
+        description = t("queue.perm_updated", locale, level=labels.get(level, level)),
         color       = 0x5865F2,
     )
 
 
-def duplicate_mode_embed(mode: str) -> discord.Embed:
+def duplicate_mode_embed(mode: str, locale: str = "en") -> discord.Embed:
     labels = {
         "allow": "✅ Allow — duplicates are added normally",
         "warn":  "⚠️ Warn — notified, but still added",
@@ -740,6 +739,6 @@ def duplicate_mode_embed(mode: str) -> discord.Embed:
     }
     return discord.Embed(
         title       = "🔄  Duplicate Mode Updated",
-        description = f"Mode: **{labels.get(mode, mode)}**",
+        description = t("queue.duplicate_mode", locale, mode=labels.get(mode, mode)),
         color       = 0x5865F2,
     )

@@ -19,6 +19,7 @@ import discord
 from chapters.detector import Chapter
 from chapters.seek_handler import seek_to_chapter
 from utils.embeds import error_embed, success_embed
+from core.i18n import get_locale, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -58,10 +59,12 @@ class ChapterSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(thinking=True, ephemeral=True)
 
+        locale = await get_locale(self.guild_id, self.bot.db)
+
         chapter = self._chapters_map.get(self.values[0])
         if not chapter:
             await interaction.followup.send(
-                embed=error_embed("Invalid Chapter", "Could not find that chapter."),
+                embed=error_embed("Invalid Chapter", t("chapters.none_found", locale)),
                 ephemeral=True,
             )
             return
@@ -69,7 +72,7 @@ class ChapterSelect(discord.ui.Select):
         player = self.bot.get_player(self.guild_id)
         if not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Nothing Playing", "No track is currently playing."),
+                embed=error_embed("Nothing Playing", t("error.not_playing", locale)),
                 ephemeral=True,
             )
             return
@@ -77,7 +80,7 @@ class ChapterSelect(discord.ui.Select):
         success = await seek_to_chapter(self.bot, self.guild_id, chapter)
         if success:
             embed = discord.Embed(
-                title       = f"⏩  Jumped to Chapter {chapter.index}",
+                title       = t("chapters.jumped", locale, time=chapter.start_str),
                 description = (
                     f"**{discord.utils.escape_markdown(chapter.title)}**\n"
                     f"⏱ Timestamp: `{chapter.start_str}`"
@@ -87,7 +90,7 @@ class ChapterSelect(discord.ui.Select):
             await interaction.followup.send(embed=embed, ephemeral=True)
         else:
             await interaction.followup.send(
-                embed=error_embed("Seek Failed", "Could not seek to that chapter. Try again."),
+                embed=error_embed("Seek Failed", t("chapters.seek_failed", locale)),
                 ephemeral=True,
             )
 

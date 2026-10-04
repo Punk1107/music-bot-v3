@@ -36,7 +36,7 @@ class EffectsCog(commands.Cog, name="Effects"):
             return True
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     def _restart_audio(self, guild_id: int) -> None:

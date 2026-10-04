@@ -58,7 +58,7 @@ class SeekCog(commands.Cog, name="Seek"):
         if any(r.id == cfg.dj_role_id for r in member.roles):
             return True
 
-        await interaction.followup.send(embed=dj_required_embed(), ephemeral=True)
+        await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
 
     @app_commands.command(name="seek", description="Seek to a specific timestamp in the current track")

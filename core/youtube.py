@@ -271,18 +271,19 @@ class YouTubeExtractor:
         # Fallback: use the top-level URL from yt-dlp
         # Only reject actual YouTube watch/short page URLs — CDN (googlevideo.com) is fine
         stream = entry.get("url")
-        if stream and not any(
-            stream.startswith(prefix)
-            for prefix in (
-                "http://www.youtube.com/watch",
-                "https://www.youtube.com/watch",
-                "http://youtu.be/",
-                "https://youtu.be/",
-                "http://www.youtube.com/shorts",
-                "https://www.youtube.com/shorts",
-            )
-        ):
-            return stream
+        if stream:
+            from urllib.parse import urlparse
+            try:
+                parsed = urlparse(stream)
+                netloc = parsed.netloc.lower()
+                if ":" in netloc:
+                    netloc = netloc.split(":")[0]
+                # Reject YouTube webpage domains (both apex and subdomains)
+                if any(netloc == d or netloc.endswith("." + d) for d in ("youtube.com", "youtu.be", "youtube-nocookie.com")):
+                    return None
+                return stream
+            except Exception:
+                pass
         return None
 
     # ── Cache maintenance (V3 NEW) ────────────────────────────────────────────
@@ -399,8 +400,15 @@ class YouTubeExtractor:
         except Exception as exc:
             logger.debug("Pre-fetch failed for '%s': %s", track.url[:60], exc)
 
-    async def search(self, query: str, max_results: int = 10) -> list[Track]:
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        limit: Optional[int] = None,
+    ) -> list[Track]:
         """Search YouTube and return up to max_results Track objects."""
+        if limit is not None:
+            max_results = limit
         if not query or not query.strip():
             return []
 
