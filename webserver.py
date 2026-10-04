@@ -26,6 +26,7 @@ from aiohttp import web
 import aiohttp
 
 import config
+from dashboard import DashboardRouter, DashboardService, DashboardWebSocketManager
 from utils.formatters import format_uptime, format_duration
 
 if TYPE_CHECKING:
@@ -246,6 +247,11 @@ class WebServer:
         self._stats_cache: Optional[dict] = None
         self._stats_ts: float = 0.0
 
+        # Group 4: Local Web Dashboard
+        self.dashboard_service = DashboardService(bot)
+        self.dashboard_ws_mgr  = DashboardWebSocketManager(self.dashboard_service)
+        self.dashboard_router  = DashboardRouter(self.dashboard_service, self.dashboard_ws_mgr)
+
         self._setup_routes()
 
     # ── Middleware ────────────────────────────────────────────────────────────
@@ -279,7 +285,11 @@ class WebServer:
     # ── Route setup ───────────────────────────────────────────────────────────
 
     def _setup_routes(self) -> None:
-        self.app.router.add_get("/",                           self._dashboard)
+        # Group 4: Register Local Web Dashboard routes (/ and /dashboard, /ws/dashboard, player & queue APIs)
+        self.dashboard_router.register_routes(self.app)
+
+        # Legacy stats dashboard and system endpoints
+        self.app.router.add_get("/stats-legacy",               self._dashboard)
         self.app.router.add_get("/health",                     self._health)
         self.app.router.add_get("/status",                     self._status)
         self.app.router.add_get("/ready",                      self._ready)
@@ -470,11 +480,13 @@ class WebServer:
         site = web.TCPSite(self._runner, config.WEB_HOST, config.WEB_PORT)
         await site.start()
         self._push_task = asyncio.create_task(self._ws_push_loop())
+        await self.dashboard_ws_mgr.start()
         logger.info("Webserver listening on http://%s:%d", config.WEB_HOST, config.WEB_PORT)
 
     async def stop(self) -> None:
         if self._push_task:
             self._push_task.cancel()
+        await self.dashboard_ws_mgr.stop()
         for ws in list(self._ws_clients):
             try:
                 await ws.close()
