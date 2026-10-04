@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 Lecture automatique intelligente activée.",
   "autoplay.disabled": "📻 Lecture automatique intelligente désactivée.",
-  "autoplay.up_next": "📻 Lecture automatique intelligente | À suivre : **{title}**"
+  "autoplay.up_next": "📻 Lecture automatique intelligente | À suivre : **{title}**",
+
+  "seek.success": "⏩ Positionné à **{time}**.",
+  "seek.forward": "⏩ Avancé de {seconds}s (à **{time}**).",
+  "seek.rewind": "⏪ Reculé de {seconds}s (à **{time}**).",
+  "seek.replay": "🔄 Relecture de **{title}** depuis le début.",
+  "seek.invalid_format": "Format de temps invalide. Utilisez `MM:SS`, `HH:MM:SS` ou des secondes (ex. `1:30`, `90`).",
+  "seek.out_of_range": "Le repère temporel est hors limites. La durée de la piste est de **{duration}**."
 }

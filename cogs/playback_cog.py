@@ -52,15 +52,18 @@ class PlaybackCog(commands.Cog, name="Playback"):
 
     def _restart_audio(self, guild_id: int) -> None:
         """
-        Stop FFmpeg so the after_play callback fires _play_next,
-        which will pick up the new settings when rebuilding FFmpeg options.
+        Seamlessly hot-reload FFmpeg with updated options at the current position.
         """
-        guild = self.bot.get_guild(guild_id)
-        if not guild:
-            return
-        vc = guild.voice_client
-        if vc and (vc.is_playing() or vc.is_paused()):
-            vc.stop()
+        import asyncio
+        if hasattr(self.bot, "seek") and self.bot.seek:
+            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+        else:
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                return
+            vc = guild.voice_client
+            if vc and (vc.is_playing() or vc.is_paused()):
+                vc.stop()
 
     # ── F21: Playback Speed ───────────────────────────────────────────────────
 

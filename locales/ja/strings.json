@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 スマート自動再生を有効にしました。",
   "autoplay.disabled": "📻 スマート自動再生を無効にしました。",
-  "autoplay.up_next": "📻 スマート自動再生 | 次の曲: **{title}**"
+  "autoplay.up_next": "📻 スマート自動再生 | 次の曲: **{title}**",
+
+  "seek.success": "⏩ **{time}** にシークしました。",
+  "seek.forward": "⏩ {seconds} 秒早送りしました (**{time}**)。",
+  "seek.rewind": "⏪ {seconds} 秒巻き戻しました (**{time}**)。",
+  "seek.replay": "🔄 **{title}** を最初から再生します。",
+  "seek.invalid_format": "無効な時間形式です。`MM:SS`、`HH:MM:SS`、または秒（例: `1:30`、`90`）を使用してください。",
+  "seek.out_of_range": "指定した時間が範囲外です。トラックの長さは **{duration}** です。"
 }

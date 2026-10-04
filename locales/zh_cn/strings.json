@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 已启用智能自动播放。",
   "autoplay.disabled": "📻 已禁用智能自动播放。",
-  "autoplay.up_next": "📻 智能自动播放 | 即将播放：**{title}**"
+  "autoplay.up_next": "📻 智能自动播放 | 即将播放：**{title}**",
+
+  "seek.success": "⏩ 已跳转至 **{time}**。",
+  "seek.forward": "⏩ 快进 {seconds} 秒（当前 **{time}**）。",
+  "seek.rewind": "⏪ 快退 {seconds} 秒（当前 **{time}**）。",
+  "seek.replay": "🔄 重新从头播放 **{title}**。",
+  "seek.invalid_format": "时间格式无效。请使用 `MM:SS`、`HH:MM:SS` 或秒数（例如 `1:30`、`90`）。",
+  "seek.out_of_range": "时间戳超出范围。歌曲总时长为 **{duration}**。"
 }

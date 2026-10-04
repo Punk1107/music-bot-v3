@@ -70,5 +70,12 @@
 
   "autoplay.enabled": "📻 Reproducción automática inteligente activada.",
   "autoplay.disabled": "📻 Reproducción automática inteligente desactivada.",
-  "autoplay.up_next": "📻 Reproducción inteligente | Siguiente: **{title}**"
+  "autoplay.up_next": "📻 Reproducción inteligente | Siguiente: **{title}**",
+
+  "seek.success": "⏩ Saltado a **{time}**.",
+  "seek.forward": "⏩ Adelantado {seconds}s (en **{time}**).",
+  "seek.rewind": "⏪ Rebobinado {seconds}s (en **{time}**).",
+  "seek.replay": "🔄 Reproduciendo **{title}** desde el principio.",
+  "seek.invalid_format": "Formato de tiempo no válido. Usa `MM:SS`, `HH:MM:SS` o segundos (ej. `1:30`, `90`).",
+  "seek.out_of_range": "La marca de tiempo está fuera de rango. La duración de la pista es **{duration}**."
 }
