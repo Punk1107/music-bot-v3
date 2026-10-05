@@ -73,7 +73,7 @@ class FavoritesCog(commands.Cog, name="Favorites"):
         if count >= config.MAX_FAVORITES_PER_USER:
             await interaction.followup.send(
                 embed=error_embed(
-                    "Favorites Full",
+                    t("title.favorites_full", locale),
                     f"You have reached the limit of {config.MAX_FAVORITES_PER_USER} favorites.\n"
                     "Remove some with `/favorite remove`.",
                 ),
@@ -89,7 +89,7 @@ class FavoritesCog(commands.Cog, name="Favorites"):
         else:
             await interaction.followup.send(
                 embed=error_embed(
-                    "Already Exists",
+                    t("title.already_exists", locale),
                     f"You already have a favorite named `{fav_name}`.\nUse `/favorite remove {fav_name}` first.",
                 ),
                 ephemeral=True,

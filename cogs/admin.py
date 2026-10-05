@@ -55,9 +55,10 @@ class AdminCog(commands.Cog, name="Admin"):
     @app_commands.describe(role="Role to designate as DJ")
     async def djset_role(self, interaction: discord.Interaction, role: discord.Role) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
@@ -72,9 +73,10 @@ class AdminCog(commands.Cog, name="Admin"):
     @djset_group.command(name="clear", description="Remove DJ role restriction (everyone can control the bot)")
     async def djset_clear(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
@@ -102,9 +104,10 @@ class AdminCog(commands.Cog, name="Admin"):
         channel:     discord.TextChannel,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
@@ -118,9 +121,10 @@ class AdminCog(commands.Cog, name="Admin"):
     @rc_group.command(name="clear", description="Remove the request channel")
     async def rc_clear(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
@@ -140,16 +144,17 @@ class AdminCog(commands.Cog, name="Admin"):
     @app_commands.default_permissions(administrator=True)
     async def autoplaylist(self, interaction: discord.Interaction, enabled: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
         val = enabled.strip().lower()
         if val not in ("on", "off", "true", "false", "1", "0"):
             await interaction.followup.send(
-                embed=error_embed("Invalid Value", 'Use "on" or "off".'), ephemeral=True
+                embed=error_embed(t("title.invalid_value", locale), 'Use "on" or "off".'), ephemeral=True
             )
             return
 
@@ -187,15 +192,16 @@ class AdminCog(commands.Cog, name="Admin"):
     @app_commands.default_permissions(administrator=True)
     async def idletimeout(self, interaction: discord.Interaction, seconds: int) -> None:
         await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
         if not _is_admin(interaction.user):
             await interaction.followup.send(
-                embed=error_embed("Permission Denied", "Administrator permission required."), ephemeral=True
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
             )
             return
 
         if not 60 <= seconds <= 3600:
             await interaction.followup.send(
-                embed=error_embed("Invalid Value", "Idle timeout must be between 60 and 3600 seconds."),
+                embed=error_embed(t("title.invalid_value", locale), "Idle timeout must be between 60 and 3600 seconds."),
                 ephemeral=True,
             )
             return

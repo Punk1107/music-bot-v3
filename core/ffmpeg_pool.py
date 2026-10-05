@@ -116,13 +116,19 @@ class FFmpegWarmPool:
         A true zero-gap swap would require monkey-patching discord.py internals;
         this approach gives a practical 30-60% reduction in between-track gap.
         """
-        # Discard any idle warm source (frees its pipe)
+        # Discard any idle warm source (frees its pipe and kills subprocess)
         try:
             warm = self._ready.get_nowait()
             try:
                 warm.cleanup()
             except Exception:
                 pass
+            proc = getattr(warm, "_process", None)
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
         except asyncio.QueueEmpty:
             pass
 

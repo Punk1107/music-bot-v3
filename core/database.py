@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 # Events accumulate here and are flushed in a single batch transaction.
 ANALYTICS_FLUSH_INTERVAL: float = 5.0    # seconds between auto-flushes
 ANALYTICS_FLUSH_SIZE:     int   = 50     # flush early if buffer this full
+ANALYTICS_BUF_MAX:        int   = 2000   # hard cap on buffered events to prevent memory leaks / OOM
 
 # ── Server config cache ───────────────────────────────────────────────────────
 _CFG_CACHE_TTL: float = 30.0            # cache guild config for 30 s
@@ -603,6 +604,8 @@ class DatabaseManager:
         try:
             payload_json = json.dumps(payload or {}, ensure_ascii=False)
             async with self._analytics_lock:
+                if len(self._analytics_buf) >= ANALYTICS_BUF_MAX:
+                    self._analytics_buf.pop(0)
                 self._analytics_buf.append((guild_id, event_type, payload_json))
                 should_flush = len(self._analytics_buf) >= ANALYTICS_FLUSH_SIZE
 
@@ -631,9 +634,13 @@ class DatabaseManager:
             logger.debug("Analytics flush: %d events committed", len(batch))
         except Exception as exc:
             logger.warning("Analytics flush error: %s", exc)
-            # Re-queue failed events
+            # Re-queue failed events with hard cap
             async with self._analytics_lock:
                 self._analytics_buf[:0] = batch
+                if len(self._analytics_buf) > ANALYTICS_BUF_MAX:
+                    drop_count = len(self._analytics_buf) - ANALYTICS_BUF_MAX
+                    del self._analytics_buf[:drop_count]
+                    logger.warning("Analytics buffer exceeded %d; dropped %d oldest events", ANALYTICS_BUF_MAX, drop_count)
 
     async def _analytics_flush_loop(self) -> None:
         """Background loop: flush analytics buffer every ANALYTICS_FLUSH_INTERVAL seconds."""

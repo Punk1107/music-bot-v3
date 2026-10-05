@@ -64,7 +64,10 @@ class PanCog(commands.Cog, name="Pan"):
     def _restart_audio(self, guild_id: int) -> None:
         """Hot-reload current playback to apply new pan / stereo filters seamlessly."""
         if hasattr(self.bot, "seek") and self.bot.seek:
-            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+            if hasattr(self.bot, "track_task"):
+                self.bot.track_task(self.bot.seek.hot_reload(guild_id), name=f"pan_hot_reload_{guild_id}")
+            else:
+                asyncio.create_task(self.bot.seek.hot_reload(guild_id))
         else:
             guild = self.bot.get_guild(guild_id)
             if guild and guild.voice_client:
@@ -93,11 +96,11 @@ class PanCog(commands.Cog, name="Pan"):
         self._restart_audio(interaction.guild_id)
 
         if abs(b) < 0.05:
-            pos_label = "Center (0%)"
+            pos_label = t("pan.center", locale)
         elif b < 0:
-            pos_label = f"Left {int(abs(b) * 100)}%"
+            pos_label = t("pan.left", locale, pct=int(abs(b) * 100))
         else:
-            pos_label = f"Right {int(b * 100)}%"
+            pos_label = t("pan.right", locale, pct=int(b * 100))
 
         await interaction.followup.send(
             embed=success_embed("Audio Pan", t("pan.set", locale, position=pos_label)),
@@ -124,14 +127,18 @@ class PanCog(commands.Cog, name="Pan"):
         player.stereo_width = w
         self._restart_audio(interaction.guild_id)
 
-        mode_labels = {
-            0.0: "Mono (0.0x)",
-            0.5: "Narrow (0.5x)",
-            1.0: "Normal Stereo (1.0x)",
-            1.5: "Wide (1.5x)",
-            2.0: "Ultra-Wide (2.0x)",
-        }
-        label = mode_labels.get(w, f"{w:.1f}x")
+        if abs(w - 0.0) < 0.05:
+            label = t("stereo.mono", locale)
+        elif abs(w - 0.5) < 0.05:
+            label = t("stereo.narrow", locale)
+        elif abs(w - 1.0) < 0.05:
+            label = t("stereo.normal", locale)
+        elif abs(w - 1.5) < 0.05:
+            label = t("stereo.wide", locale, val=f"{w:.1f}")
+        elif abs(w - 2.0) < 0.05:
+            label = t("stereo.ultra_wide", locale, val=f"{w:.1f}")
+        else:
+            label = f"{w:.1f}x"
 
         await interaction.followup.send(
             embed=success_embed("Stereo Enhance", t("stereo.set", locale, mode=label)),

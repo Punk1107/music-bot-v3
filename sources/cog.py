@@ -307,7 +307,7 @@ class SourcesCog(commands.Cog, name="Sources"):
         await interaction.followup.send(embed=embed)
 
         if not vc.is_playing() and not vc.is_paused():
-            asyncio.create_task(music_cog._play_next(interaction.guild_id))
+            self.bot.track_task(music_cog._play_next(interaction.guild_id), name=f"sc_play_next_{interaction.guild_id}")
 
         return True
 

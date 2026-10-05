@@ -190,7 +190,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         await player.extend(tracks)
 
         if vc:
-            asyncio.create_task(
+            self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
 

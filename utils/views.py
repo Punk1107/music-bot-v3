@@ -270,9 +270,9 @@ class MusicControlView(discord.ui.View):
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
         player.reset()
-        asyncio.create_task(self.bot.db.clear_queue(self.guild_id))
+        self.bot.track_task(self.bot.db.clear_queue(self.guild_id))
         await interaction.response.send_message(
-            embed=success_embed("Stopped", t("leave.manual", locale)), ephemeral=True
+            embed=success_embed(t("title.stopped", locale), t("leave.manual", locale)), ephemeral=True
         )
 
     # ── Row 1: Seek + Volume + Favorite ───────────────────────────────────────

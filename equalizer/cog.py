@@ -74,7 +74,10 @@ class EqualizerCog(commands.Cog, name="Equalizer"):
     def _restart_audio(self, guild_id: int) -> None:
         """Seamlessly hot-reload FFmpeg with new equalizer filters without advancing queue."""
         if hasattr(self.bot, "seek") and self.bot.seek:
-            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+            if hasattr(self.bot, "track_task"):
+                self.bot.track_task(self.bot.seek.hot_reload(guild_id), name=f"eq_hot_reload_{guild_id}")
+            else:
+                asyncio.create_task(self.bot.seek.hot_reload(guild_id))
         else:
             guild = self.bot.get_guild(guild_id)
             if guild and guild.voice_client:

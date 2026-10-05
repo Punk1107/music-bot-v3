@@ -18,6 +18,8 @@ class RateLimiter:
         self.max_calls = max_calls
         self.window    = window
         self._windows: dict[tuple[int, int], deque[float]] = defaultdict(deque)
+        self._last_cleanup: float = 0.0
+        self._cleanup_interval: float = 60.0
 
     def is_rate_limited(self, guild_id: int, user_id: int) -> bool:
         """
@@ -32,7 +34,8 @@ class RateLimiter:
         while dq and now - dq[0] > self.window:
             dq.popleft()
 
-        if len(self._windows) > 1000:
+        # Throttled cleanup when tracking table grows large (at most once every 60s)
+        if len(self._windows) > 1000 and (now - self._last_cleanup) > self._cleanup_interval:
             self.cleanup()
 
         if len(dq) >= self.max_calls:
@@ -58,6 +61,7 @@ class RateLimiter:
     def cleanup(self) -> None:
         """Evict keys that have no active timestamps in their window."""
         now = time.monotonic()
+        self._last_cleanup = now
         expired_keys = [
             k for k, dq in self._windows.items()
             if not dq or now - dq[-1] > self.window

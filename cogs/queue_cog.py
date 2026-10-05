@@ -312,14 +312,14 @@ class QueueCog(commands.Cog, name="Queue"):
             )
             vc = interaction.guild.voice_client
             if vc:
-                asyncio.create_task(
+                self.bot.track_task(
                     self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
                 )
         else:
             # Pop the undo entry since nothing was removed
             player.undo_pop()
             await interaction.followup.send(
-                embed=error_embed("Invalid Position", t("queue.invalid_pos", locale, pos=position)), ephemeral=True
+                embed=error_embed(t("title.invalid_value", locale), t("queue.invalid_pos", locale, pos=position)), ephemeral=True
             )
 
     @app_commands.command(name="move", description="Move a track to a new position")
@@ -481,7 +481,7 @@ class QueueCog(commands.Cog, name="Queue"):
                 else:
                     music_cog = self.bot.get_cog("Music")
                     if music_cog:
-                        asyncio.create_task(music_cog._play_next(inter.guild_id))
+                        self.bot.track_task(music_cog._play_next(inter.guild_id))
             await inter.followup.send(
                 embed=success_embed("Jumped ↪", t("queue.jumped", loc, title=target.short_title, pos=pos)), ephemeral=True
             )
@@ -515,7 +515,7 @@ class QueueCog(commands.Cog, name="Queue"):
 
         if not target:
             await interaction.followup.send(
-                embed=error_embed("Invalid Position", t("queue.invalid_pos", locale, pos=position)), ephemeral=True
+                embed=error_embed(t("title.invalid_value", locale), t("queue.invalid_pos", locale, pos=position)), ephemeral=True
             )
             return
 
@@ -526,7 +526,7 @@ class QueueCog(commands.Cog, name="Queue"):
             else:
                 music_cog = self.bot.get_cog("Music")
                 if music_cog:
-                    asyncio.create_task(music_cog._play_next(interaction.guild_id))
+                    self.bot.track_task(music_cog._play_next(interaction.guild_id))
 
         await interaction.followup.send(
             embed=success_embed("Jumped ↪", t("queue.jumped", locale, title=target.short_title, pos=position)),
@@ -674,7 +674,7 @@ class QueueCog(commands.Cog, name="Queue"):
         await player.extend(tracks)
 
         if vc:
-            asyncio.create_task(
+            self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
 
@@ -717,7 +717,7 @@ class QueueCog(commands.Cog, name="Queue"):
         # Restore DB queue
         vc = interaction.guild.voice_client
         if vc:
-            asyncio.create_task(
+            self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
 
@@ -808,7 +808,7 @@ class QueueCog(commands.Cog, name="Queue"):
         # Restore DB
         vc = interaction.guild.voice_client
         if vc:
-            asyncio.create_task(
+            self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
         embed = discord.Embed(

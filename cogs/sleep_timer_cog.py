@@ -210,7 +210,10 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                 _p.sleep_timer_task = None
                 _p.sleep_timer_end  = None
 
-        player.sleep_timer_task = asyncio.create_task(_timer_task())
+        task = asyncio.create_task(_timer_task(), name=f"sleep_timer_{guild_id}")
+        if hasattr(self.bot, "track_task"):
+            self.bot.track_task(task)
+        player.sleep_timer_task = task
 
         await interaction.followup.send(
             embed=_sleep_set_embed(total_secs, end_time, locale=locale),

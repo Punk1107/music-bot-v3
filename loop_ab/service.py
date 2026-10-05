@@ -58,9 +58,13 @@ class LoopABService:
 
         # Spawn loop timer task
         # Pass the freshly updated play_seq from the seek
-        player.loop_ab_task = asyncio.create_task(
-            self._loop_worker(guild_id, start_sec, end_sec, player._play_seq)
+        task = asyncio.create_task(
+            self._loop_worker(guild_id, start_sec, end_sec, player._play_seq),
+            name=f"loop_ab_{guild_id}",
         )
+        if hasattr(self.bot, "track_task"):
+            self.bot.track_task(task)
+        player.loop_ab_task = task
         logger.info("guild %d: Loop A-B started from %ds to %ds", guild_id, start_sec, end_sec)
         return True, ""
 

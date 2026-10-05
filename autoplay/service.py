@@ -17,8 +17,10 @@ For non-YouTube seeds (Spotify, SoundCloud, Bandcamp):
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import re
+import time
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 from urllib.parse import urlparse, parse_qs
@@ -145,6 +147,15 @@ class AutoplayService:
         # Per-guild rolling dedup history: {guild_id: deque[video_id or title]}
         self._history: dict[int, deque[str]] = {}
         self._lock:    asyncio.Lock = asyncio.Lock()
+        # Perf-2: In-memory recommendation cache {video_id: (tracks, timestamp)}
+        self._recommendation_cache: dict[str, tuple[list[Track], float]] = {}
+        self._cache_ttl: float = 3600.0  # 1 hour TTL
+        self._cache_max: int = 256
+        self._semaphore: asyncio.Semaphore = asyncio.Semaphore(2)
+
+    def clear_cache(self) -> None:
+        """Clear recommendation cache (useful for testing or memory reclaim)."""
+        self._recommendation_cache.clear()
 
     # ── History helpers ───────────────────────────────────────────────────────
 
@@ -176,18 +187,28 @@ class AutoplayService:
 
     async def fetch_related_tracks(self, video_id: str, limit: int = 8) -> list[Track]:
         """Fetch up to limit related tracks for a YouTube video using Radio Mix."""
+        now = time.monotonic()
+        if video_id in self._recommendation_cache:
+            cached_tracks, ts = self._recommendation_cache[video_id]
+            if now - ts < self._cache_ttl:
+                logger.debug("Smart Autoplay: cache HIT for video_id=%s", video_id)
+                return [copy.copy(t) for t in cached_tracks[:limit]]
+            else:
+                self._recommendation_cache.pop(video_id, None)
+
         opts = dict(_RELATED_OPTS)
         opts["playlist_items"] = f"2-{limit + 1}"
         url  = _radio_url(video_id)
         loop = asyncio.get_running_loop()
         try:
-            result = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: self._run_ytdl(opts, url),
-                ),
-                timeout=25.0,
-            )
+            async with self._semaphore:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: self._run_ytdl(opts, url),
+                    ),
+                    timeout=25.0,
+                )
         except asyncio.TimeoutError:
             logger.warning("Smart Autoplay: yt-dlp timed out for video_id=%s", video_id)
             return []
@@ -208,6 +229,11 @@ class AutoplayService:
                 if len(tracks) >= limit:
                     break
         logger.debug("Smart Autoplay: fetched %d related tracks for %s", len(tracks), video_id)
+        if tracks:
+            if len(self._recommendation_cache) >= self._cache_max:
+                oldest_k = next(iter(self._recommendation_cache))
+                self._recommendation_cache.pop(oldest_k, None)
+            self._recommendation_cache[video_id] = ([copy.copy(t) for t in tracks], time.monotonic())
         return tracks
 
     async def _fetch_related(self, video_id: str) -> list[Track]:

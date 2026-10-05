@@ -98,7 +98,7 @@ class SeekCog(commands.Cog, name="Seek"):
         if ok:
             time_str = format_duration(target_sec)
             await interaction.followup.send(
-                embed=success_embed("Seek", t("seek.success", locale, time=time_str)),
+                embed=success_embed(t("title.seek", locale), t("seek.success", locale, time=time_str)),
                 ephemeral=True,
             )
         else:
@@ -130,7 +130,7 @@ class SeekCog(commands.Cog, name="Seek"):
         if ok:
             time_str = format_duration(new_time)
             await interaction.followup.send(
-                embed=success_embed("Fast-Forward", t("seek.forward", locale, seconds=seconds, time=time_str)),
+                embed=success_embed(t("title.fast_forward", locale), t("seek.forward", locale, seconds=seconds, time=time_str)),
                 ephemeral=True,
             )
         else:
@@ -162,7 +162,7 @@ class SeekCog(commands.Cog, name="Seek"):
         if ok:
             time_str = format_duration(new_time)
             await interaction.followup.send(
-                embed=success_embed("Rewind", t("seek.rewind", locale, seconds=seconds, time=time_str)),
+                embed=success_embed(t("title.rewind", locale), t("seek.rewind", locale, seconds=seconds, time=time_str)),
                 ephemeral=True,
             )
         else:
@@ -189,7 +189,7 @@ class SeekCog(commands.Cog, name="Seek"):
         ok = await self.bot.seek.replay(interaction.guild_id)
         if ok:
             await interaction.followup.send(
-                embed=success_embed("Replay", t("seek.replay", locale, title=track_title)),
+                embed=success_embed(t("title.replay", locale), t("seek.replay", locale, title=track_title)),
                 ephemeral=True,
             )
         else:
