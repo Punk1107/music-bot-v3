@@ -397,7 +397,7 @@ class MusicCog(commands.Cog, name="Music"):
         elif player._pending_play:
             # after_play fired while we held the lock — honour it now.
             player._pending_play = False
-            asyncio.create_task(self._play_next(guild_id))
+            self.bot.track_task(self._play_next(guild_id))
 
     async def _play_next_locked(self, guild_id: int, *, skip_depth: int = 0) -> Optional[int]:
         """
@@ -487,8 +487,9 @@ class MusicCog(commands.Cog, name="Music"):
         except CircuitBreakerOpen:
             if player.text_channel:
                 try:
+                    loc = await get_locale(guild_id, self.bot.db)
                     await player.text_channel.send(
-                        embed=error_embed("Service Busy", "YouTube API circuit breaker is OPEN. Try again later."),
+                        embed=error_embed(t("title.service_busy", loc), t("error.circuit_open", loc)),
                         delete_after=30,
                     )
                 except Exception:
@@ -572,7 +573,7 @@ class MusicCog(commands.Cog, name="Music"):
             source = discord.PCMVolumeTransformer(raw_source, volume=player.volume)
             vc.play(source, after=after_play)
             # Replenish the pool in the background
-            asyncio.create_task(self.bot.ffmpeg_pool.replenish())
+            self.bot.track_task(self.bot.ffmpeg_pool.replenish())
             logger.debug("FFmpegWarmPool: playing %s…", stream_url[:80])
         except Exception as exc:
             logger.error("FFmpeg start failed: %s", exc)
@@ -587,22 +588,28 @@ class MusicCog(commands.Cog, name="Music"):
         player.idle_since      = None
 
         # ── Record analytics ───────────────────────────────────────────────────
-        asyncio.create_task(
+        self.bot.track_task(
             self.bot.db.log_event(guild_id, "track_play", {"title": next_track.title, "url": next_track.url})
         )
 
         # ── Feature 15: Background metadata refresh ───────────────────────────
-        asyncio.create_task(
+        self.bot.track_task(
             bg_refresh_metadata(next_track, self.bot.youtube)
         )
 
         # ── Feature 14: Predictive thumbnail pre-warm for next N tracks ────────
-        asyncio.create_task(
+        self.bot.track_task(
             prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=player.adaptive_prefetch_limit())
         )
 
         # ── Send now-playing embed ────────────────────────────────────────────
         if player.text_channel:
+            # Disable components on old now_playing_msg to avoid lingering active buttons
+            if player.now_playing_msg and hasattr(player.now_playing_msg, "edit"):
+                try:
+                    await player.now_playing_msg.edit(view=None)
+                except Exception:
+                    pass
             try:
                 color = await get_dominant_color(next_track.thumbnail, self.bot.http_session)
                 # Perf-1: cache resolved base color on player so _np_refresh
@@ -659,7 +666,7 @@ class MusicCog(commands.Cog, name="Music"):
             await asyncio.sleep(delay)
             await self.bot.youtube.prefetch_stream_url(next_track)
 
-        player._prefetch_task = asyncio.create_task(_prefetch_after_delay())
+        player._prefetch_task = self.bot.track_task(_prefetch_after_delay())
 
     # ── Public helper: play_track ──────────────────────────────────────────────
 
@@ -717,14 +724,14 @@ class MusicCog(commands.Cog, name="Music"):
 
         # Save queue to DB immediately (write-ahead)
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
-        asyncio.create_task(
+        self.bot.track_task(
             self.bot.db.save_queue(
                 interaction.guild_id,
                 vc.channel.id,
                 player.queue,
             )
         )
-        asyncio.create_task(
+        self.bot.track_task(
             self.bot.db.add_search_history(interaction.guild_id, interaction.user.id, track.title)
         )
 
@@ -808,7 +815,7 @@ class MusicCog(commands.Cog, name="Music"):
             if shuffle and len(tracks) > 1:
                 random.shuffle(tracks)
             await player.extend(tracks)
-            asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
+            self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
@@ -833,7 +840,7 @@ class MusicCog(commands.Cog, name="Music"):
             if shuffle and len(tracks) > 1:
                 random.shuffle(tracks)
             await player.extend(tracks)
-            asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
+            self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
             if not vc.is_playing():
                 await self._play_next(interaction.guild_id)
@@ -936,7 +943,7 @@ class MusicCog(commands.Cog, name="Music"):
                 t_item.requested_by_id   = interaction.user.id
                 t_item.requested_by_name = interaction.user.display_name
             await player.extend_next(tracks)
-            asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
+            self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), locale=locale))
             if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
@@ -959,7 +966,7 @@ class MusicCog(commands.Cog, name="Music"):
                 t_item.requested_by_id   = interaction.user.id
                 t_item.requested_by_name = interaction.user.display_name
             await player.extend_next(tracks)
-            asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
+            self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), locale=locale))
             if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
@@ -1004,7 +1011,7 @@ class MusicCog(commands.Cog, name="Music"):
                     await self.play_track(interaction, resolved[0], play_next=True)
                 else:
                     await player.extend_next(resolved)
-                    asyncio.create_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
+                    self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
                     await interaction.followup.send(embed=playlist_added_embed(len(resolved), locale=locale))
                     if not vc.is_playing() and not vc.is_paused():
                         await self._play_next(interaction.guild_id)

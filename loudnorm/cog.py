@@ -64,7 +64,10 @@ class LoudnormCog(commands.Cog, name="Loudnorm"):
     def _restart_audio(self, guild_id: int) -> None:
         """Hot-reload current playback to apply/remove loudnorm seamlessly."""
         if hasattr(self.bot, "seek") and self.bot.seek:
-            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+            if hasattr(self.bot, "track_task"):
+                self.bot.track_task(self.bot.seek.hot_reload(guild_id), name=f"loudnorm_hot_reload_{guild_id}")
+            else:
+                asyncio.create_task(self.bot.seek.hot_reload(guild_id))
         else:
             guild = self.bot.get_guild(guild_id)
             if guild and guild.voice_client:

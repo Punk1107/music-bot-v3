@@ -486,6 +486,11 @@ class WebServer:
     async def stop(self) -> None:
         if self._push_task:
             self._push_task.cancel()
+            try:
+                await self._push_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._push_task = None
         await self.dashboard_ws_mgr.stop()
         for ws in list(self._ws_clients):
             try:

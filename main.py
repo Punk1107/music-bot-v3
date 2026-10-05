@@ -894,12 +894,11 @@ class MusicBot(commands.Bot):
         """
         Refresh now-playing embed progress bar every 7 seconds.
 
-        Perf-1 optimisations:
-          1. Use player._cached_base_color instead of re-fetching the thumbnail
-             on every tick (thumbnail URL and dominant color don't change mid-track).
-          2. Skip msg.edit() when the quantised progress hasn't advanced by at
-             least one step (~1 / bar_width ≈ 3 %).  This prevents a burst of
-             Discord API calls on very short tracks or when the bot is paused.
+        - Ticks every 7 seconds unconditionally until the track completes.
+        - Updates elapsed/remaining timer and dynamic color smoothly.
+        - Skips msg.edit() only when playback is paused.
+        - Resilient error handling: only clears message reference on NotFound (404)
+          or Forbidden (403); transient 429/5xx errors do not destroy the reference.
         """
         for guild_id, player in self._players.items():
             if not player.now_playing or not player.now_playing_msg:
@@ -921,10 +920,7 @@ class MusicBot(commands.Bot):
                 guild_vc = self.get_guild(guild_id).voice_client if self.get_guild(guild_id) else None
                 is_paused = bool(guild_vc and guild_vc.is_paused())
 
-                # Perf-1 UX: When paused the progress knob doesn't move — skip
-                # the edit unless something else changed (the embed_theme or
-                # now_playing changed). This avoids Discord API churn and prevents
-                # the embed from flickering every 7 s while paused.
+                # When paused the progress knob doesn't move — skip edit
                 if is_paused:
                     continue
 
@@ -935,13 +931,17 @@ class MusicBot(commands.Bot):
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)
             except discord.NotFound:
-                # Bug 10: message was deleted — clear ref to stop repeated 404s
+                # Message was deleted — clear ref to stop repeated 404s
                 player.now_playing_msg    = None
                 player.now_playing_msg_id = None
-            except Exception:
-                # Bug 10: on any unexpected error, clear the msg ref too so the
-                # next tick doesn't retry a potentially broken message object.
-                player.now_playing_msg = None
+            except discord.Forbidden:
+                player.now_playing_msg    = None
+                player.now_playing_msg_id = None
+            except discord.HTTPException as http_exc:
+                # Transient HTTP error (e.g. 429 rate limit or 5xx) — keep message ref
+                logger.debug("Transient HTTP error in NP refresh: %s", http_exc)
+            except Exception as exc:
+                logger.debug("Unexpected error in NP refresh: %s", exc)
 
     @_np_refresh.before_loop
     async def _before_np_refresh(self) -> None:

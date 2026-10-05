@@ -154,7 +154,7 @@ def now_playing_embed(
     q_size   = len(player)
     q_val    = f"{q_size} {t('embed.in_queue', locale)}"
     req_val  = f"@{track.requested_by_name}" if track.requested_by_name else "—"
-    loop_val = player.loop_mode.value.capitalize()
+    loop_val = t(f"loop.mode_{player.loop_mode.value.lower()}", locale)
     vol_val  = f"{int(player.volume * 100)}%"
     footer_icon = bot_user.display_avatar.url if bot_user else None
 
@@ -342,8 +342,9 @@ def queue_embed(
         description = "\n".join(lines),
         color       = color,
     )
+    loop_mode_str = t(f"loop.mode_{player.loop_mode.value.lower()}", locale)
     embed.set_footer(
-        text=f"Page {page}/{total_pages}  ·  🔁 {player.loop_mode.value.capitalize()}  ·  🔊 {int(player.volume * 100)}%"
+        text=f"Page {page}/{total_pages}  ·  🔁 {loop_mode_str}  ·  🔊 {int(player.volume * 100)}%"
     )
     return embed
 

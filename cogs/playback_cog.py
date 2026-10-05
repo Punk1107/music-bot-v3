@@ -57,7 +57,10 @@ class PlaybackCog(commands.Cog, name="Playback"):
         """
         import asyncio
         if hasattr(self.bot, "seek") and self.bot.seek:
-            asyncio.create_task(self.bot.seek.hot_reload(guild_id))
+            if hasattr(self.bot, "track_task"):
+                self.bot.track_task(self.bot.seek.hot_reload(guild_id), name=f"playback_hot_reload_{guild_id}")
+            else:
+                asyncio.create_task(self.bot.seek.hot_reload(guild_id))
         else:
             guild = self.bot.get_guild(guild_id)
             if not guild:
