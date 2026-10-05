@@ -27,7 +27,7 @@ from discord.ext import commands
 import config
 from core.circuit_breaker import CircuitBreakerOpen
 from core.validator import validate_url, validate_search_query
-from core.i18n import get_locale, t
+from core.i18n import get_locale, get_locale_sync, t
 from models.track import Track
 from models.enums import QueuePermission, DuplicateMode
 from core.media_cache import (          # Tier-S+ F14 F15
@@ -194,11 +194,12 @@ class MusicCog(commands.Cog, name="Music"):
         if dup_index is None:
             return "ok"  # Not a duplicate
 
+        locale = get_locale_sync(interaction.guild_id)
         if mode == DuplicateMode.BLOCK:
             await interaction.followup.send(
                 embed=error_embed(
-                    "🚫 Duplicate Rejected",
-                    f"**{track.short_title}** is already in the queue (position #{dup_index + 1}).",
+                    t("title.duplicate_rejected", locale),
+                    t("queue.duplicate_blocked", locale, title=track.short_title, pos=dup_index + 1),
                 ),
                 ephemeral=True,
             )
@@ -207,8 +208,8 @@ class MusicCog(commands.Cog, name="Music"):
         if mode == DuplicateMode.WARN:
             await interaction.followup.send(
                 embed=warning_embed(
-                    "⚠️ Duplicate Track",
-                    f"**{track.short_title}** is already in the queue at position #{dup_index + 1}.",
+                    t("title.duplicate_warned", locale),
+                    t("queue.duplicate_warned", locale, title=track.short_title, pos=dup_index + 1),
                 ),
                 ephemeral=True,
             )
@@ -225,8 +226,8 @@ class MusicCog(commands.Cog, name="Music"):
                     player._queue = deque(lst)
             await interaction.followup.send(
                 embed=info_embed(
-                    "⏫ Moved to Front",
-                    f"**{track.short_title}** was already in queue — moved to position #1.",
+                    t("title.moved_front", locale),
+                    t("queue.duplicate_moved_front", locale, title=track.short_title),
                 ),
                 ephemeral=True,
             )

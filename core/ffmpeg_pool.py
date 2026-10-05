@@ -90,6 +90,12 @@ class FFmpegWarmPool:
                     src.cleanup()
                 except Exception:
                     pass
+                proc = getattr(src, "_process", None)
+                if proc and proc.poll() is None:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
             except asyncio.QueueEmpty:
                 break
 

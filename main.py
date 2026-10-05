@@ -27,7 +27,7 @@ import logging
 import os
 import traceback
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 import discord
 from discord.ext import commands, tasks
@@ -162,7 +162,28 @@ class MusicBot(commands.Bot):
         self.mem_leak_detector: Optional[MemoryLeakDetector]           = None
         self.metrics:           Optional[metrics_module.MetricsCollector] = None
 
+        # ── Background task tracker (prevents premature GC & logs unhandled errors) ───
+        self._background_tasks: set[asyncio.Task] = set()
+
     # ── Player registry ───────────────────────────────────────────────────────
+
+    def track_task(self, coro_or_task: Any, name: Optional[str] = None) -> asyncio.Task:
+        """Create and track a background task to prevent premature GC and log errors."""
+        if asyncio.iscoroutine(coro_or_task):
+            task = asyncio.create_task(coro_or_task, name=name)
+        else:
+            task = coro_or_task
+        self._background_tasks.add(task)
+
+        def _on_done(t: asyncio.Task) -> None:
+            self._background_tasks.discard(t)
+            if not t.cancelled():
+                exc = t.exception()
+                if exc:
+                    logger.error("Background task '%s' raised an unhandled error: %s", t.get_name(), exc, exc_info=exc)
+
+        task.add_done_callback(_on_done)
+        return task
 
     def get_player(self, guild_id: int) -> GuildPlayer:
         """Return (or create) the GuildPlayer for a guild."""
@@ -497,7 +518,7 @@ class MusicBot(commands.Bot):
                         async def _delayed_resume(gid: int) -> None:
                             await asyncio.sleep(2)
                             await music_cog._play_next(gid)
-                        asyncio.create_task(_delayed_resume(guild.id))
+                        self.track_task(_delayed_resume(guild.id), name=f"delayed_resume_{guild.id}")
             return
 
         # Ignore other bots
@@ -564,8 +585,9 @@ class MusicBot(commands.Bot):
                         _player.alone_since     = None
                         _player.alone_leave_task = None
 
-                    player.alone_leave_task = asyncio.create_task(
-                        _leave_if_still_alone(guild.id, vc)
+                    player.alone_leave_task = self.track_task(
+                        _leave_if_still_alone(guild.id, vc),
+                        name=f"auto_leave_{guild.id}",
                     )
             else:
                 # Human rejoined — cancel the alone timer
@@ -637,6 +659,8 @@ class MusicBot(commands.Bot):
 
         result = self.nlu.parse(content)
 
+        locale = get_locale_sync(message.guild.id)
+
         # Determine query to play
         query: Optional[str] = None
 
@@ -648,7 +672,7 @@ class MusicBot(commands.Bot):
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             try:
-                reply = await message.channel.send("⏭ Skipped!", delete_after=5)
+                reply = await message.channel.send(t("skip.done", locale), delete_after=5)
             except Exception:
                 pass
             return
@@ -657,7 +681,7 @@ class MusicBot(commands.Bot):
             if vc and vc.is_playing():
                 vc.pause()
             try:
-                await message.channel.send("⏸ Paused.", delete_after=5)
+                await message.channel.send(t("now_playing.paused", locale), delete_after=5)
             except Exception:
                 pass
             return
@@ -666,7 +690,7 @@ class MusicBot(commands.Bot):
             if vc and vc.is_paused():
                 vc.resume()
             try:
-                await message.channel.send("▶ Resumed.", delete_after=5)
+                await message.channel.send(t("now_playing.playing", locale), delete_after=5)
             except Exception:
                 pass
             return
@@ -674,7 +698,7 @@ class MusicBot(commands.Bot):
             player = self.get_player(message.guild.id)
             player.volume = result.volume / 100
             try:
-                await message.channel.send(f"🔊 Volume set to {result.volume}%", delete_after=5)
+                await message.channel.send(t("volume.set", locale, vol=result.volume), delete_after=5)
             except Exception:
                 pass
             return
@@ -697,7 +721,7 @@ class MusicBot(commands.Bot):
         if not message.author.voice:
             try:
                 await message.channel.send(
-                    "❌ Join a voice channel first.", delete_after=8
+                    f"❌ {t('error.not_in_voice', locale)}", delete_after=8
                 )
             except Exception:
                 pass

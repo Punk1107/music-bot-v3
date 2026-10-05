@@ -64,10 +64,13 @@ class SpotifyExtractor:
             if self._token and now < self._token_expires_at:
                 return self._token
             try:
+                import base64
+                creds = f"{config.SPOTIFY_CLIENT_ID}:{config.SPOTIFY_CLIENT_SECRET}"
+                b64_creds = base64.b64encode(creds.encode("utf-8")).decode("ascii")
                 resp = await session.post(
                     _TOKEN_URL,
                     data={"grant_type": "client_credentials"},
-                    auth=aiohttp.BasicAuth(config.SPOTIFY_CLIENT_ID, config.SPOTIFY_CLIENT_SECRET),
+                    headers={"Authorization": f"Basic {b64_creds}"},
                     timeout=aiohttp.ClientTimeout(total=10),
                 )
                 data = await resp.json()
