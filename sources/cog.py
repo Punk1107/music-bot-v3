@@ -24,7 +24,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from sources.router import MultiSourceRouter, SourceKind, classify
-from core.i18n import t, get_locale
+from core.i18n import t, get_locale, get_locale_sync
 from utils.embeds import error_embed, success_embed, info_embed, playlist_added_embed
 from utils.formatters import truncate, format_duration
 
@@ -60,8 +60,9 @@ class SCSearchSelect(discord.ui.Select):
             )
             for i, t in enumerate(tracks)
         ]
+        locale = get_locale_sync(guild_id)
         super().__init__(
-            placeholder = "Choose a SoundCloud track…",
+            placeholder = t("sources.sc_select_placeholder", locale),
             min_values  = 1,
             max_values  = 1,
             options     = options,
@@ -78,7 +79,7 @@ class SCSearchSelect(discord.ui.Select):
         member = interaction.guild.get_member(interaction.user.id)
         if not member or not member.voice or not member.voice.channel:
             await interaction.followup.send(
-                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)),
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
                 ephemeral=True,
             )
             return
@@ -136,7 +137,10 @@ class SCSearchSelect(discord.ui.Select):
                     return
 
         if not vc.is_playing() and not vc.is_paused():
-            asyncio.create_task(music_cog._play_next(self.guild_id))
+            if hasattr(self.bot, "track_task"):
+                self.bot.track_task(music_cog._play_next(self.guild_id), name=f"sc_play_next_{self.guild_id}")
+            else:
+                asyncio.create_task(music_cog._play_next(self.guild_id))
 
 
 class SCSearchView(discord.ui.View):
@@ -201,6 +205,7 @@ class SourcesCog(commands.Cog, name="Sources"):
             )
             return
 
+        locale = get_locale_sync(interaction.guild_id)
         embed = discord.Embed(
             title       = f"🔊  SoundCloud Search: {discord.utils.escape_markdown(query[:50])}",
             description = "\n".join(
@@ -210,7 +215,7 @@ class SourcesCog(commands.Cog, name="Sources"):
             ),
             color       = 0xFF5500,
         )
-        embed.set_footer(text="Select a track from the dropdown below")
+        embed.set_footer(text=t("sources.sc_select_footer", locale))
 
         view = SCSearchView(bot=self.bot, guild_id=interaction.guild_id, tracks=tracks)
         await interaction.followup.send(embed=embed, view=view)

@@ -91,9 +91,11 @@ class HealthCog(commands.Cog, name="Health"):
         if not await self._check_dj(interaction):
             return
 
+        from core.i18n import get_locale_sync, t
+        locale = get_locale_sync(interaction.guild_id)
         psutil = _try_psutil()
         embed  = discord.Embed(
-            title       = "🩺  Bot Health Report",
+            title       = t("health.title", locale),
             description = f"Uptime: **{_uptime_str(self.bot.start_time)}**  •  Guilds: **{len(self.bot.guilds)}**",
             color       = 0x2ED573,
             timestamp   = datetime.now(timezone.utc),

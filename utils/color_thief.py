@@ -47,6 +47,7 @@ _cache_evictions: int = 0
 
 # ── Concurrency limit (semaphore on coroutine side) ───────────────────────────
 _SEM: asyncio.Semaphore | None = None
+_CACHE_LOCK: asyncio.Lock | None = None
 
 # ── Perf-1: Dedicated bounded thread-pool for CPU-bound color extraction ──────
 # max_workers=2 means at most 2 images are being decoded simultaneously.
@@ -54,6 +55,13 @@ _SEM: asyncio.Semaphore | None = None
 _COLOR_EXECUTOR: ThreadPoolExecutor = ThreadPoolExecutor(
     max_workers=2, thread_name_prefix="color_thief"
 )
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    global _CACHE_LOCK
+    if _CACHE_LOCK is None:
+        _CACHE_LOCK = asyncio.Lock()
+    return _CACHE_LOCK
 
 
 def animated_embed_color(base_color: int, elapsed_seconds: int, interval: int = 7) -> int:
@@ -90,7 +98,6 @@ def _get_sem() -> asyncio.Semaphore:
 def _sample_jpeg(data: bytes, samples: int = 400) -> tuple[int, int, int]:
     """Extract dominant color from raw JPEG bytes (simplified median cut)."""
     try:
-        import struct
         pos = 0
         pixels: list[tuple[int, int, int]] = []
 
@@ -210,18 +217,20 @@ async def get_dominant_color(
         return fallback
 
     now = time.monotonic()
+    cache_lock = _get_cache_lock()
 
     # Cache hit
-    if url in _COLOR_CACHE:
-        color, ts = _COLOR_CACHE[url]
-        if now - ts < _CACHE_TTL:
-            _cache_hits += 1
-            return (color[0] << 16) | (color[1] << 8) | color[2]
-        del _COLOR_CACHE[url]
-        _cache_evictions += 1
-        logger.debug("Color cache TTL eviction for url=%s…", url[:40])
+    async with cache_lock:
+        if url in _COLOR_CACHE:
+            color, ts = _COLOR_CACHE[url]
+            if now - ts < _CACHE_TTL:
+                _cache_hits += 1
+                return (color[0] << 16) | (color[1] << 8) | color[2]
+            del _COLOR_CACHE[url]
+            _cache_evictions += 1
+            logger.debug("Color cache TTL eviction for url=%s…", url[:40])
 
-    _cache_misses += 1
+        _cache_misses += 1
 
     async with _get_sem():
         try:
@@ -249,12 +258,13 @@ async def get_dominant_color(
                 _COLOR_EXECUTOR, _extract_dominant_color, raw, content_type
             )
 
-            # Store in cache
-            _COLOR_CACHE[url] = (color, now)
-            if len(_COLOR_CACHE) > _CACHE_MAX:
-                oldest = min(_COLOR_CACHE, key=lambda k: _COLOR_CACHE[k][1])
-                del _COLOR_CACHE[oldest]
-                _cache_evictions += 1
+            # Store in cache safely under lock
+            async with cache_lock:
+                _COLOR_CACHE[url] = (color, now)
+                if len(_COLOR_CACHE) > _CACHE_MAX:
+                    oldest = min(_COLOR_CACHE, key=lambda k: _COLOR_CACHE[k][1])
+                    _COLOR_CACHE.pop(oldest, None)
+                    _cache_evictions += 1
 
             return (color[0] << 16) | (color[1] << 8) | color[2]
 

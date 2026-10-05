@@ -30,41 +30,39 @@ logger = logging.getLogger(__name__)
 
 # ── Error classification ──────────────────────────────────────────────────────
 
-_ERROR_CLASSIFICATIONS = [
-    (["copyright", "has been blocked"], "Copyright Restriction", "⚖️",
-     "This track has been blocked due to copyright restrictions.",
-     "เพลงนี้ถูกบล็อกเนื่องจากลิขสิทธิ์"),
-    (["age-restricted", "age restricted", "sign in to confirm your age"], "Age-Restricted Content", "🔞",
-     "This content is age-restricted and cannot be played.",
-     "เนื้อหานี้จำกัดอายุและไม่สามารถเล่นได้"),
-    (["private video", "video is private"], "Private Video", "🔒",
-     "This video is private and cannot be accessed.",
-     "วิดีโอนี้เป็นส่วนตัวและไม่สามารถเข้าถึงได้"),
-    (["video unavailable", "removed by the user"], "Video Unavailable", "❌",
-     "This video is no longer available.",
-     "วิดีโอนี้ไม่สามารถใช้งานได้อีกต่อไป"),
-    (["rate limit", "429", "too many requests"], "Rate Limited", "⏳",
-     "YouTube is rate-limiting requests. Please try again in a few minutes.",
-     "YouTube จำกัดคำขอ กรุณาลองอีกครั้งในไม่กี่นาที"),
-    (["network", "connection", "timeout"], "Network Error", "🌐",
-     "A network error occurred. Please check your connection.",
-     "เกิดข้อผิดพลาดเครือข่าย กรุณาตรวจสอบการเชื่อมต่อ"),
+# ── Error classification ──────────────────────────────────────────────────────
+
+_ERROR_CATEGORIES = [
+    (["copyright", "has been blocked"], "copyright", "⚖️"),
+    (["age-restricted", "age restricted", "sign in to confirm your age"], "age_restricted", "🔞"),
+    (["private video", "video is private"], "private_video", "🔒"),
+    (["video unavailable", "unavailable", "is unavailable", "removed by the user"], "video_unavailable", "❌"),
+    (["rate limit", "429", "too many requests"], "rate_limited_yt", "⏳"),
+    (["network", "connection", "timeout"], "network", "🌐"),
 ]
 
-_FALLBACK = ("Playback Error", "⚠️",
-             "An unknown error occurred during playback.",
-             "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุระหว่างการเล่นเพลง")
+_FALLBACK_CATEGORY = ("playback_fallback", "⚠️")
+
+
+def get_error_category(error_str: str) -> tuple[str, str]:
+    """Returns (category_key, emoji)."""
+    err_lower = error_str.lower()
+    for keywords, category, emoji in _ERROR_CATEGORIES:
+        if any(k in err_lower for k in keywords):
+            return category, emoji
+    return _FALLBACK_CATEGORY
 
 
 def classify_error(error_str: str) -> tuple[str, str, str, str]:
     """
     Returns (title, emoji, description_en, description_th).
+    Maintained for backward compatibility.
     """
-    err_lower = error_str.lower()
-    for keywords, title, emoji, desc_en, desc_th in _ERROR_CLASSIFICATIONS:
-        if any(k in err_lower for k in keywords):
-            return title, emoji, desc_en, desc_th
-    return _FALLBACK
+    category, emoji = get_error_category(error_str)
+    title = t(f"error.{category}.title", "en")
+    desc_en = t(f"error.{category}.desc", "en")
+    desc_th = t(f"error.{category}.desc", "th")
+    return title, emoji, desc_en, desc_th
 
 
 # ── Embed builders ────────────────────────────────────────────────────────────
@@ -79,11 +77,9 @@ def command_error_embed(title: str, description: str) -> discord.Embed:
 
 
 def playback_error_embed(error_str: str, locale: str = "en") -> discord.Embed:
-    title, emoji, desc_en, desc_th = classify_error(error_str)
-    if locale == "th":
-        desc = desc_th
-    else:
-        desc = desc_en
+    category, emoji = get_error_category(error_str)
+    title = t(f"error.{category}.title", locale)
+    desc = t(f"error.{category}.desc", locale)
     embed = discord.Embed(
         title       = f"{emoji} {title}",
         description = desc,
@@ -94,8 +90,9 @@ def playback_error_embed(error_str: str, locale: str = "en") -> discord.Embed:
 
 def voice_connection_error_embed(channel_name: str, attempts: int, locale: str = "en") -> discord.Embed:
     desc = t("error.voice_reconnect_failed", locale, channel=channel_name, attempts=attempts)
+    title = t("error.voice_reconnect_title", locale)
     embed = discord.Embed(
-        title       = "🔌 Voice Reconnect Failed",
+        title       = title,
         description = desc,
         color       = discord.Color.red(),
     )
@@ -111,9 +108,11 @@ def dj_required_embed(locale: Any = "en") -> discord.Embed:
         locale = get_locale_sync(getattr(g, "id", None) if g else None)
     elif isinstance(locale, int):
         locale = get_locale_sync(locale)
-    desc = t("error.dj_required", str(locale or "en"))
+    loc_str = str(locale or "en")
+    desc = t("error.dj_required", loc_str)
+    title = t("error.dj_required_title", loc_str)
     return discord.Embed(
-        title       = "🎚️ DJ Permission Required",
+        title       = title,
         description = desc,
         color       = discord.Color.orange(),
     )
@@ -121,8 +120,9 @@ def dj_required_embed(locale: Any = "en") -> discord.Embed:
 
 def rate_limited_embed(retry_after: float, locale: str = "en") -> discord.Embed:
     desc = t("error.rate_limited", locale, retry_after=f"{retry_after:.1f}")
+    title = t("error.rate_limit_title", locale)
     return discord.Embed(
-        title       = "⏳ Slow Down!",
+        title       = title,
         description = desc,
         color       = discord.Color.yellow(),
     )

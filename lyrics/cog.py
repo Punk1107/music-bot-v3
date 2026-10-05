@@ -27,6 +27,7 @@ from discord.ext import commands
 from lyrics.parser import LyricLine, find_current_line_index
 from lyrics.service import LyricsService
 from utils.embeds import error_embed, info_embed
+from core.i18n import get_locale_sync, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -56,6 +57,7 @@ class LyricsPaginatorView(discord.ui.View):
         bot:        "MusicBot",
         total_pages: int,
         start_page:  int = 0,
+        locale:      str = "en",
     ) -> None:
         super().__init__(timeout=_TIMEOUT)
         self.lines        = lines
@@ -65,6 +67,12 @@ class LyricsPaginatorView(discord.ui.View):
         self.bot          = bot
         self.total_pages  = total_pages
         self.current_page = start_page
+        self.locale       = locale
+        self.btn_first.label = t("lyrics.button_first", locale)
+        self.btn_prev.label  = t("lyrics.button_prev", locale)
+        self.btn_next.label  = t("lyrics.button_next", locale)
+        self.btn_last.label  = t("lyrics.button_last", locale)
+        self.btn_sync.label  = t("lyrics.button_sync", locale)
         self._update_buttons()
 
     # ── Build Embed ──────────────────────────────────────────────────────────
@@ -176,10 +184,11 @@ class LyricsCog(commands.Cog, name="Lyrics"):
         await interaction.response.defer(thinking=True)
 
         player = self.bot.get_player(interaction.guild_id)
+        locale = get_locale_sync(interaction.guild_id)
 
         if not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Nothing Playing", "There is no track currently playing."),
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)),
                 ephemeral=True,
             )
             return
@@ -192,9 +201,8 @@ class LyricsCog(commands.Cog, name="Lyrics"):
         if not any(domain in video_url for domain in ("youtube.com", "youtu.be")):
             await interaction.followup.send(
                 embed=error_embed(
-                    "Not Supported",
-                    "Lyrics via subtitles are only available for YouTube tracks.\n"
-                    "SoundCloud and Bandcamp do not provide subtitle streams.",
+                    t("error.playback_fallback.title", locale),
+                    t("lyrics.not_supported", locale),
                 ),
                 ephemeral=True,
             )
@@ -208,14 +216,14 @@ class LyricsCog(commands.Cog, name="Lyrics"):
             )
         except asyncio.TimeoutError:
             await interaction.followup.send(
-                embed=error_embed("Timed Out", "Could not fetch subtitles in time. Please try again."),
+                embed=error_embed(t("error.network.title", locale), t("lyrics.timed_out", locale)),
                 ephemeral=True,
             )
             return
         except Exception as exc:
             logger.error("Lyrics fetch error for '%s': %s", track.title[:50], exc)
             await interaction.followup.send(
-                embed=error_embed("Error", "An unexpected error occurred while fetching lyrics."),
+                embed=error_embed(t("error.playback_fallback.title", locale), t("lyrics.error", locale)),
                 ephemeral=True,
             )
             return
@@ -223,10 +231,9 @@ class LyricsCog(commands.Cog, name="Lyrics"):
         if result is None:
             await interaction.followup.send(
                 embed=info_embed(
-                    "No Lyrics Available",
+                    "🎵 Lyrics",
                     f"**{discord.utils.escape_markdown(track.title)}**\n\n"
-                    "This video has no subtitles or auto-generated captions available.\n"
-                    "YouTube does not provide lyrics for all videos.",
+                    f"{t('lyrics.no_lyrics', locale)}",
                 ),
             )
             return
@@ -236,8 +243,8 @@ class LyricsCog(commands.Cog, name="Lyrics"):
         if not lines:
             await interaction.followup.send(
                 embed=info_embed(
-                    "Empty Lyrics",
-                    "Subtitles were found but contained no readable text."
+                    "🎵 Lyrics",
+                    t("lyrics.empty", locale),
                 ),
                 ephemeral=True,
             )
@@ -260,6 +267,7 @@ class LyricsCog(commands.Cog, name="Lyrics"):
             bot         = self.bot,
             total_pages = total_pages,
             start_page  = start_page,
+            locale      = locale,
         )
         embed = view._build_embed()
 

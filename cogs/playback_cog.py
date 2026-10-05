@@ -23,7 +23,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.i18n import get_locale, t
+from core.i18n import get_locale, get_locale_sync, t
 from utils.embeds import error_embed, success_embed
 
 if TYPE_CHECKING:
@@ -188,16 +188,11 @@ class PlaybackCog(commands.Cog, name="Playback"):
 
         self._restart_audio(interaction.guild_id)
 
+        locale = get_locale_sync(interaction.guild_id)
+        desc = t("playback.silence_trim_enabled", locale) if state else t("playback.silence_trim_disabled", locale)
         embed = discord.Embed(
-            title       = "✂️  Silence Trim",
-            description = (
-                f"Silence trim is now **{'enabled ✅' if state else 'disabled ❌'}**.\n"
-                + (
-                    "*Leading and trailing silence will be removed via `silenceremove` FFmpeg filter.*"
-                    if state else
-                    "*Tracks play as-is, including any intro/outro silence.*"
-                )
-            ),
+            title       = t("playback.silence_trim_title", locale),
+            description = desc,
             color       = 0x2ED573 if state else 0x747F8D,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
@@ -216,17 +211,11 @@ class PlaybackCog(commands.Cog, name="Playback"):
 
         self._restart_audio(interaction.guild_id)
 
+        locale = get_locale_sync(interaction.guild_id)
+        desc = t("playback.replay_gain_enabled", locale) if state else t("playback.replay_gain_disabled", locale)
         embed = discord.Embed(
-            title       = "🎚️  Replay Gain",
-            description = (
-                f"Replay Gain (loudness normalization) is now **{'enabled ✅' if state else 'disabled ❌'}**.\n"
-                + (
-                    "*All tracks will be normalized to a consistent volume via `dynaudnorm` — "
-                    "loud tracks get quieter, quiet tracks get louder.*"
-                    if state else
-                    "*Volume is as encoded in the source audio.*"
-                )
-            ),
+            title       = t("playback.replay_gain_title", locale),
+            description = desc,
             color       = 0x2ED573 if state else 0x747F8D,
         )
         await interaction.followup.send(embed=embed, ephemeral=True)

@@ -661,7 +661,7 @@ def bookmark_saved_embed(name: str, count: int, color: int = 0x1ABC9C, locale: s
 
 
 def bookmark_loaded_embed(name: str, count: int, mode: str, color: int = 0x1ABC9C, locale: str = "en") -> discord.Embed:
-    action = "replaced" if mode == "replace" else "appended to"
+    action = t("bookmark.mode_replaced", locale) if mode == "replace" else t("bookmark.mode_appended", locale)
     return discord.Embed(
         title       = f"📋  {t('bookmark.title', locale)}",
         description = t("bookmark.loaded", locale, count=count, name=name, mode=action),

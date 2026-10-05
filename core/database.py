@@ -494,6 +494,12 @@ class DatabaseManager:
         async with self._cfg_lock:
             self._cfg_cache[guild_id] = (cfg, time.monotonic())
 
+        try:
+            from core.i18n import set_locale_cache
+            set_locale_cache(guild_id, getattr(cfg, "language", "en"))
+        except Exception:
+            pass
+
         return cfg
 
     def invalidate_config_cache(self, guild_id: int) -> None:
@@ -523,8 +529,13 @@ class DatabaseManager:
                 (cfg.guild_id, cfg.to_json()),
             )
             await conn.commit()
-        # Invalidate cache after write
+        # Invalidate cache after write and update locale cache
         self.invalidate_config_cache(cfg.guild_id)
+        try:
+            from core.i18n import set_locale_cache
+            set_locale_cache(cfg.guild_id, getattr(cfg, "language", "en"))
+        except Exception:
+            pass
 
     # ── Search History (autocomplete) ─────────────────────────────────────────
 

@@ -140,17 +140,17 @@ class MusicControlView(discord.ui.View):
         vc = self._vc(interaction)
         if not vc:
             await interaction.response.send_message(
-                embed=error_embed("Not Connected", t("error.not_connected", locale)), ephemeral=True
+                embed=error_embed(t("title.not_connected", locale), t("error.not_connected", locale)), ephemeral=True
             )
             return False
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", t("error.not_in_voice", locale)), ephemeral=True
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)), ephemeral=True
             )
             return False
         if interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", t("error.wrong_channel", locale, channel=vc.channel.name)), ephemeral=True
+                embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)), ephemeral=True
             )
             return False
         return True
@@ -180,7 +180,7 @@ class MusicControlView(discord.ui.View):
         vc = self._vc(interaction)
         if not vc:
             await interaction.response.send_message(
-                embed=error_embed("Not Connected", t("error.not_connected", locale)), ephemeral=True
+                embed=error_embed(t("title.not_connected", locale), t("error.not_connected", locale)), ephemeral=True
             )
             return
         if vc.is_playing():
@@ -191,7 +191,7 @@ class MusicControlView(discord.ui.View):
             now_paused = False
         else:
             await interaction.response.send_message(
-                embed=error_embed("Nothing Playing", t("error.not_playing", locale)), ephemeral=True
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)), ephemeral=True
             )
             return
 
@@ -351,9 +351,10 @@ class MusicControlView(discord.ui.View):
     async def favorite(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         """Quick-save the currently playing track as a favorite."""
         player = self.bot.get_player(self.guild_id)
+        locale = get_locale_sync(self.guild_id)
         if not player.now_playing:
             await interaction.response.send_message(
-                embed=error_embed("Nothing Playing"), ephemeral=True
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)), ephemeral=True
             )
             return
         track = player.now_playing
@@ -628,18 +629,18 @@ class VoteSkipView(discord.ui.View):
 
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_in_voice", self.locale), t("error.not_in_voice", self.locale)), ephemeral=True
             )
             return
         if vc and interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
+                embed=error_embed(t("title.wrong_channel", self.locale), t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
             )
             return
 
         if user_id in player.skip_votes:
             await interaction.response.send_message(
-                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.already_voted", self.locale), t("vote.already_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -664,7 +665,7 @@ class VoteSkipView(discord.ui.View):
 
         if user_id not in player.skip_votes:
             await interaction.response.send_message(
-                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_voted", self.locale), t("vote.not_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -754,18 +755,18 @@ class VoteClearView(discord.ui.View):
 
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_in_voice", self.locale), t("error.not_in_voice", self.locale)), ephemeral=True
             )
             return
         if vc and interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
+                embed=error_embed(t("title.wrong_channel", self.locale), t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
             )
             return
 
         if user_id in player.clear_votes:
             await interaction.response.send_message(
-                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.already_voted", self.locale), t("vote.already_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -794,7 +795,7 @@ class VoteClearView(discord.ui.View):
 
         if user_id not in player.clear_votes:
             await interaction.response.send_message(
-                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_voted", self.locale), t("vote.not_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -884,18 +885,18 @@ class VoteShuffleView(discord.ui.View):
 
         if not interaction.user.voice:
             await interaction.response.send_message(
-                embed=error_embed("Not in Voice", t("error.not_in_voice", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_in_voice", self.locale), t("error.not_in_voice", self.locale)), ephemeral=True
             )
             return
         if vc and interaction.user.voice.channel != vc.channel:
             await interaction.response.send_message(
-                embed=error_embed("Wrong Channel", t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
+                embed=error_embed(t("title.wrong_channel", self.locale), t("error.wrong_channel", self.locale, channel=vc.channel.name)), ephemeral=True
             )
             return
 
         if user_id in player.shuffle_votes:
             await interaction.response.send_message(
-                embed=error_embed("Already Voted", t("vote.already_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.already_voted", self.locale), t("vote.already_voted", self.locale)), ephemeral=True
             )
             return
 
@@ -923,7 +924,7 @@ class VoteShuffleView(discord.ui.View):
 
         if user_id not in player.shuffle_votes:
             await interaction.response.send_message(
-                embed=error_embed("Not Voted", t("vote.not_voted", self.locale)), ephemeral=True
+                embed=error_embed(t("title.not_voted", self.locale), t("vote.not_voted", self.locale)), ephemeral=True
             )
             return
 

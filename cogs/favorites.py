@@ -25,6 +25,7 @@ from utils.embeds import (
 )
 from utils.views import FavoritesView
 from utils.formatters import truncate
+from core.i18n import get_locale_sync, t
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -55,9 +56,10 @@ class FavoritesCog(commands.Cog, name="Favorites"):
         await interaction.response.defer(ephemeral=True)
 
         player = self.bot.get_player(interaction.guild_id)
+        locale = get_locale_sync(interaction.guild_id)
         if not player.now_playing:
             await interaction.followup.send(
-                embed=error_embed("Nothing Playing", "Play a track first before saving."),
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)),
                 ephemeral=True,
             )
             return
