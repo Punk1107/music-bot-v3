@@ -207,153 +207,153 @@ class PresetsCog(commands.Cog, name="Presets"):
         merged.update(guild_presets)
         return merged
 
-    @app_commands.command(name="preset", description="Manage and apply guild presets")
-    @app_commands.describe(
-        action="Action to perform",
-        name="Preset name",
+    # ── Slash Command Group: /preset ──────────────────────────────────────────
+
+    preset_group = app_commands.Group(
+        name="preset",
+        description="Manage and apply guild presets",
     )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="load   — Apply a preset to the bot",   value="load"),
-        app_commands.Choice(name="save   — Save current settings",         value="save"),
-        app_commands.Choice(name="list   — Show all available presets",    value="list"),
-        app_commands.Choice(name="delete — Remove a custom preset (Admin)", value="delete"),
-    ])
-    async def preset(
-        self,
-        interaction: discord.Interaction,
-        action: str,
-        name: str = "",
-    ) -> None:
+
+    @preset_group.command(name="list", description="Show all available presets")
+    async def pr_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
-
         locale = await get_locale(interaction.guild_id, self.bot.db)
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        all_p = self._all_presets(cfg.guild_presets)
+        lines = []
+        for k, p in all_p.items():
+            label  = p.get("_label", k.title())
+            source = "🏷 Built-in" if k in _BUILTIN_PRESETS else "💾 Custom"
+            lines.append(f"**{label}** (`{k}`)  {source}")
 
-        if action in ("load", "save", "delete") and not await self._check_dj(interaction):
+        embed = discord.Embed(
+            title       = t("preset.list_title", locale),
+            description = "\n".join(lines) if lines else "No presets found.",
+            color       = 0x5865F2,
+        )
+        embed.set_footer(text="Use /preset load <name> to apply a preset")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @preset_group.command(name="load", description="Apply a preset to the bot")
+    @app_commands.describe(name="Preset name to apply")
+    async def pr_load(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        if not await self._check_dj(interaction):
             return
 
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
-
-        # ── LIST ──────────────────────────────────────────────────────────────
-        if action == "list":
-            all_p = self._all_presets(cfg.guild_presets)
-            lines = []
-            for k, p in all_p.items():
-                label  = p.get("_label", k.title())
-                source = "🏷 Built-in" if k in _BUILTIN_PRESETS else "💾 Custom"
-                lines.append(f"**{label}** (`{k}`)  {source}")
-
-            embed = discord.Embed(
-                title       = t("preset.list_title", locale),
-                description = "\n".join(lines) if lines else "No presets found.",
-                color       = 0x5865F2,
-            )
-            embed.set_footer(text="Use /preset load <name> to apply a preset")
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        # ── LOAD ──────────────────────────────────────────────────────────────
-        if action == "load":
-            name_lower = name.strip().lower()
-            if not name_lower:
-                await interaction.followup.send(
-                    embed=error_embed("Missing Name", t("preset.name_required", locale)),
-                    ephemeral=True,
-                )
-                return
-
-            all_p  = self._all_presets(cfg.guild_presets)
-            preset = all_p.get(name_lower)
-            if not preset:
-                available = ", ".join(f"`{k}`" for k in all_p)
-                await interaction.followup.send(
-                    embed=error_embed(
-                        "Preset Not Found",
-                        f"{t('preset.not_found', locale, name=name_lower)}\nAvailable: {available}",
-                    ),
-                    ephemeral=True,
-                )
-                return
-
-            player = self.bot.get_player(interaction.guild_id)
-            _apply_preset(player, preset)
-
-            # Also update quality in server config
-            quality_val = preset.get("quality", "high")
-            try:
-                cfg.audio_quality = AudioQuality(quality_val)
-                await self.bot.db.save_server_config(cfg)
-            except Exception:
-                pass
-
-            self._restart_audio(interaction.guild_id)
-            embed = _preset_embed(name_lower, preset, is_active=True)
-            embed.title = t("preset.applied", locale, name=preset.get('_label', name_lower.title()))
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        # ── SAVE ──────────────────────────────────────────────────────────────
-        if action == "save":
-            name_lower = name.strip().lower()
-            if not name_lower:
-                await interaction.followup.send(
-                    embed=error_embed("Missing Name", t("preset.name_required", locale)),
-                    ephemeral=True,
-                )
-                return
-            if name_lower in _BUILTIN_PRESETS:
-                await interaction.followup.send(
-                    embed=error_embed(
-                        "Reserved Name",
-                        t("preset.reserved_name", locale, name=name_lower),
-                    ),
-                    ephemeral=True,
-                )
-                return
-
-            player     = self.bot.get_player(interaction.guild_id)
-            preset_data = _player_to_preset(player, cfg.audio_quality.value)
-            preset_data["_label"] = name_lower.title()
-            preset_data["_desc"]  = f"Custom preset saved by {interaction.user.display_name}"
-
-            cfg.guild_presets[name_lower] = preset_data
-            await self.bot.db.save_server_config(cfg)
-
-            embed = _preset_embed(name_lower, preset_data)
-            embed.title = t("preset.saved", locale, name=name_lower)
-            await interaction.followup.send(embed=embed, ephemeral=True)
-            return
-
-        # ── DELETE ────────────────────────────────────────────────────────────
-        if action == "delete":
-            if not self._is_admin(interaction):
-                await interaction.followup.send(
-                    embed=error_embed("Permission Denied", t("preset.admin_required", locale)),
-                    ephemeral=True,
-                )
-                return
-
-            name_lower = name.strip().lower()
-            if name_lower in _BUILTIN_PRESETS:
-                await interaction.followup.send(
-                    embed=error_embed("Cannot Delete", t("preset.cannot_delete", locale)),
-                    ephemeral=True,
-                )
-                return
-            if name_lower not in cfg.guild_presets:
-                await interaction.followup.send(
-                    embed=error_embed("Not Found", t("preset.not_found", locale, name=name_lower)),
-                    ephemeral=True,
-                )
-                return
-
-            del cfg.guild_presets[name_lower]
-            await self.bot.db.save_server_config(cfg)
+        name_lower = name.strip().lower()
+        if not name_lower:
             await interaction.followup.send(
-                embed=success_embed("Preset Deleted", t("preset.deleted", locale, name=name_lower)),
+                embed=error_embed("Missing Name", t("preset.name_required", locale)),
                 ephemeral=True,
             )
+            return
 
-    @preset.autocomplete("name")
+        all_p  = self._all_presets(cfg.guild_presets)
+        preset = all_p.get(name_lower)
+        if not preset:
+            available = ", ".join(f"`{k}`" for k in all_p)
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Preset Not Found",
+                    f"{t('preset.not_found', locale, name=name_lower)}\nAvailable: {available}",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player = self.bot.get_player(interaction.guild_id)
+        _apply_preset(player, preset)
+
+        quality_val = preset.get("quality", "high")
+        try:
+            cfg.audio_quality = AudioQuality(quality_val)
+            await self.bot.db.save_server_config(cfg)
+        except Exception:
+            pass
+
+        self._restart_audio(interaction.guild_id)
+        embed = _preset_embed(name_lower, preset, is_active=True)
+        embed.title = t("preset.applied", locale, name=preset.get('_label', name_lower.title()))
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @preset_group.command(name="save", description="Save current settings as a guild preset")
+    @app_commands.describe(name="Preset name (alphanumeric, max 30 chars)")
+    async def pr_save(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        if not await self._check_dj(interaction):
+            return
+
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        name_lower = name.strip().lower()
+        if not name_lower:
+            await interaction.followup.send(
+                embed=error_embed("Missing Name", t("preset.name_required", locale)),
+                ephemeral=True,
+            )
+            return
+        if name_lower in _BUILTIN_PRESETS:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Reserved Name",
+                    t("preset.reserved_name", locale, name=name_lower),
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player      = self.bot.get_player(interaction.guild_id)
+        preset_data = _player_to_preset(player, cfg.audio_quality.value)
+        preset_data["_label"] = name_lower.title()
+        preset_data["_desc"]  = f"Custom preset saved by {interaction.user.display_name}"
+
+        cfg.guild_presets[name_lower] = preset_data
+        await self.bot.db.save_server_config(cfg)
+
+        embed = _preset_embed(name_lower, preset_data)
+        embed.title = t("preset.saved", locale, name=name_lower)
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @preset_group.command(name="delete", description="Remove a custom guild preset (Admin only)")
+    @app_commands.describe(name="Preset name to delete")
+    async def pr_delete(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        if not self._is_admin(interaction):
+            await interaction.followup.send(
+                embed=error_embed("Permission Denied", t("preset.admin_required", locale)),
+                ephemeral=True,
+            )
+            return
+
+        name_lower = name.strip().lower()
+        if name_lower in _BUILTIN_PRESETS:
+            await interaction.followup.send(
+                embed=error_embed("Cannot Delete", t("preset.cannot_delete", locale)),
+                ephemeral=True,
+            )
+            return
+
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if name_lower not in cfg.guild_presets:
+            await interaction.followup.send(
+                embed=error_embed("Not Found", t("preset.not_found", locale, name=name_lower)),
+                ephemeral=True,
+            )
+            return
+
+        del cfg.guild_presets[name_lower]
+        await self.bot.db.save_server_config(cfg)
+        await interaction.followup.send(
+            embed=success_embed("Preset Deleted", t("preset.deleted", locale, name=name_lower)),
+            ephemeral=True,
+        )
+
+    @pr_load.autocomplete("name")
+    @pr_delete.autocomplete("name")
     async def preset_name_autocomplete(
         self,
         interaction: discord.Interaction,
