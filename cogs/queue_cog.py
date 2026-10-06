@@ -31,11 +31,11 @@ from utils.embeds import (
     error_embed, success_embed, info_embed, queue_embed,
     history_embed, queue_search_embed,
     queue_lock_embed, queue_permission_embed, duplicate_mode_embed,
-    vote_clear_embed, vote_shuffle_embed,
+    vote_clear_embed, vote_shuffle_embed, vote_skip_embed,
 )
 from utils.views import (
     QueueView, HistoryView, QueueSearchResultView,
-    VoteClearView, VoteShuffleView,
+    VoteClearView, VoteShuffleView, VoteSkipView,
 )
 from utils.error_handler import dj_required_embed
 from utils.color_thief import get_dominant_color
@@ -114,6 +114,79 @@ class QueueCog(commands.Cog, name="Queue"):
             return
 
         await self._start_vote_shuffle(interaction, player, locale)
+
+    @app_commands.command(name="voteskip", description="Start a democratic vote to skip the current track")
+    async def voteskip(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
+        vc = interaction.guild.voice_client
+
+        if not player.now_playing or not (vc and (vc.is_playing() or vc.is_paused())):
+            await interaction.followup.send(
+                embed=error_embed("Nothing to Skip", t("error.not_playing", locale)),
+                ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        if not getattr(member, "voice", None) or (vc and member.voice.channel != vc.channel):
+            await interaction.followup.send(
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
+                ephemeral=True
+            )
+            return
+
+        voice_members = [m for m in (vc.channel.members if vc and vc.channel else []) if not m.bot]
+        threshold = player.skip_vote_threshold(len(voice_members))
+
+        if member.id in player.skip_votes:
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Already Voted",
+                    f"{t('vote.already_voted', locale)} `{len(player.skip_votes)}/{threshold}`",
+                ),
+                ephemeral=True,
+            )
+            return
+
+        player.skip_votes.add(member.id)
+
+        if len(player.skip_votes) >= threshold:
+            player.cancel_prefetch()
+            player.skip_votes.clear()
+            vc.stop()
+            await interaction.followup.send(
+                embed=success_embed(
+                    "Skipped! ⏭",
+                    t("vote.threshold_reached", locale, threshold=threshold),
+                )
+            )
+            return
+
+        voter_names = []
+        guild = self.bot.get_guild(interaction.guild_id)
+        for uid in player.skip_votes:
+            m = guild.get_member(uid) if guild else None
+            voter_names.append(m.display_name if m else f"User#{uid}")
+
+        track_title = player.now_playing.title if player.now_playing else "Track"
+        view = VoteSkipView(
+            bot=self.bot,
+            guild_id=interaction.guild_id,
+            threshold=threshold,
+            track_title=track_title,
+            locale=locale,
+        )
+        embed = vote_skip_embed(
+            track_title=track_title,
+            votes=player.skip_votes,
+            threshold=threshold,
+            voters=voter_names,
+            locale=locale,
+        )
+        msg = await interaction.followup.send(embed=embed, view=view)
+        view.set_message(msg)
 
     @app_commands.command(name="voteshuffle", description="Start a vote to shuffle the queue")
     async def voteshuffle(self, interaction: discord.Interaction) -> None:

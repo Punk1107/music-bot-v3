@@ -240,6 +240,10 @@ class EqualizerCog(commands.Cog, name="Equalizer"):
     async def eq_show(self, interaction: discord.Interaction) -> None:
         await self._show_eq(interaction)
 
+    @eq_group.command(name="view", description="Display current equalizer band levels and visualizer")
+    async def eq_view(self, interaction: discord.Interaction) -> None:
+        await self._show_eq(interaction)
+
     # ── Slash Command: /eq shorthand ─────────────────────────────────────────
 
     @app_commands.command(name="eq", description="Quick shortcut to apply an equalizer preset")

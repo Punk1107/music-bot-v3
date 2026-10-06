@@ -39,39 +39,44 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
     def __init__(self, bot: "MusicBot") -> None:
         self.bot = bot
 
-    # ── /bookmark save ────────────────────────────────────────────────────────
+    # ── Slash Command Group: /bookmark ────────────────────────────────────────
 
-    @app_commands.command(name="bookmark", description="Manage queue bookmarks (snapshots)")
-    @app_commands.describe(action="save / load / list / delete")
-    @app_commands.choices(action=[
-        app_commands.Choice(name="💾 Save — snapshot current queue",   value="save"),
-        app_commands.Choice(name="📂 Load — restore a bookmark",       value="load"),
-        app_commands.Choice(name="📋 List — show all bookmarks",       value="list"),
-        app_commands.Choice(name="🗑 Delete — remove a bookmark",      value="delete"),
-    ])
-    async def bookmark(
-        self,
-        interaction: discord.Interaction,
-        action: str,
-        name: str = "",
-        mode: str = "append",
-    ) -> None:
+    bookmark_group = app_commands.Group(
+        name="bookmark",
+        description="Manage queue bookmarks (snapshots)",
+    )
+
+    @bookmark_group.command(name="save", description="Save the current queue as a named bookmark")
+    @app_commands.describe(name="Bookmark name (max 50 chars)")
+    async def bm_save(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
+        await self._save(interaction, name)
 
-        if action == "save":
-            await self._save(interaction, name)
-        elif action == "load":
-            await self._load(interaction, name, mode)
-        elif action == "list":
-            await self._list(interaction)
-        elif action == "delete":
-            await self._delete(interaction, name)
-        else:
-            await interaction.followup.send(
-                embed=error_embed("Unknown Action", "Choose: save, load, list, delete"), ephemeral=True
-            )
+    @bookmark_group.command(name="load", description="Load a bookmark into the queue")
+    @app_commands.describe(
+        name="Bookmark name to load",
+        mode="replace = clear queue first, append = add to queue",
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Replace queue", value="replace"),
+        app_commands.Choice(name="Append to queue", value="append"),
+    ])
+    async def bm_load(self, interaction: discord.Interaction, name: str, mode: str = "append") -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self._load(interaction, name, mode)
 
-    # ── Sub-commands (also exposed individually for slash autocomplete) ────────
+    @bookmark_group.command(name="list", description="List all your queue bookmarks")
+    async def bm_list(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self._list(interaction)
+
+    @bookmark_group.command(name="delete", description="Delete a queue bookmark")
+    @app_commands.describe(name="Bookmark name to delete")
+    async def bm_delete(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self._delete(interaction, name)
+
+    # ── Shortcuts (/bsave, /bload, /blist, /bdelete) ───────────────────────────
 
     @app_commands.command(name="bsave", description="Save the current queue as a named bookmark")
     @app_commands.describe(name="Bookmark name (max 50 chars)")
@@ -105,6 +110,8 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
 
     # ── Autocomplete ──────────────────────────────────────────────────────────
 
+    @bm_load.autocomplete("name")
+    @bm_delete.autocomplete("name")
     @bload.autocomplete("name")
     @bdelete.autocomplete("name")
     async def bookmark_name_autocomplete(
