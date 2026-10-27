@@ -125,6 +125,8 @@ class AudioEffectsProcessor:
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", "5",
+            "-probesize", "65536",
+            "-analyzeduration", "0",
         ]
         if seek_sec > 0:
             before_opts += ["-ss", str(int(seek_sec))]
@@ -214,6 +216,6 @@ class AudioEffectsProcessor:
         ]
         # Note: no -b:a here for the same reason as build_ffmpeg_options.
         return {
-            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -probesize 65536 -analyzeduration 0",
             "options": f"-vn -af {','.join(filters)}",
         }

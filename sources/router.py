@@ -16,9 +16,11 @@ to extend the /play command transparently.
 from __future__ import annotations
 
 import logging
+import time
 from enum import Enum, auto
 from typing import Optional, TYPE_CHECKING
 
+import config
 from sources.soundcloud import SoundCloudExtractor, is_soundcloud_url, is_soundcloud_query
 from sources.bandcamp   import BandcampExtractor,   is_bandcamp_url,   is_bandcamp_album
 from models.track import Track
@@ -122,14 +124,23 @@ class MultiSourceRouter:
 
         Falls back to track.url if the source can't be determined.
         """
+        if track and track.stream_url_cache and track.stream_url_expires:
+            if time.monotonic() < track.stream_url_expires - 60:
+                return track.stream_url_cache
+
         url  = track.url
         kind = classify(url)
 
         try:
+            stream: Optional[str] = None
             if kind in (SourceKind.SOUNDCLOUD, SourceKind.SOUNDCLOUD_SET):
-                return await self._sc.get_stream_url(url)
+                stream = await self._sc.get_stream_url(url)
             elif kind in (SourceKind.BANDCAMP_TRACK, SourceKind.BANDCAMP_ALBUM):
-                return await self._bc.get_stream_url(url)
+                stream = await self._bc.get_stream_url(url)
+            if stream:
+                track.stream_url_cache   = stream
+                track.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
+                return stream
         except Exception as exc:
             logger.error("MultiSourceRouter.get_stream_url failed for %r: %s", url[:60], exc)
 

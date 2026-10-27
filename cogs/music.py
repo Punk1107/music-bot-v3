@@ -479,11 +479,15 @@ class MusicCog(commands.Cog, name="Music"):
 
         # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
         try:
-            stream_url = await self.bot.yt_breaker.call(
-                self.bot.youtube.get_stream_url,
-                next_track.url,
-                next_track,
-            )
+            router = getattr(self.bot, "sources_router", None)
+            if router and router.is_supported(next_track.url):
+                stream_url = await router.get_stream_url(next_track)
+            else:
+                stream_url = await self.bot.yt_breaker.call(
+                    self.bot.youtube.get_stream_url,
+                    next_track.url,
+                    next_track,
+                )
         except CircuitBreakerOpen:
             if player.text_channel:
                 try:
@@ -742,10 +746,11 @@ class MusicCog(commands.Cog, name="Music"):
                 embed=track_added_embed(track, pos, color, interaction.user, eta_secs=eta, locale=locale, is_next=play_next)
             )
         else:
+            play_task = self.bot.track_task(self._play_next(interaction.guild_id))
             await interaction.followup.send(
                 embed=track_added_embed(track, pos, color, interaction.user, eta_secs=0, locale=locale, is_next=play_next)
             )
-            await self._play_next(interaction.guild_id)
+            await play_task
 
     # ── Slash Commands ────────────────────────────────────────────────────────
 

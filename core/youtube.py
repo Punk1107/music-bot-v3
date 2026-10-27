@@ -43,7 +43,7 @@ _COMMON_OPTS: dict = {
     "remote_components": ["ejs:github"],
     "extractor_args": {
         "youtube": {
-            "player_client": ["android", "mweb", "web"],
+            "player_client": ["android", "web"],
         }
     },
 }
@@ -227,8 +227,8 @@ class YouTubeExtractor:
                      config.YTDL_RETRIES, query[:60], last_exc)
         return None
 
-    @staticmethod
-    def _entry_to_track(entry: dict) -> Track | None:
+    @classmethod
+    def _entry_to_track(cls, entry: dict) -> Track | None:
         title = entry.get("title")
         url   = entry.get("webpage_url") or entry.get("url")
         if not title or not url:
@@ -236,7 +236,7 @@ class YouTubeExtractor:
         duration = entry.get("duration") or 0
         if duration > config.MAX_TRACK_LENGTH:
             return None
-        return Track(
+        track = Track(
             title       = title,
             url         = url,
             duration    = int(duration),
@@ -245,6 +245,11 @@ class YouTubeExtractor:
             view_count  = entry.get("view_count"),
             upload_date = entry.get("upload_date"),
         )
+        stream_url = cls._extract_stream_url(entry)
+        if stream_url:
+            track.stream_url_cache   = stream_url
+            track.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
+        return track
 
     @staticmethod
     def _extract_stream_url(entry: dict) -> str | None:
@@ -335,7 +340,20 @@ class YouTubeExtractor:
         entry = (info.get("entries") or [info])[0]
         if not entry:
             return None
-        return self._entry_to_track(entry)
+        track = self._entry_to_track(entry)
+        if track:
+            try:
+                from core.media_cache import set_cached_metadata
+                await set_cached_metadata(track.url, {
+                    "view_count":  track.view_count,
+                    "uploader":    track.uploader,
+                    "duration":    track.duration,
+                    "thumbnail":   track.thumbnail,
+                    "upload_date": track.upload_date,
+                })
+            except Exception:
+                pass
+        return track
 
     async def get_stream_url(self, url: str, track: Optional[Track] = None) -> str | None:
         """
@@ -440,6 +458,18 @@ class YouTubeExtractor:
                 tracks.append(track)
 
         if tracks:
+            try:
+                from core.media_cache import set_cached_metadata
+                for t in tracks:
+                    await set_cached_metadata(t.url, {
+                        "view_count":  t.view_count,
+                        "uploader":    t.uploader,
+                        "duration":    t.duration,
+                        "thumbnail":   t.thumbnail,
+                        "upload_date": t.upload_date,
+                    })
+            except Exception:
+                pass
             async with self._search_cache_lock:
                 self._search_cache[cache_key] = (tracks, time.monotonic())
                 if len(self._search_cache) > config.SEARCH_CACHE_MAX_SIZE:

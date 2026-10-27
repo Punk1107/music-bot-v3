@@ -71,7 +71,7 @@ API_SECRET: str = os.getenv("API_SECRET", "")
 API_RATE_LIMIT: int = int(os.getenv("API_RATE_LIMIT", "60"))
 
 # ── Audio (FFmpeg only — Lavalink removed in V3) ──────────────────────────────
-YTDL_AUDIO_FORMAT: str = os.getenv("YTDL_AUDIO_FORMAT", "bestaudio[ext=webm]/bestaudio/best")
+YTDL_AUDIO_FORMAT: str = os.getenv("YTDL_AUDIO_FORMAT", "bestaudio/best")
 YTDL_RETRIES: int = int(os.getenv("YTDL_RETRIES", "3"))
 YTDL_TIMEOUT: float = float(os.getenv("YTDL_TIMEOUT", "30.0"))
 YTDL_STREAM_TIMEOUT: float = float(os.getenv("YTDL_STREAM_TIMEOUT", "20.0"))
