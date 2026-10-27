@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 from typing import Optional
 
 import yt_dlp
@@ -81,7 +82,7 @@ def _entry_to_track(entry: dict) -> Optional[Track]:
     duration = int(entry.get("duration") or 0)
     if duration > config.MAX_TRACK_LENGTH:
         return None
-    return Track(
+    track = Track(
         title       = title,
         url         = url,
         duration    = duration,
@@ -90,6 +91,24 @@ def _entry_to_track(entry: dict) -> Optional[Track]:
         view_count  = entry.get("view_count"),
         upload_date = entry.get("upload_date"),
     )
+    formats = entry.get("formats") or []
+    stream = None
+    if formats:
+        audio_fmt = sorted(
+            [f for f in formats if f.get("url") and f.get("acodec") not in (None, "none", "")],
+            key=lambda f: f.get("abr") or 0,
+            reverse=True,
+        )
+        if audio_fmt:
+            stream = audio_fmt[0]["url"]
+    if not stream:
+        raw_url = entry.get("url")
+        if raw_url and raw_url.startswith("http") and not is_bandcamp_url(raw_url):
+            stream = raw_url
+    if stream:
+        track.stream_url_cache   = stream
+        track.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
+    return track
 
 
 class BandcampExtractor:
