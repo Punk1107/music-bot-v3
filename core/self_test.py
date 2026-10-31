@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-core/self_test.py — Startup Self-Test for Music Bot V3.
+core/self_test.py — Startup Self-Test for Music Bot V3 (Gen 5.0 MySQL).
 
 Tier Performance F34: Startup Self Test
   Run before bot.on_ready() completes to verify all critical subsystems.
   Each check is isolated — a single failure does NOT abort the bot.
 
 Checks (in order):
-  1. SQLite        — can we read/write the DB?
+  1. MySQL 8.0+    — can we read/write the DB & check pool health?
   2. FFmpeg        — is the binary reachable and working?
   3. Voice         — does the discord.py voice backend load?
   4. Permissions   — does the bot token have the required intents?
@@ -66,16 +66,27 @@ class SelfTestReport:
 
 # ── Individual checks ─────────────────────────────────────────────────────────
 
-async def _check_sqlite(bot: "MusicBot") -> CheckResult:
-    """Test SQLite: write a temp value and read it back."""
+async def _check_mysql(bot: "MusicBot") -> CheckResult:
+    """Test MySQL 8.0+ connection pool: read sentinel config and report pool stats."""
     t0 = time.monotonic()
     try:
         await bot.db.get_server_config(0)  # guild_id=0 is a safe sentinel
         latency = time.monotonic() - t0
-        return CheckResult("SQLite", True, f"Read OK in {latency*1000:.0f}ms", latency)
+        pool_info = ""
+        if hasattr(bot.db, "pool_stats"):
+            ps = bot.db.pool_stats()
+            if ps.get("status") == "connected":
+                pool_info = f" (pool {ps.get('size', 0)}/{ps.get('maxsize', 25)}, mode={ps.get('mode', 'mysql')})"
+            else:
+                pool_info = f" (mode={ps.get('mode', 'sqlite_fallback')})"
+        return CheckResult("MySQL 8.0+", True, f"Read OK in {latency*1000:.0f}ms{pool_info}", latency)
     except Exception as exc:
         latency = time.monotonic() - t0
-        return CheckResult("SQLite", False, f"Error: {exc}", latency)
+        return CheckResult("MySQL 8.0+", False, f"Error: {exc}", latency)
+
+
+# Backward-compat alias
+_check_sqlite = _check_mysql
 
 
 def _check_ffmpeg_sync() -> CheckResult:
@@ -110,7 +121,6 @@ async def _check_voice(bot: "MusicBot") -> CheckResult:
     t0 = time.monotonic()
     try:
         import discord
-        # Verify PyNaCl is installed (required for voice encryption)
         import nacl
         latency = time.monotonic() - t0
         return CheckResult(
@@ -132,7 +142,6 @@ async def _check_permissions(bot: "MusicBot") -> CheckResult:
     t0 = time.monotonic()
     try:
         if not bot.is_ready():
-            # We may be called before on_ready; check intents instead
             intents = bot.intents
             missing = []
             if not intents.voice_states:
@@ -146,7 +155,6 @@ async def _check_permissions(bot: "MusicBot") -> CheckResult:
                 return CheckResult("Permissions", False, f"Missing intents: {missing}", latency)
             return CheckResult("Permissions", True, "Intents OK (pre-ready check)", latency)
 
-        # Post-ready: check actual permissions in first available guild
         for guild in bot.guilds:
             me = guild.me
             if me is None:
@@ -179,7 +187,6 @@ async def _check_youtube(bot: "MusicBot") -> CheckResult:
         def _probe():
             import yt_dlp
             with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "extract_flat": True}) as ydl:
-                # Just instantiating and resolving extractors is enough
                 return ydl.params.get("format", "bestaudio")
 
         fmt = await asyncio.wait_for(loop.run_in_executor(None, _probe), timeout=8)
@@ -205,7 +212,6 @@ async def _check_spotify(bot: "MusicBot") -> CheckResult:
             latency = time.monotonic() - t0
             return CheckResult("Spotify", False, "SPOTIFY_CLIENT_ID / SECRET not set", latency)
 
-        # Try to get a token (lightweight)
         sp = bot.spotify
         if hasattr(sp, "_get_token"):
             await sp._get_token()
@@ -219,13 +225,13 @@ async def _check_spotify(bot: "MusicBot") -> CheckResult:
 async def _check_db_latency(bot: "MusicBot") -> CheckResult:
     """
     Measure actual DB round-trip latency using the dedicated ping() method.
-    WARN if > 100ms (indicates disk/I/O pressure).
+    WARN if > 100ms (indicates network/I/O pressure).
     """
     t0 = time.monotonic()
     try:
         latency_ms = await asyncio.wait_for(bot.db.ping(), timeout=10.0)
         status     = "OK" if latency_ms < 100 else f"SLOW ({latency_ms:.0f}ms)"
-        ok         = latency_ms < 200  # 200ms hard threshold for FAIL
+        ok         = latency_ms < 200
         return CheckResult(
             "DB Latency", ok,
             f"{status} — {latency_ms:.1f}ms round-trip",
@@ -240,10 +246,7 @@ async def _check_db_latency(bot: "MusicBot") -> CheckResult:
 
 
 async def _check_voice_latency(bot: "MusicBot") -> CheckResult:
-    """
-    Report Discord WebSocket latency (heartbeat round-trip).
-    Not a failure if the bot isn't connected yet — returns a warning instead.
-    """
+    """Report Discord WebSocket latency (heartbeat round-trip)."""
     t0 = time.monotonic()
     try:
         ws_ms = bot.latency * 1000 if bot.latency else None
@@ -261,10 +264,7 @@ async def _check_voice_latency(bot: "MusicBot") -> CheckResult:
 
 
 async def _check_cache_status(bot: "MusicBot") -> CheckResult:
-    """
-    Verify LRU caches are functional and report their hit-rates.
-    Flags a problem if a cache cannot be queried (corruption indicator).
-    """
+    """Verify LRU caches are functional and report their hit-rates."""
     t0 = time.monotonic()
     try:
         from core.lru_cache import combined_stats
@@ -284,10 +284,7 @@ async def _check_cache_status(bot: "MusicBot") -> CheckResult:
 
 
 async def _check_config(bot: "MusicBot") -> CheckResult:
-    """
-    Verify critical config values are sensible.
-    Issues are WARN (ok=True) not failures — bot can still run.
-    """
+    """Verify critical config values are sensible."""
     t0 = time.monotonic()
     try:
         import config
@@ -322,7 +319,7 @@ async def run_self_test(bot: "MusicBot") -> SelfTestReport:
     logger.info("🔍 Running startup self-test…")
 
     checks_to_run = [
-        ("SQLite",          _check_sqlite),
+        ("MySQL 8.0+",      _check_mysql),
         ("FFmpeg",          _check_ffmpeg),
         ("Voice",           _check_voice),
         ("Permissions",     _check_permissions),

@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-webserver.py — Async aiohttp web server for Music Bot V3.
+webserver.py — Async aiohttp web server for Music Bot V3 (Gen 5.0 MySQL).
 
-V3 major additions:
+V3 / Gen 5.0 additions:
   - REST API v1: /api/v1/guilds /api/v1/guild/{id}/nowplaying
                  /api/v1/guild/{id}/queue /api/v1/guild/{id}/analytics
   - WebSocket:   /ws/stats — real-time bot stats push (every 5s)
   - Middleware:  per-IP rate limiting, request logging, gzip compression, CORS
   - Bearer token authentication (API_SECRET env var, optional)
-  - Real-time HTML dashboard using WebSocket connection
-  - Stats cache TTL reduced to 5s (from 15s)
+  - Phase 2 Worker/Dashboard Separation: Optional independent MySQL connection pool
+    via DASHBOARD_STANDALONE_POOL=true
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from aiohttp import web
 import aiohttp
 
 import config
+from core.database import DatabaseManager
 from dashboard import DashboardRouter, DashboardService, DashboardWebSocketManager
 from utils.formatters import format_uptime, format_duration
 
@@ -139,7 +140,7 @@ _DASHBOARD_HTML = """\
     </div>
   </div>
 
-  <div class="footer">Music Bot V3 · FFmpeg only · <span id="py-ver">discord.py</span></div>
+  <div class="footer">Music Bot V3 · MySQL 8.0+ · FFmpeg only · <span id="py-ver">discord.py</span></div>
   <div id="ws-status">⚡ Connecting…</div>
 
   <script>
@@ -223,22 +224,12 @@ class _IPRateLimiter:
 
 class WebServer:
     """
-    Async aiohttp web server.
-
-    Endpoints:
-      GET /               → HTML dashboard (real-time via WebSocket)
-      GET /health         → 200 OK
-      GET /status         → JSON status snapshot
-      GET /ready          → 200 if bot is ready, 503 otherwise
-      GET /api/v1/guilds  → list of active guild IDs + names
-      GET /api/v1/guild/{id}/nowplaying → current track JSON
-      GET /api/v1/guild/{id}/queue      → current queue JSON
-      GET /api/v1/guild/{id}/analytics  → play analytics (last 7 days)
-      WS  /ws/stats       → real-time stats push every 5s
+    Async aiohttp web server with Phase 2 Standalone MySQL Pool support.
     """
 
     def __init__(self, bot: "MusicBot") -> None:
         self.bot     = bot
+        self.standalone_db: Optional[DatabaseManager] = None
         self.app     = web.Application(middlewares=[self._rate_limit_mw, self._cors_mw])
         self._ip_rl  = _IPRateLimiter(config.API_RATE_LIMIT, window=60.0)
         self._ws_clients: set[web.WebSocketResponse] = set()
@@ -253,6 +244,11 @@ class WebServer:
         self.dashboard_router  = DashboardRouter(self.dashboard_service, self.dashboard_ws_mgr)
 
         self._setup_routes()
+
+    @property
+    def db(self) -> DatabaseManager:
+        """Return standalone MySQL pool if configured (Phase 2), else bot's shared pool."""
+        return self.standalone_db if self.standalone_db is not None else self.bot.db
 
     # ── Middleware ────────────────────────────────────────────────────────────
 
@@ -285,19 +281,17 @@ class WebServer:
     # ── Route setup ───────────────────────────────────────────────────────────
 
     def _setup_routes(self) -> None:
-        # Group 4: Register Local Web Dashboard routes (/ and /dashboard, /ws/dashboard, player & queue APIs)
         self.dashboard_router.register_routes(self.app)
 
-        # Legacy stats dashboard and system endpoints
-        self.app.router.add_get("/stats-legacy",               self._dashboard)
-        self.app.router.add_get("/health",                     self._health)
-        self.app.router.add_get("/status",                     self._status)
-        self.app.router.add_get("/ready",                      self._ready)
-        self.app.router.add_get("/ws/stats",                   self._ws_stats)
-        self.app.router.add_get("/api/v1/guilds",              self._api_guilds)
+        self.app.router.add_get("/stats-legacy",                 self._dashboard)
+        self.app.router.add_get("/health",                       self._health)
+        self.app.router.add_get("/status",                       self._status)
+        self.app.router.add_get("/ready",                        self._ready)
+        self.app.router.add_get("/ws/stats",                     self._ws_stats)
+        self.app.router.add_get("/api/v1/guilds",                self._api_guilds)
         self.app.router.add_get("/api/v1/guild/{id}/nowplaying", self._api_nowplaying)
-        self.app.router.add_get("/api/v1/guild/{id}/queue",    self._api_queue)
-        self.app.router.add_get("/api/v1/guild/{id}/analytics", self._api_analytics)
+        self.app.router.add_get("/api/v1/guild/{id}/queue",      self._api_queue)
+        self.app.router.add_get("/api/v1/guild/{id}/analytics",  self._api_analytics)
 
     # ── Basic endpoints ───────────────────────────────────────────────────────
 
@@ -323,10 +317,10 @@ class WebServer:
             raise web.HTTPUnauthorized(text='{"error":"unauthorized"}', content_type="application/json")
         guilds = [
             {
-                "id":   str(g.id),
-                "name": g.name,
+                "id":      str(g.id),
+                "name":    g.name,
                 "members": g.member_count,
-                "active": self.bot.get_player(g.id).now_playing is not None,
+                "active":  self.bot.get_player(g.id).now_playing is not None,
             }
             for g in self.bot.guilds
         ]
@@ -385,7 +379,7 @@ class WebServer:
         except (ValueError, KeyError):
             raise web.HTTPBadRequest(text='{"error":"invalid_params"}', content_type="application/json")
 
-        data = await self.bot.db.get_analytics(gid, days=max(1, min(days, 90)))
+        data = await self.db.get_analytics(gid, days=max(1, min(days, 90)))
         return web.json_response(data)
 
     # ── WebSocket /ws/stats ───────────────────────────────────────────────────
@@ -396,10 +390,8 @@ class WebServer:
         self._ws_clients.add(ws)
         logger.debug("WebSocket client connected (%d total)", len(self._ws_clients))
         try:
-            # Send initial stats immediately
             stats = await self._build_stats()
             await ws.send_json(stats)
-            # Keep alive until client disconnects
             async for _ in ws:
                 pass
         finally:
@@ -424,24 +416,27 @@ class WebServer:
             guild = self.bot.get_guild(g_id)
             t = p.now_playing
             sessions.append({
-                "guild_id":   str(g_id),
-                "guild_name": guild.name if guild else str(g_id),
+                "guild_id":    str(g_id),
+                "guild_name":  guild.name if guild else str(g_id),
                 "now_playing": t.to_dict() if t else None,
                 "queue_size":  len(p),
                 "volume":      round(p.volume, 2),
                 "loop_mode":   p.loop_mode.value,
             })
 
+        db_pool_info = self.db.pool_stats() if hasattr(self.db, "pool_stats") else {}
+
         stats = {
-            "timestamp":     datetime.now(timezone.utc).isoformat(),
-            "status":        "online" if self.bot.is_ready() else "starting",
-            "guilds":        len(self.bot.guilds),
+            "timestamp":      datetime.now(timezone.utc).isoformat(),
+            "status":         "online" if self.bot.is_ready() else "starting",
+            "guilds":         len(self.bot.guilds),
             "active_players": len(active_players),
-            "uptime":        format_uptime(self.bot.start_time) if hasattr(self.bot, "start_time") else "—",
-            "sessions":      sessions,
+            "uptime":         format_uptime(self.bot.start_time) if hasattr(self.bot, "start_time") else "—",
+            "sessions":       sessions,
+            "db_pool":        db_pool_info,
             "circuit_breakers": {
                 "youtube": self.bot.yt_breaker.status_dict(),
-                "spotify":  self.bot.sp_breaker.status_dict(),
+                "spotify": self.bot.sp_breaker.status_dict(),
             },
         }
         self._stats_cache = stats
@@ -469,12 +464,15 @@ class WebServer:
                 except Exception as exc:
                     logger.debug("WS push error: %s", exc)
         except asyncio.CancelledError:
-            # Bug 7: normal shutdown — suppress the CancelledError noise
             return
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
+        if config.DASHBOARD_STANDALONE_POOL:
+            self.standalone_db = await DatabaseManager.create_standalone_pool()
+            logger.info("Phase 2: WebServer initialised standalone MySQL pool")
+
         self._runner = web.AppRunner(self.app, access_log=None)
         await self._runner.setup()
         site = web.TCPSite(self._runner, config.WEB_HOST, config.WEB_PORT)
@@ -500,4 +498,7 @@ class WebServer:
         self._ws_clients.clear()
         if self._runner:
             await self._runner.cleanup()
+        if self.standalone_db:
+            await self.standalone_db.close()
+            self.standalone_db = None
         logger.info("Webserver stopped.")

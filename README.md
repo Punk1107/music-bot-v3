@@ -127,7 +127,7 @@ music-bot-v3/
 │   ├── audio.py                # AudioEffectsProcessor (9-stage FFmpeg filtergraph pipeline)
 │   ├── audio_backend.py        # FFmpegBackend (play/stop abstractions)
 │   ├── circuit_breaker.py      # 3-state circuit breaker (CLOSED / OPEN / HALF-OPEN)
-│   ├── database.py             # aiosqlite (WAL mode) — queues, history, favorites, config
+│   ├── database.py             # Enterprise MySQL 8.0+ pool (aiomysql) + self-healing + SQLite dual-write
 │   ├── ffmpeg_pool.py          # Pre-warmed FFmpeg processes for instant playback start
 │   ├── i18n.py                 # 9-Language localization engine with fallback resolution
 │   ├── lru_cache.py            # LRU caches with automatic memory pressure eviction
@@ -511,7 +511,29 @@ Copy `.env.example` to `.env` and configure your settings:
 | `DISCORD_TOKEN` | Bot authentication token from the [Discord Developer Portal](https://discord.com/developers/applications). |
 | `APP_ID` | Application / Client ID of your bot. |
 
-### 2. Optional Integrations
+### 2. Enterprise Database Engine (MySQL 8.0+ & SQLite Dual-Write)
+| Variable | Default | Description |
+|---|---|---|
+| `DB_HOST` | `127.0.0.1` | MySQL 8.0+ Server Host. |
+| `DB_PORT` | `3306` | MySQL Port. |
+| `DB_USER` | `root` | MySQL Database User. |
+| `DB_PASSWORD` | *(empty)* | MySQL Password. |
+| `DB_NAME` | `musicbot_v3` | Database Schema Name (auto-created if missing). |
+| `DB_POOL_MIN_SIZE` | `5` | aiomysql connection pool minimum warm connections. |
+| `DB_POOL_MAX_SIZE` | `25` | aiomysql connection pool peak concurrency ceiling. |
+| `DB_CHARSET` | `utf8mb4` | MySQL Character Set (full Unicode, Emojis, CJK). |
+| `DB_AUTOCOMMIT` | `false` | Explicit transaction control (`autocommit=False`). |
+| `DB_CONNECT_TIMEOUT` | `10.0` | Socket connect timeout in seconds. |
+| `DB_DEADLOCK_RETRIES`| `3` | Maximum automatic retries for Error 1213 / 1205 with jittered backoff. |
+| `DB_MIGRATION_MODE` | `mysql` | Mode: `mysql` (cutover), `dual_write` (sync write), or `sqlite_fallback`. |
+| `DATABASE_PATH` | `data/musicbot.db` | Legacy SQLite database path (used during migration and fallback). |
+| `ANALYTICS_RETENTION_DAYS` | `90` | Automatic retention policy for listening analytics. |
+| `WORKER_ID` | `worker-1` | Unique instance ID for distributed task locking (`locked_by`). |
+| `DASHBOARD_STANDALONE_POOL` | `false` | Enable independent connection pool for Dashboard process. |
+| `DB_REPLICA_HOST` | *(empty)* | Optional Read-Replica host for Master-Replica split routing. |
+| `DB_SHARDS_JSON` | *(empty)* | Optional JSON array of shard configs for guild modulo sharding. |
+
+### 3. Optional Integrations
 | Variable | Default | Description |
 |---|---|---|
 | `SPOTIFY_CLIENT_ID` | *(empty)* | Spotify Developer Client ID (leave empty to disable Spotify). |
@@ -523,7 +545,7 @@ Copy `.env.example` to `.env` and configure your settings:
 | `SKIP_ERROR_LIMIT` | `5` | Maximum consecutive broken-track skips before stopping. |
 | `DEV_LOG_CHANNEL_IDS` | *(empty)* | Comma-separated Discord channel IDs for error traceback forwarding. |
 
-### 3. Smart Autoplay & Queue Settings
+### 4. Smart Autoplay & Queue Settings
 | Variable | Default | Description |
 |---|---|---|
 | `SMART_AUTOPLAY` | `false` | Enable YouTube Radio Mix recommendations when queue empties. |
@@ -537,7 +559,7 @@ Copy `.env.example` to `.env` and configure your settings:
 | `MAX_TRACK_LENGTH` | `7200` | Maximum track duration allowed in seconds (2 hours). |
 | `QUEUE_SAVE_INTERVAL` | `300` | Periodic queue state persistence interval (seconds). |
 
-### 4. Audio, Network & VPS Anti-Bot Bypass
+### 5. Audio, Network & VPS Anti-Bot Bypass
 | Variable | Default | Description |
 |---|---|---|
 | `YTDL_COOKIE_FILE` | `cookies.txt` | Path to Netscape-format cookie file exported from a browser. |
@@ -552,7 +574,7 @@ Copy `.env.example` to `.env` and configure your settings:
 | `PLAYLIST_EXTRACT_CONCURRENCY`| `2` | Maximum concurrent playlist extraction workers. |
 | `COLOR_EXTRACT_CONCURRENCY` | `3` | Maximum concurrent thumbnail dominant color extraction tasks. |
 
-### 5. Web Dashboard & Security
+### 6. Web Dashboard & Security
 | Variable | Default | Description |
 |---|---|---|
 | `WEB_HOST` | `0.0.0.0` | Local dashboard server bind address. |
@@ -560,7 +582,7 @@ Copy `.env.example` to `.env` and configure your settings:
 | `API_SECRET` | *(empty)* | Bearer token for REST API & Dashboard authentication (empty = no auth). |
 | `API_RATE_LIMIT` | `60` | Maximum REST API requests per minute per IP. |
 
-### 6. Stability & Self-Healing
+### 7. Stability & Self-Healing
 | Variable | Default | Description |
 |---|---|---|
 | `CIRCUIT_BREAKER_THRESHOLD` | `5` | Consecutive failures before opening circuit breaker. |
@@ -629,18 +651,56 @@ The repository includes a ready-to-deploy [`render.yaml`](render.yaml) blueprint
 
 ---
 
+## 🏛️ Enterprise MySQL 8.0+ Database Architecture & Migration
+
+Music Bot Gen 4.0/5.0 transitions from SQLite single-writer serialization to an enterprise async MySQL 8.0+ engine powered by pure asyncio `aiomysql`.
+
+### 1. Architectural Highlights
+- **High-Performance Async Pool**: `aiomysql.create_pool` with min 5 / max 25 warm connections, `utf8mb4` charset, and strict transaction demarcation (`autocommit=False`).
+- **Self-Healing Connection Pool**: Automatic health checks (`conn.ping(reconnect=True)`), transparent auto-reconnect on MySQL Server has gone away (Error 2006/2013), and automatic InnoDB deadlock retry (Error 1213/1205) with exponential backoff and jitter.
+- **Enterprise Normalized Schema (9 Table Groups)**:
+  - `server_configs`: 20 normalized columns replacing generic blobs.
+  - `queue`: Guild queue ordered by position with composite indexes.
+  - `history`: Partitioned by range using `TO_DAYS(played_at)` with `PRIMARY KEY (id, played_at)`.
+  - `user_stats`: Aggregated listening minutes and play counts.
+  - `favorites`: Personal quick-access bookmarks.
+  - `user_playlists` & `playlist_tracks`: Gen 5.0 multi-playlist engine with `CASCADE` deletion and scope access (`personal`, `guild`, `global`).
+  - `scheduled_tasks`: Gen 5.0 scheduled playback tasks with distributed worker claiming (`locked_by`).
+  - `session_state`: Crash recovery and clean shutdown restoration state.
+  - `analytics`: Buffered writes with automated 90-day retention pruning.
+  - `search_history`: User query telemetry.
+
+### 2. Migration Toolkit & Zero-Downtime Transition
+Migrate existing SQLite data with cursor streaming (1,000 rows/batch), data normalization, bulk `executemany` inserts, and checksum reconciliation:
+
+```bash
+# Run dry-run migration check
+python scripts/migrate_sqlite_to_mysql.py --sqlite-path data/musicbot.db --dry-run
+
+# Execute full migration with checksum reconciliation
+python scripts/migrate_sqlite_to_mysql.py --sqlite-path data/musicbot.db --batch-size 1000 --verify
+```
+
+### 3. Evolutionary Roadmap
+- **Phase 1 (Centralized)**: Single MySQL 8.0+ primary instance with connection pooling.
+- **Phase 2 (Decoupled Dashboard & Worker)**: Standalone connection pool separation (`DASHBOARD_STANDALONE_POOL=true`) and distributed task locking (`locked_by`).
+- **Phase 3 (High-Availability Scale)**: Master-Replica read/write splitting (`DB_REPLICA_HOST`) and guild modulo sharding (`DB_SHARDS_JSON`).
+
+---
+
 ## 🛡️ Enterprise Stability & 679-Test Suite
 
-### 1. 10 Background Loop Watchdogs
-Music Bot Gen 4.0 runs 10 background tasks that continuously maintain bot health and recover from anomalies:
+### 1. 11 Background Loop Watchdogs
+Music Bot Gen 4.0 runs 11 background tasks that continuously maintain bot health and recover from anomalies:
 
 | Task Loop | Interval | Architectural Purpose |
 |---|:---:|---|
 | `_idle_check` | 30 s | Automatically disconnects idle voice channels and prunes inactive players. |
-| `_queue_save` | 5 min | Persists server queues to SQLite WAL (also saves on every enqueue). |
+| `_queue_save` | 5 min | Persists server queues to database (MySQL or SQLite fallback). |
+| `_scheduled_playback` | 30 s | Evaluates due scheduled playback alarms with distributed task locking (`locked_by`). |
 | `_np_refresh` | 7 s | Smoothly updates the now-playing embed's two-tone progress bar. |
 | `_cache_prune` | 30 min | Evicts expired yt-dlp stream URLs, search results, and media caches. |
-| `_analytics_prune` | 24 h | Prunes listening analytics records older than 30 days. |
+| `_analytics_prune` | 24 h | Prunes listening analytics records older than 90 days and maintains history partitions. |
 | `_session_heartbeat` | 60 s | Saves full player states (queue, volume, loop, effects, position) to disk. |
 | `_memory_pressure` | 60 s | Monitors process RSS; automatically flushes LRU caches if memory limits are reached. |
 | `_metrics_snapshot` | 5 min | Records CPU, memory, active players, and throughput snapshots. |

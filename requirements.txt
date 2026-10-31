@@ -11,7 +11,10 @@ aiohappyeyeballs>=2.7.1
 yarl>=1.24.2
 idna>=3.18
 
-# ── Database ──────────────────────────────────────────────────────────────────
+# ── Database (MySQL 8.0+ Primary + SQLite Migration/Fallback) ─────────────────
+aiomysql>=0.2.0
+PyMySQL>=1.1.1
+cryptography>=42.0.0
 aiosqlite>=0.21.0
 
 # ── Environment ───────────────────────────────────────────────────────────────

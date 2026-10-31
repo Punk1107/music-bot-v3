@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -72,7 +72,9 @@ class Track:
         )
 
     @classmethod
-    def from_json(cls, s: str) -> "Track":
+    def from_json(cls, s: str | dict | Any) -> "Track":
+        if isinstance(s, dict):
+            return cls.from_dict(s)
         return cls.from_dict(json.loads(s))
 
     # ── Helpers ───────────────────────────────────────────────────────────────

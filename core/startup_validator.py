@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-core/startup_validator.py — Pre-login startup validation for Music Bot V3.
+core/startup_validator.py — Pre-login startup validation for Music Bot V3 (Gen 5.0 MySQL).
 
 Runs BEFORE bot.run() is called so that catastrophic misconfiguration
 is caught early, before any network connection is made to Discord.
@@ -9,21 +9,16 @@ Checks (in order):
   1. DISCORD_TOKEN       — present and non-empty
   2. APP_ID              — present if set; valid integer
   3. FFmpeg              — binary reachable in PATH and responds to -version
-  4. Database path       — parent directory exists / can be created; file writable
+  4. MySQL 8.0+ / DB     — validates MySQL pool parameters & reachability
   5. Config completeness — warn on optional-but-recommended settings
   6. Spotify keys        — present → try token fetch (WARNING only if missing)
-
-ValidationReport contains:
-  - items: list[ValidationItem]  (severity: FATAL | WARNING | OK)
-  - has_fatal: bool
-
-If has_fatal is True, main() should print the report and exit(1).
 """
 
 from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -71,13 +66,10 @@ class ValidationReport:
         self.items.append(ValidationItem(name=name, severity=severity, detail=detail))
 
     def print_report(self) -> None:
-        import sys
-        # Use UTF-8 aware writing; fall back to ASCII-safe repr on narrow terminals
         def _print(text: str) -> None:
             try:
                 print(text)
             except UnicodeEncodeError:
-                # Strip/replace non-ASCII characters for terminals without UTF-8
                 safe = text.encode("ascii", errors="replace").decode("ascii")
                 print(safe)
 
@@ -92,7 +84,6 @@ class ValidationReport:
         else:
             _print(f"  All critical checks passed ({len(self.warning_items)} warning(s)).")
         _print("=" * 60 + "\n")
-
 
 
 # ── Individual checks ─────────────────────────────────────────────────────────
@@ -153,25 +144,49 @@ def _check_js_runtime(report: ValidationReport) -> None:
 
 def _check_database(report: ValidationReport) -> None:
     import config
-    db_path = getattr(config, "DATABASE_PATH", "data/musicbot.db")
-    parent  = Path(db_path).parent
-    try:
-        parent.mkdir(parents=True, exist_ok=True)
-    except Exception as exc:
-        report.add("Database dir", Severity.FATAL,
-                   f"Cannot create parent directory '{parent}': {exc}")
-        return
+    mode = getattr(config, "DB_MIGRATION_MODE", "mysql").lower()
+    host = getattr(config, "DB_HOST", "127.0.0.1")
+    port = int(getattr(config, "DB_PORT", 3306))
+    db_name = getattr(config, "DB_NAME", "musicbot")
+    pool_min = int(getattr(config, "DB_POOL_MIN_SIZE", 5))
+    pool_max = int(getattr(config, "DB_POOL_MAX_SIZE", 25))
 
-    # Writable?
-    test_file = parent / ".write_test"
-    try:
-        test_file.write_text("ok")
-        test_file.unlink()
-        report.add("Database", Severity.OK,
-                   f"Path '{db_path}' is writable.")
-    except Exception as exc:
-        report.add("Database", Severity.FATAL,
-                   f"Directory '{parent}' is not writable: {exc}")
+    if mode in ("mysql", "dual_write"):
+        if pool_min < 1 or pool_max < pool_min:
+            report.add(
+                "MySQL Pool Config",
+                Severity.FATAL,
+                f"Invalid pool bounds: min={pool_min}, max={pool_max}",
+            )
+            return
+
+        # Quick TCP probe to check if MySQL server port is reachable
+        try:
+            with socket.create_connection((host, port), timeout=2.0):
+                report.add(
+                    "MySQL 8.0+",
+                    Severity.OK,
+                    f"Reachable at {host}:{port}/{db_name} (pool {pool_min}–{pool_max}, mode={mode})",
+                )
+        except Exception as exc:
+            sev = Severity.WARNING if mode == "dual_write" else Severity.WARNING
+            report.add(
+                "MySQL 8.0+",
+                sev,
+                f"TCP probe to {host}:{port} failed ({exc}) — verify MySQL 8.0+ service is running.",
+            )
+
+    if mode in ("dual_write", "sqlite_fallback"):
+        db_path = getattr(config, "DATABASE_PATH", "data/musicbot.db")
+        parent  = Path(db_path).parent
+        try:
+            parent.mkdir(parents=True, exist_ok=True)
+            test_file = parent / ".write_test"
+            test_file.write_text("ok")
+            test_file.unlink()
+            report.add("SQLite Fallback", Severity.OK, f"Path '{db_path}' is writable (mode={mode}).")
+        except Exception as exc:
+            report.add("SQLite Fallback", Severity.FATAL, f"Directory '{parent}' is not writable: {exc}")
 
 
 def _check_spotify(report: ValidationReport) -> None:
@@ -189,7 +204,6 @@ def _check_spotify(report: ValidationReport) -> None:
 def _check_config_completeness(report: ValidationReport) -> None:
     import config
 
-    # ── DEV_LOG_CHANNEL_IDS ───────────────────────────────────────────────────
     channel_ids: list[int] = getattr(config, "DEV_LOG_CHANNEL_IDS", [])
     if not channel_ids:
         report.add(
@@ -205,7 +219,6 @@ def _check_config_completeness(report: ValidationReport) -> None:
             f"{len(channel_ids)} channel(s) configured: {ids_preview}",
         )
 
-    # ── API_SECRET ────────────────────────────────────────────────────────────
     api_secret: str = getattr(config, "API_SECRET", "") or ""
     if not api_secret:
         report.add(
@@ -221,7 +234,6 @@ def _check_config_completeness(report: ValidationReport) -> None:
             f"Bearer token set ({masked})",
         )
 
-    # ── Sanity-check numeric values ───────────────────────────────────────────
     try:
         import config as cfg
         if cfg.IDLE_TIMEOUT < 30:
@@ -251,9 +263,7 @@ def _check_logs_dir(report: ValidationReport) -> None:
 def validate_pre_login(*, print_report: bool = True) -> ValidationReport:
     """
     Run all pre-login checks synchronously.
-
     Called in main() before bot.run().
-    Returns a ValidationReport; if has_fatal is True, caller should exit(1).
     """
     report = ValidationReport()
 

@@ -1,11 +1,41 @@
 version: "3.9"
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: musicbot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-musicbot_root_pass}
+      MYSQL_DATABASE: ${DB_NAME:-musicbot}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=caching_sha2_password
+      --max-connections=200
+      --innodb-buffer-pool-size=256M
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   musicbot:
     build: .
     container_name: musicbot-v3
     restart: unless-stopped
     env_file: .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+    depends_on:
+      mysql:
+        condition: service_healthy
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -17,3 +47,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+
+volumes:
+  mysql_data:

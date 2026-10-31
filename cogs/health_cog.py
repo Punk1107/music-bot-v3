@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-cogs/health_cog.py — Health Report (Feature 35) for Music Bot V3.
+cogs/health_cog.py — Health Report (Feature 35) for Music Bot V3 (Gen 5.0 MySQL).
 
 Displays a comprehensive system status embed showing:
   - Voice connections status
-  - SQLite database status
+  - MySQL 8.0+ database pool & ping status
   - LRU Cache stats (metadata / thumbnail / search) — F31
   - Memory usage (RAM %) — F32
   - CPU usage
@@ -111,22 +111,26 @@ class HealthCog(commands.Cog, name="Health"):
             inline = True,
         )
 
-        # ── SQLite (live ping) ────────────────────────────────────────────────────
+        # ── MySQL 8.0+ (live ping & pool stats) ───────────────────────────────
         try:
             db_latency = await asyncio.wait_for(self.bot.db.ping(), timeout=5.0)
             db_icon    = "✅" if db_latency < 100 else ("⚠️" if db_latency < 200 else "🔴")
-            db_status  = f"{db_icon} {db_latency:.0f}ms ping"
+            pool_detail = ""
+            if hasattr(self.bot.db, "pool_stats"):
+                ps = self.bot.db.pool_stats()
+                if ps.get("status") == "connected":
+                    pool_detail = f"\nPool: `{ps.get('used', 0)}/{ps.get('size', 0)}` active (max `{ps.get('maxsize', 25)}`)"
+                else:
+                    pool_detail = f"\nMode: `{ps.get('mode', 'sqlite_fallback')}`"
+            db_status  = f"{db_icon} {db_latency:.0f}ms ping{pool_detail}"
         except asyncio.TimeoutError:
             db_status = "❌ Timed out (>5s)"
         except Exception as exc:
             db_status = f"❌ Error: {str(exc)[:60]}"
 
-        embed.add_field(name="🗄️  SQLite",  value=db_status, inline=True)
+        embed.add_field(name="🗄️  MySQL 8.0+",  value=db_status, inline=True)
 
         # ── Memory (psutil) ───────────────────────────────────────────────────
-        # Shows TWO values:
-        #   1. Bot process RSS  — primary metric, drives cache eviction thresholds
-        #   2. System RAM       — diagnostic only (high system RAM ≠ bot memory issue)
         if psutil:
             import os as _os
             vm          = psutil.virtual_memory()
@@ -137,7 +141,6 @@ class HealthCog(commands.Cog, name="Health"):
             try:
                 proc    = psutil.Process(_os.getpid())
                 rss_mb  = proc.memory_info().rss / (1024 * 1024)
-                # Thresholds match lru_cache.py defaults (overridable via config)
                 try:
                     import config as _cfg
                     _light = float(getattr(_cfg, "MEMORY_PRESSURE_MB_LIGHT", 400))
@@ -163,7 +166,6 @@ class HealthCog(commands.Cog, name="Health"):
 
         # ── CPU ───────────────────────────────────────────────────────────────
         if psutil:
-            # cpu_percent with interval=None is non-blocking (uses last measurement)
             cpu_pct  = psutil.cpu_percent(interval=None)
             cpu_icon = "✅" if cpu_pct < 60 else ("⚠️" if cpu_pct < 85 else "🔴")
             embed.add_field(name="⚙️  CPU", value=f"{cpu_icon} **{cpu_pct:.1f}%**", inline=True)
@@ -300,7 +302,6 @@ class HealthCog(commands.Cog, name="Health"):
     async def cacheinfo(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         if not await self._check_dj(interaction):
-
             return
 
         try:
@@ -313,7 +314,6 @@ class HealthCog(commands.Cog, name="Health"):
 
         embed = discord.Embed(title="📦  LRU Cache Statistics", color=0x70A1FF)
         for name, s in data.items():
-            total    = s["hits"] + s["misses"]
             hit_rate = f"{s['hit_rate']*100:.1f}%"
             embed.add_field(
                 name  = f"**{name.title()}** Cache",
