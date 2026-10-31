@@ -619,31 +619,28 @@ class DatabaseManager:
             autocommit=True,
             connect_timeout=config.DB_CONNECT_TIMEOUT,
         )
+        
         try:
             async with bootstrap_conn.cursor() as cur:
-                safe_db = self._db_name.replace("`", "")
                 await cur.execute(
-                    f"CREATE DATABASE IF NOT EXISTS `{safe_db}` "
-                    f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                    """
+                    SELECT SCHEMA_NAME
+                    FROM INFORMATION_SCHEMA.SCHEMATA
+                    WHERE SCHEMA_NAME = %s
+                    """,
+                    (self._db_name,)
                 )
+
+                database_exists = await cur.fetchone()
+
+                if not database_exists:
+                    safe_db = self._db_name.replace("`", "")
+                    await cur.execute(
+                        f"CREATE DATABASE IF NOT EXISTS `{safe_db}` "
+                        f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+                    )
         finally:
             bootstrap_conn.close()
-
-        # Step 2: Open Master Pool (autocommit=False per spec)
-        self.router.master_pool = await aiomysql.create_pool(
-            host=self._host,
-            port=self._port,
-            user=self._user,
-            password=self._password,
-            db=self._db_name,
-            minsize=self._pool_min,
-            maxsize=self._pool_max,
-            charset=self._charset,
-            autocommit=False,
-            cursorclass=aiomysql.DictCursor,
-            connect_timeout=config.DB_CONNECT_TIMEOUT,
-            init_command="SET SESSION time_zone = '+00:00', NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
-        )
 
         # Step 3: Phase 3 Optional Read-Replica Pool
         if config.DB_REPLICA_HOST:
