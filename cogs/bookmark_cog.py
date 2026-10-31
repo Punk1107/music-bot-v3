@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
-"""cogs/bookmark_cog.py — Queue Bookmark commands for Music Bot V3.
+"""cogs/bookmark_cog.py — Multi-Playlist & Queue Bookmark commands for Music Bot V3 (Gen 5.0).
 
-Tier-S Feature 5: Queue Bookmark (Snapshot)
-  - /bookmark save <name>   — snapshot current queue
-  - /bookmark load <name>   — restore queue (replace or append)
-  - /bookmark list          — show all bookmarks
-  - /bookmark delete <name> — remove a bookmark
-
-Bookmarks are per-user per-guild snapshots of the queue. Unlike Favorites
-(single tracks), a Bookmark captures the entire queue state at a point in time.
+Tier-S Feature 5 & Gen 5.0 Multi-Playlist Management:
+  - /bookmark save <name> [scope] [public] — snapshot current queue into `user_playlists` & `playlist_tracks`
+  - /bookmark load <name>                  — restore playlist/bookmark into queue (replace or append)
+  - /bookmark list                         — show all personal & public guild/global playlists
+  - /bookmark delete <name>                — remove a playlist/bookmark (cascades to playlist_tracks)
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -34,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class BookmarkCog(commands.Cog, name="Bookmark"):
-    """Queue snapshot (bookmark) commands."""
+    """Queue snapshot (bookmark) & Gen 5.0 Multi-Playlist commands."""
 
     def __init__(self, bot: "MusicBot") -> None:
         self.bot = bot
@@ -43,18 +39,33 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
 
     bookmark_group = app_commands.Group(
         name="bookmark",
-        description="Manage queue bookmarks (snapshots)",
+        description="Manage queue bookmarks & multi-playlists (Gen 5.0)",
     )
 
-    @bookmark_group.command(name="save", description="Save the current queue as a named bookmark")
-    @app_commands.describe(name="Bookmark name (max 50 chars)")
-    async def bm_save(self, interaction: discord.Interaction, name: str) -> None:
-        await interaction.response.defer(ephemeral=True)
-        await self._save(interaction, name)
-
-    @bookmark_group.command(name="load", description="Load a bookmark into the queue")
+    @bookmark_group.command(name="save", description="Save the current queue as a named playlist/bookmark")
     @app_commands.describe(
-        name="Bookmark name to load",
+        name="Playlist/Bookmark name (max 100 chars)",
+        scope="Visibility scope: personal, guild, or global",
+        is_public="Allow other members to load this playlist",
+    )
+    @app_commands.choices(scope=[
+        app_commands.Choice(name="Personal (Only you)", value="personal"),
+        app_commands.Choice(name="Guild (This server)", value="guild"),
+        app_commands.Choice(name="Global (All servers)", value="global"),
+    ])
+    async def bm_save(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        scope: str = "personal",
+        is_public: bool = False,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        await self._save(interaction, name, scope=scope, is_public=is_public)
+
+    @bookmark_group.command(name="load", description="Load a bookmark/playlist into the queue")
+    @app_commands.describe(
+        name="Bookmark/Playlist name to load",
         mode="replace = clear queue first, append = add to queue",
     )
     @app_commands.choices(mode=[
@@ -65,12 +76,12 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         await interaction.response.defer(ephemeral=True)
         await self._load(interaction, name, mode)
 
-    @bookmark_group.command(name="list", description="List all your queue bookmarks")
+    @bookmark_group.command(name="list", description="List all your queue bookmarks & public playlists")
     async def bm_list(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         await self._list(interaction)
 
-    @bookmark_group.command(name="delete", description="Delete a queue bookmark")
+    @bookmark_group.command(name="delete", description="Delete a queue bookmark/playlist")
     @app_commands.describe(name="Bookmark name to delete")
     async def bm_delete(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
@@ -79,7 +90,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
     # ── Shortcuts (/bsave, /bload, /blist, /bdelete) ───────────────────────────
 
     @app_commands.command(name="bsave", description="Save the current queue as a named bookmark")
-    @app_commands.describe(name="Bookmark name (max 50 chars)")
+    @app_commands.describe(name="Bookmark name (max 100 chars)")
     async def bsave(self, interaction: discord.Interaction, name: str) -> None:
         await interaction.response.defer(ephemeral=True)
         await self._save(interaction, name)
@@ -126,9 +137,16 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    async def _save(self, interaction: discord.Interaction, name: str) -> None:
+    async def _save(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        *,
+        scope: str = "personal",
+        is_public: bool = False,
+    ) -> None:
         locale = await get_locale(interaction.guild_id, self.bot.db)
-        name = name.strip()[:50]
+        name = name.strip()[:100]
         if not name:
             await interaction.followup.send(
                 embed=error_embed("Name Required", t("bookmark.name_required", locale)),
@@ -145,15 +163,29 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
             )
             return
 
-        # Include now_playing at front if active
         snapshot = []
         if player.now_playing:
             snapshot.append(player.now_playing)
         snapshot.extend(queue)
 
-        ok = await self.bot.db.save_bookmark(
-            interaction.user.id, interaction.guild_id, name, snapshot
-        )
+        if scope in ("guild", "global"):
+            is_public = True
+
+        try:
+            ok = await self.bot.db.save_bookmark(
+                interaction.user.id,
+                interaction.guild_id,
+                name,
+                snapshot,
+                scope=scope,
+                is_public=is_public,
+            )
+        except TypeError:
+            # Backward-compat with mocks that only accept 4 positional args
+            ok = await self.bot.db.save_bookmark(
+                interaction.user.id, interaction.guild_id, name, snapshot
+            )
+
         if ok:
             await interaction.followup.send(
                 embed=bookmark_saved_embed(name, len(snapshot), locale=locale), ephemeral=True

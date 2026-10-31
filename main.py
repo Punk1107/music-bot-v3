@@ -1,17 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-main.py — Music Bot V3 entry point.
+main.py — Music Bot V3 entry point (Gen 5.0 MySQL 8.0+ Architecture).
 
 MusicBot class:
-  - Initialises all core services (DB, YouTube, Spotify, audio, NLU, webserver)
-  - Loads all cogs (music, queue, effects, info, favorites, admin)
+  - Initialises all core services (MySQL 8.0+ Pool, YouTube, Spotify, audio, NLU, webserver)
+  - Loads all cogs (music, queue, effects, info, favorites, admin, etc.)
   - Manages per-guild GuildPlayer registry
   - Background tasks:
-      • idle_check    (every 30s)   — auto-disconnect idle guilds
-      • queue_save    (every 5min)  — persist all queues to DB
-      • np_refresh    (every 7s)    — update now-playing progress bar
-      • cache_prune   (every 30min) — evict expired yt-dlp cache entries
-      • analytics_prune (daily)     — prune old analytics rows
+      • idle_check          (every 30s)   — auto-disconnect idle guilds
+      • queue_save          (every 5min)  — persist all queues to DB
+      • np_refresh          (every 7s)    — update now-playing progress bar
+      • cache_prune         (every 30min) — evict expired yt-dlp cache entries
+      • analytics_prune     (daily)       — prune old analytics (>90d) & maintain history partitions
+      • scheduled_playback  (every 30s)   — Gen 5.0 scheduled playback task runner (distributed lock)
   - Event handlers:
       • on_ready           — log and sync commands
       • on_guild_join/remove
@@ -76,7 +77,7 @@ _COGS = [
     "cogs.info",
     "cogs.favorites",
     "cogs.admin",
-    "cogs.bookmark_cog",     # Tier-S  Feature 5: Queue Bookmarks
+    "cogs.bookmark_cog",     # Tier-S  Feature 5 / Gen 5.0: Queue Bookmarks & Multi-Playlists
     "cogs.sleep_timer_cog",  # Tier A  Feature 16: Sleep Timer
     "cogs.playback_cog",     # Tier A+ Features 21-25: Speed/Pitch/Crossfade/Trim/Gain
     "cogs.presets_cog",      # Tier B  Feature 26: Guild Presets
@@ -100,7 +101,7 @@ _COGS = [
 
 class MusicBot(commands.Bot):
     """
-    Main bot class for Music Bot V3.
+    Main bot class for Music Bot V3 (Gen 5.0 MySQL).
 
     Services are initialised in setup_hook() so they run on the event loop.
     """
@@ -145,13 +146,13 @@ class MusicBot(commands.Bot):
             recovery_window   = config.CIRCUIT_BREAKER_WINDOW,
         )
 
-        # ── Per-guild player registry ──────────────────────────────────────────────────
+        # ── Per-guild player registry ─────────────────────────────────────────
         self._players:   dict[int, GuildPlayer] = {}
 
-        # ── Shared HTTP session (created in setup_hook) ──────────────────────────────
+        # ── Shared HTTP session (created in setup_hook) ───────────────────────
         self.http_session: Optional[aiohttp.ClientSession] = None
 
-        # ── Timing ──────────────────────────────────────────────────────────────────
+        # ── Timing ────────────────────────────────────────────────────────────
         self.start_time: datetime = datetime.now(timezone.utc)
 
         # ── Tier Performance: Self-test report (F34) ──────────────────────────
@@ -162,7 +163,7 @@ class MusicBot(commands.Bot):
         self.mem_leak_detector: Optional[MemoryLeakDetector]           = None
         self.metrics:           Optional[metrics_module.MetricsCollector] = None
 
-        # ── Background task tracker (prevents premature GC & logs unhandled errors) ───
+        # ── Background task tracker ───────────────────────────────────────────
         self._background_tasks: set[asyncio.Task] = set()
 
     # ── Player registry ───────────────────────────────────────────────────────
@@ -217,7 +218,7 @@ class MusicBot(commands.Bot):
             timeout      = aiohttp.ClientTimeout(total=30),
         )
 
-        # Database
+        # Database (MySQL 8.0+ Pool & Schema Init)
         await self.db.initialise()
 
         # Webserver
@@ -244,15 +245,16 @@ class MusicBot(commands.Bot):
         # Register all loops with the dead task watchdog
         if self.task_watchdog:
             for _loop_task, _loop_name in [
-                (self._idle_check,        "idle_check"),
-                (self._queue_save,        "queue_save"),
-                (self._np_refresh,        "np_refresh"),
-                (self._cache_prune,       "cache_prune"),
-                (self._analytics_prune,   "analytics_prune"),
-                (self._session_heartbeat, "session_heartbeat"),
-                (self._memory_pressure,   "memory_pressure"),
-                (self._metrics_snapshot,  "metrics_snapshot"),
-                (self._memory_leak_detect,"memory_leak_detect"),
+                (self._idle_check,         "idle_check"),
+                (self._queue_save,         "queue_save"),
+                (self._np_refresh,         "np_refresh"),
+                (self._cache_prune,        "cache_prune"),
+                (self._analytics_prune,    "analytics_prune"),
+                (self._session_heartbeat,  "session_heartbeat"),
+                (self._scheduled_playback, "scheduled_playback"),
+                (self._memory_pressure,    "memory_pressure"),
+                (self._metrics_snapshot,   "metrics_snapshot"),
+                (self._memory_leak_detect, "memory_leak_detect"),
             ]:
                 self.task_watchdog.register(_loop_task, _loop_name)
 
@@ -262,11 +264,12 @@ class MusicBot(commands.Bot):
         self._np_refresh.start()
         self._cache_prune.start()
         self._analytics_prune.start()
-        self._session_heartbeat.start()  # Tier-S+ F11: session state heartbeat
-        self._memory_pressure.start()    # Tier Performance F32: memory pressure handler
-        self._metrics_snapshot.start()   # Stability: runtime metrics every 5 min
-        self._memory_leak_detect.start() # Stability: memory leak detection every 30 min
-        self._dead_task_watchdog.start() # Stability: dead task detector every 60 s
+        self._session_heartbeat.start()   # Tier-S+ F11: session state heartbeat
+        self._scheduled_playback.start()  # Gen 5.0: scheduled playback runner
+        self._memory_pressure.start()     # Tier Performance F32: memory pressure handler
+        self._metrics_snapshot.start()    # Stability: runtime metrics every 5 min
+        self._memory_leak_detect.start()  # Stability: memory leak detection every 30 min
+        self._dead_task_watchdog.start()  # Stability: dead task detector every 60 s
 
         # Tier-S+ F13: Warm FFmpeg pool
         asyncio.create_task(self.ffmpeg_pool.initialise())
@@ -280,18 +283,16 @@ class MusicBot(commands.Bot):
         """Graceful shutdown: save queues, stop services, close connections."""
         logger.info("Shutting down Music Bot V3…")
 
-        # Signal watchdog to stop restarting tasks
         if self.task_watchdog:
             self.task_watchdog.stop()
 
-        # Cancel discord.ext.tasks loops
         _task_loops = [
             t for t in [
                 self._idle_check, self._queue_save, self._np_refresh,
                 self._cache_prune, self._analytics_prune,
-                self._session_heartbeat, self._memory_pressure,
-                self._metrics_snapshot, self._memory_leak_detect,
-                self._dead_task_watchdog,
+                self._session_heartbeat, self._scheduled_playback,
+                self._memory_pressure, self._metrics_snapshot,
+                self._memory_leak_detect, self._dead_task_watchdog,
             ]
             if t is not None
         ]
@@ -302,9 +303,6 @@ class MusicBot(commands.Bot):
             return_exceptions=True,
         )
 
-        # Cancel ALL floating asyncio tasks (prefetch, _leave_if_still_alone,
-        # _delayed_resume, sleep timers, etc.) — every create_task() that was
-        # launched but never explicitly cancelled.
         current_task  = asyncio.current_task()
         floating_tasks = [
             t for t in asyncio.all_tasks()
@@ -358,7 +356,7 @@ class MusicBot(commands.Bot):
         except Exception as exc:
             logger.warning("Webserver stop error: %s", exc)
 
-        # Close DB
+        # Close DB Pool(s)
         try:
             await asyncio.wait_for(self.db.close(), timeout=10.0)
         except Exception as exc:
@@ -403,13 +401,11 @@ class MusicBot(commands.Bot):
     async def _restore_queues(self) -> None:
         """
         Tier-S+ Feature 11: Full session state restore on bot start.
-        Restores: queue, loop mode, volume, effects, and the now-playing track
-        (which is re-added to front of queue so it plays first after resume).
+        Restores: queue, loop mode, volume, effects, and the now-playing track.
         """
         from models.enums import LoopMode, AudioEffect
         for guild in self.guilds:
             try:
-                # Try full session state first (Tier-S+)
                 state = await self.db.load_session_state(guild.id)
                 if state:
                     player = self.get_player(guild.id)
@@ -420,18 +416,15 @@ class MusicBot(commands.Bot):
                         if e in [ae.value for ae in AudioEffect]
                     ]
 
-                    # Restore text channel
                     if state["text_channel_id"]:
                         tc = guild.get_channel(state["text_channel_id"])
                         if tc:
                             player.text_channel = tc
 
-                    # Rebuild queue: now_playing goes to front
                     restored_tracks = []
                     if state["now_playing"]:
-                        # Put now_playing at front with elapsed position info attached
                         t = state["now_playing"]
-                        t._resume_offset = state["elapsed_secs"]  # carry offset for Feature 12
+                        t._resume_offset = state["elapsed_secs"]
                         restored_tracks.append(t)
                     restored_tracks.extend(state["queue"])
 
@@ -444,7 +437,6 @@ class MusicBot(commands.Bot):
                             [e.value for e in player.effects],
                         )
 
-                    # Clear state after successful restore (don't replay on next start)
                     await self.db.clear_session_state(guild.id)
                     continue
 
@@ -473,23 +465,15 @@ class MusicBot(commands.Bot):
         before: discord.VoiceState,
         after:  discord.VoiceState,
     ) -> None:
-        """Track idle state and handle bot's own voice disconnects (Feature 12).
-
-        Also handles:
-          F17: Auto-leave when bot is alone for 90+ seconds
-          F18: Auto-pause when channel empties; resume on rejoin
-        """
+        """Track idle state and handle bot's own voice disconnects (Feature 12)."""
         guild  = member.guild
         player = self.get_player(guild.id)
         vc     = guild.voice_client
 
-        # Feature 12: Detect when the BOT itself gets disconnected unexpectedly
         if member.id == self.user.id:
             was_connected = before.channel is not None
             now_connected = after.channel  is not None
 
-            # Bug 2: Bot was MOVED to a different channel — update last_channel_id
-            # so that future reconnect attempts target the correct channel.
             if before.channel and after.channel and before.channel != after.channel:
                 player.last_channel_id = after.channel.id
                 logger.debug(
@@ -498,21 +482,12 @@ class MusicBot(commands.Bot):
                 )
 
             if was_connected and not now_connected:
-                # Bot was kicked from voice / Discord dropped the connection.
-                # Reconnect if: not intentional AND (was playing OR has queued tracks).
-                # Previously required player.now_playing to be truthy, which caused
-                # permanent silence when the bot was kicked while the queue had tracks
-                # but now_playing was None (e.g. during URL resolution or first join).
                 has_active_session = player.now_playing is not None or len(player) > 0
                 if not player.intentional_disconnect and has_active_session:
                     logger.info(
                         "guild %d: Bot voice disconnected unexpectedly — scheduling reconnect",
                         guild.id,
                     )
-                    # Delegate reconnect + resume to MusicCog._try_reconnect
-                    # by triggering _play_next after a short delay.
-                    # Note: guild_id is passed explicitly to avoid closure capture bug
-                    # (Python closures capture variables by reference, not by value).
                     music_cog = self.cogs.get("Music")
                     if music_cog:
                         async def _delayed_resume(gid: int) -> None:
@@ -521,7 +496,6 @@ class MusicBot(commands.Bot):
                         self.track_task(_delayed_resume(guild.id), name=f"delayed_resume_{guild.id}")
             return
 
-        # Ignore other bots
         if member.bot:
             return
 
@@ -550,7 +524,6 @@ class MusicBot(commands.Bot):
         # ── F17: Auto Leave When Alone ────────────────────────────────────────
         if cfg and cfg.auto_leave_alone:
             if human_count == 0:
-                # Start the 90-second countdown if not already running
                 if player.alone_since is None:
                     player.alone_since = datetime.now(timezone.utc)
 
@@ -563,7 +536,6 @@ class MusicBot(commands.Bot):
                         _vc2 = _guild.voice_client
                         if not _vc2 or not _vc2.is_connected():
                             return
-                        # Check still alone
                         still_alone = all(m.bot for m in _vc2.channel.members)
                         if still_alone:
                             logger.info("guild %d: Auto-leaving — alone for 90s", gid)
@@ -590,14 +562,12 @@ class MusicBot(commands.Bot):
                         name=f"auto_leave_{guild.id}",
                     )
             else:
-                # Human rejoined — cancel the alone timer
                 player.alone_since = None
                 if player.alone_leave_task and not player.alone_leave_task.done():
                     player.alone_leave_task.cancel()
                     player.alone_leave_task = None
-            return  # done with F17/F18 for non-bot member events
+            return
 
-        # ── Legacy idle tracking (when F17 disabled) ──────────────────────────
         if human_count == 0:
             if player.idle_since is None:
                 player.idle_since = datetime.now(timezone.utc)
@@ -605,17 +575,11 @@ class MusicBot(commands.Bot):
             player.idle_since = None
 
     async def on_message(self, message: discord.Message) -> None:
-        """
-        Request channel handler (V3 NEW).
-
-        If a message is sent in the configured request channel and is not from
-        a bot, treat it as a /play invocation using the NLU + request channel logic.
-        """
+        """Request channel handler (V3 NEW)."""
         if message.author.bot or not message.guild:
             await self.process_commands(message)
             return
 
-        # Check if this channel is the request channel for the guild
         try:
             cfg = await self.db.get_server_config(message.guild.id)
         except Exception:
@@ -626,42 +590,29 @@ class MusicBot(commands.Bot):
             await self._handle_request_channel(message)
             return
 
-        # NLU: if NLU enabled, try to parse music intents in any channel
         if config.NLU_ENABLED and message.content:
             result = self.nlu.parse(message.content)
             from models.enums import NLUIntent
             if result.intent != NLUIntent.UNKNOWN:
-                # Let NLU handle recognised intents (only in non-request-channels)
-                pass  # NLU is mainly for request channels in V3
+                pass
 
         await self.process_commands(message)
 
     async def _handle_request_channel(self, message: discord.Message) -> None:
-        """
-        Process a message in the request channel.
-
-        1. Try NLU intent classification
-        2. If PLAY or unknown-but-looks-like-query → trigger /play
-        3. If other intent → respond appropriately
-        4. Delete user's message after processing
-        """
+        """Process a message in the request channel."""
         from models.enums import NLUIntent
 
         content = message.content.strip()
         if not content:
             return
 
-        # Delete user message (optional — ignore errors)
         try:
             await message.delete()
         except Exception:
             pass
 
         result = self.nlu.parse(content)
-
         locale = get_locale_sync(message.guild.id)
-
-        # Determine query to play
         query: Optional[str] = None
 
         if result.intent == NLUIntent.PLAY and result.query:
@@ -672,7 +623,7 @@ class MusicBot(commands.Bot):
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             try:
-                reply = await message.channel.send(t("skip.done", locale), delete_after=5)
+                await message.channel.send(t("skip.done", locale), delete_after=5)
             except Exception:
                 pass
             return
@@ -705,19 +656,15 @@ class MusicBot(commands.Bot):
         elif result.intent == NLUIntent.UNKNOWN and self.nlu.is_music_query(content):
             query = content
         else:
-            # Unknown and doesn't look like a query — ignore silently
             return
 
         if not query:
             return
 
-        # Build a fake interaction context for play_track
-        # We can't create a real Interaction, so we call the music backend directly
         music_cog = self.cogs.get("Music")
         if not music_cog:
             return
 
-        # Check if user is in voice
         if not message.author.voice:
             try:
                 await message.channel.send(
@@ -727,7 +674,6 @@ class MusicBot(commands.Bot):
                 pass
             return
 
-        # Get or join voice
         vc = message.guild.voice_client
         if not vc or not vc.is_connected():
             try:
@@ -739,7 +685,6 @@ class MusicBot(commands.Bot):
                 logger.warning("RC join failed: %s", exc)
                 return
 
-        # Resolve track
         from core.validator import validate_search_query
         from core.circuit_breaker import CircuitBreakerOpen
 
@@ -793,27 +738,19 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=30)
     async def _idle_check(self) -> None:
-        """
-        Disconnect guilds idle longer than their configured timeout.
-
-        Perf-1 Memory Audit: Also purges stale GuildPlayer entries for guilds
-        the bot has left or that have no voice connection and nothing queued.
-        Prevents _players from growing unboundedly across the bot's lifetime.
-        """
+        """Disconnect guilds idle longer than their configured timeout."""
         now = datetime.now(timezone.utc)
         stale_guilds: list[int] = []
 
         for guild_id, player in list(self._players.items()):
             guild = self.get_guild(guild_id)
 
-            # Perf-1: guild no longer in bot's guild list (kicked / deleted)
             if not guild:
                 stale_guilds.append(guild_id)
                 continue
 
             vc = guild.voice_client
 
-            # Perf-1: idle player with empty queue and no VC — free memory
             if (
                 not player.now_playing
                 and not player.queue
@@ -822,7 +759,6 @@ class MusicBot(commands.Bot):
                 stale_guilds.append(guild_id)
                 continue
 
-            # Standard idle timeout check
             if player.now_playing or not player.idle_since:
                 continue
             if not vc or not vc.is_connected():
@@ -854,7 +790,6 @@ class MusicBot(commands.Bot):
                     pass
                 stale_guilds.append(guild_id)
 
-        # Remove all stale players in one pass (after iterating)
         for gid in stale_guilds:
             p = self._players.pop(gid, None)
             if p:
@@ -891,15 +826,7 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=7)
     async def _np_refresh(self) -> None:
-        """
-        Refresh now-playing embed progress bar every 7 seconds.
-
-        - Ticks every 7 seconds unconditionally until the track completes.
-        - Updates elapsed/remaining timer and dynamic color smoothly.
-        - Skips msg.edit() only when playback is paused.
-        - Resilient error handling: only clears message reference on NotFound (404)
-          or Forbidden (403); transient 429/5xx errors do not destroy the reference.
-        """
+        """Refresh now-playing embed progress bar every 7 seconds."""
         for guild_id, player in self._players.items():
             if not player.now_playing or not player.now_playing_msg:
                 continue
@@ -907,10 +834,8 @@ class MusicBot(commands.Bot):
                 from utils.embeds import now_playing_embed
                 from utils.color_thief import animated_embed_color
 
-                # Perf-1: reuse the color cached when playback started
                 base_color = getattr(player, "_cached_base_color", None)
                 if base_color is None:
-                    # Fallback: fetch (only happens if track started before this patch)
                     from utils.color_thief import get_dominant_color
                     base_color = await get_dominant_color(
                         player.now_playing.thumbnail, self.http_session
@@ -920,7 +845,6 @@ class MusicBot(commands.Bot):
                 guild_vc = self.get_guild(guild_id).voice_client if self.get_guild(guild_id) else None
                 is_paused = bool(guild_vc and guild_vc.is_paused())
 
-                # When paused the progress knob doesn't move — skip edit
                 if is_paused:
                     continue
 
@@ -931,14 +855,12 @@ class MusicBot(commands.Bot):
                 if hasattr(msg, "edit"):
                     await msg.edit(embed=embed)
             except discord.NotFound:
-                # Message was deleted — clear ref to stop repeated 404s
                 player.now_playing_msg    = None
                 player.now_playing_msg_id = None
             except discord.Forbidden:
                 player.now_playing_msg    = None
                 player.now_playing_msg_id = None
             except discord.HTTPException as http_exc:
-                # Transient HTTP error (e.g. 429 rate limit or 5xx) — keep message ref
                 logger.debug("Transient HTTP error in NP refresh: %s", http_exc)
             except Exception as exc:
                 logger.debug("Unexpected error in NP refresh: %s", exc)
@@ -949,21 +871,16 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(minutes=30)
     async def _cache_prune(self) -> None:
-        """Prune expired yt-dlp cache entries and media cache every 30 minutes.
-
-        Auto-recovery: if the cache raises an unexpected error (corruption),
-        it is cleared entirely and a warning is logged so the next prune runs clean.
-        """
+        """Prune expired yt-dlp cache entries and media cache every 30 minutes."""
         try:
             raw_n, search_n = await self.youtube.prune_cache()
-            thumb_n, meta_n = prune_media_caches()  # Tier-S+ F14
+            thumb_n, meta_n = prune_media_caches()
             if raw_n or search_n or thumb_n or meta_n:
                 logger.debug(
                     "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
                     raw_n, search_n, thumb_n, meta_n,
                 )
         except Exception as exc:
-            # Auto-recovery: cache may be corrupted — clear and rebuild
             logger.warning(
                 "🔧 Cache prune raised %s (%s) — clearing all caches for auto-recovery.",
                 type(exc).__name__, exc,
@@ -977,7 +894,6 @@ class MusicBot(commands.Bot):
             except Exception as clear_exc:
                 logger.error("Cache auto-recovery failed: %s", clear_exc)
 
-        # Perf-1: log all cache metrics at DEBUG level every 30 min
         try:
             from utils.color_thief import color_cache_stats
             from core.lru_cache import combined_stats as _lru_stats
@@ -1003,18 +919,89 @@ class MusicBot(commands.Bot):
     async def _before_cache_prune(self) -> None:
         await self.wait_until_ready()
 
-
     @tasks.loop(hours=24)
     async def _analytics_prune(self) -> None:
-        """Prune analytics older than 30 days."""
+        """
+        Automated Retention Policy: Prune analytics older than ANALYTICS_RETENTION_DAYS (90 days)
+        and maintain yearly range partitions on the `history` table.
+        """
         try:
-            pruned = await self.db.prune_analytics(days=30)
-            logger.debug("Analytics prune: %d rows removed.", pruned)
+            pruned = await self.db.prune_analytics(days=config.ANALYTICS_RETENTION_DAYS)
+            logger.debug("Analytics prune (>%dd): %d rows removed.", config.ANALYTICS_RETENTION_DAYS, pruned)
+            await self.db.ensure_history_partitions()
         except Exception as exc:
-            logger.warning("Analytics prune error: %s", exc)
+            logger.warning("Analytics prune / partition maintenance error: %s", exc)
 
     @_analytics_prune.before_loop
     async def _before_analytics_prune(self) -> None:
+        await self.wait_until_ready()
+
+    # Gen 5.0 Feature: Scheduled Playback Tasks Runner ────────────────────────
+
+    @tasks.loop(seconds=30)
+    async def _scheduled_playback(self) -> None:
+        """
+        Poll `scheduled_tasks` table every 30s using distributed worker locking (`locked_by`).
+        Automatically joins the target voice channel and plays the scheduled query.
+        """
+        try:
+            due_tasks = await self.db.claim_due_scheduled_tasks(config.WORKER_ID)
+        except Exception as exc:
+            logger.debug("Scheduled playback poll error: %s", exc)
+            return
+
+        if not due_tasks:
+            return
+
+        music_cog = self.cogs.get("Music")
+        for task_row in due_tasks:
+            task_id = int(task_row["id"])
+            guild_id = int(task_row["guild_id"])
+            vc_id = int(task_row["voice_channel_id"])
+            tc_id = int(task_row["text_channel_id"])
+            query = str(task_row["query"])
+            user_id = int(task_row["user_id"])
+
+            try:
+                guild = self.get_guild(guild_id)
+                if not guild or not music_cog:
+                    continue
+                voice_ch = guild.get_channel(vc_id)
+                text_ch = guild.get_channel(tc_id)
+                if not isinstance(voice_ch, discord.VoiceChannel):
+                    continue
+
+                vc = guild.voice_client
+                player = self.get_player(guild_id)
+                if not vc or not vc.is_connected():
+                    vc = await voice_ch.connect(timeout=10.0)
+                    player.last_channel_id = voice_ch.id
+                if isinstance(text_ch, discord.TextChannel):
+                    player.text_channel = text_ch
+
+                if self.youtube.is_youtube_url(query):
+                    track = await self.yt_breaker.call(self.youtube.get_track, query)
+                else:
+                    results = await self.yt_breaker.call(self.youtube.search, query, 1)
+                    track = results[0] if results else None
+
+                if track:
+                    track.requested_by_id = user_id
+                    track.requested_by_name = "Scheduled Task ⏰"
+                    await player.enqueue(track)
+                    await self.db.save_queue(guild_id, voice_ch.id, player.queue)
+                    if not vc.is_playing() and not vc.is_paused():
+                        await music_cog._play_next(guild_id)
+            except Exception as exc:
+                logger.warning("Scheduled playback execution error (task %d, guild %d): %s", task_id, guild_id, exc)
+            finally:
+                try:
+                    await self.db.release_scheduled_task_lock(task_id)
+                except Exception:
+                    pass
+
+    @_scheduled_playback.before_loop
+    async def _before_scheduled_playback(self) -> None:
         await self.wait_until_ready()
 
     # Tier-S+ Feature 11: Session State Heartbeat ─────────────────────────────
@@ -1053,11 +1040,7 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=60)
     async def _memory_pressure(self) -> None:
-        """Check bot process RSS and evict caches if pressure thresholds exceeded (F32).
-
-        Monitors OWN process RSS (not system-wide RAM) to avoid false positives
-        when other apps (Chrome, VS Code, etc.) consume memory on the same host.
-        """
+        """Check bot process RSS and evict caches if pressure thresholds exceeded (F32)."""
         try:
             result = await check_memory_pressure()
             if result["level"] >= 2:
@@ -1072,7 +1055,7 @@ class MusicBot(commands.Bot):
     async def _before_memory_pressure(self) -> None:
         await self.wait_until_ready()
 
-    # ── Stability: New background tasks ───────────────────────────────────────
+    # ── Stability: Background tasks ───────────────────────────────────────────
 
     @tasks.loop(minutes=5)
     async def _metrics_snapshot(self) -> None:
@@ -1092,7 +1075,6 @@ class MusicBot(commands.Bot):
         """Take a memory snapshot every 30 minutes and warn on anomalous growth."""
         if self.mem_leak_detector:
             try:
-                # Gather extra stats for the snapshot log line
                 extra: dict = {
                     "guilds":  len(self.guilds),
                     "players": len(self._players),
@@ -1133,7 +1115,6 @@ class MusicBot(commands.Bot):
         error: Exception,
     ) -> None:
         from utils.embeds import error_embed
-        # Classify the exception and log at appropriate level
         kind = log_with_kind(error, logger, context="app_command", include_traceback=True)
         embed = error_embed("Unexpected Error", str(error)[:200])
         try:
@@ -1144,7 +1125,6 @@ class MusicBot(commands.Bot):
         except Exception:
             pass
 
-        # Only forward FATAL / RECOVERABLE errors to dev channel (not EXPECTED)
         if kind != ExceptionKind.EXPECTED:
             from utils.error_handler import forward_to_dev_channel
             await forward_to_dev_channel(self, error, interaction)
@@ -1162,7 +1142,6 @@ class MusicBot(commands.Bot):
 
 def main() -> None:
     import sys
-    # Pre-login validation — runs BEFORE any network connection to Discord
     report = validate_pre_login(print_report=True)
     if report.has_fatal:
         sys.exit(1)
