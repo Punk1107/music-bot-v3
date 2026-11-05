@@ -1157,3 +1157,77 @@ class QueueSearchResultView(discord.ui.View):
         self._jump_cb = None  # type: ignore[assignment]
         self._rm_cb   = None  # type: ignore[assignment]
         self.bot      = None  # type: ignore[assignment]
+
+
+# ─────────────────────────── Clean Board Control View ─────────────────────────
+
+class CleanBoardControlView(discord.ui.View):
+    """
+    Single-Message Clean Player Channel Board Controls (Phase 5).
+    Persistent view designed to remain attached to the pinned player message.
+    """
+
+    def __init__(self, bot: "MusicBot", guild_id: int) -> None:
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.guild_id = guild_id
+
+    @discord.ui.button(label="⏯ Pause", style=discord.ButtonStyle.primary, custom_id="board_playpause", row=0)
+    async def btn_playpause(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = self.bot.get_guild(self.guild_id)
+        vc = guild.voice_client if guild else None
+        if vc and vc.is_playing():
+            vc.pause()
+            button.label = "▶ Resume"
+        elif vc and vc.is_paused():
+            vc.resume()
+            button.label = "⏸ Pause"
+        await self._update_board(interaction)
+
+    @discord.ui.button(label="⏭ Skip", style=discord.ButtonStyle.secondary, custom_id="board_skip", row=0)
+    async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guild = self.bot.get_guild(self.guild_id)
+        vc = guild.voice_client if guild else None
+        if vc and (vc.is_playing() or vc.is_paused()):
+            vc.stop()
+        await self._update_board(interaction)
+
+    @discord.ui.button(label="⏹ Stop", style=discord.ButtonStyle.danger, custom_id="board_stop", row=0)
+    async def btn_stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player = self.bot.get_player(self.guild_id)
+        player.clear_queue()
+        guild = self.bot.get_guild(self.guild_id)
+        vc = guild.voice_client if guild else None
+        if vc and (vc.is_playing() or vc.is_paused()):
+            vc.stop()
+        await self._update_board(interaction)
+
+    @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="board_shuffle", row=0)
+    async def btn_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        player = self.bot.get_player(self.guild_id)
+        player.shuffle()
+        await self._update_board(interaction)
+
+    @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary, custom_id="board_loop", row=0)
+    async def btn_loop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        from models.enums import LoopMode
+        player = self.bot.get_player(self.guild_id)
+        modes = [LoopMode.OFF, LoopMode.TRACK, LoopMode.QUEUE]
+        idx = (modes.index(player.loop_mode) + 1) % len(modes)
+        player.loop_mode = modes[idx]
+        button.label = f"🔁 Loop: {player.loop_mode.value.capitalize()}"
+        await self._update_board(interaction)
+
+    async def _update_board(self, interaction: discord.Interaction) -> None:
+        from utils.embeds import request_channel_board_embed
+        player = self.bot.get_player(self.guild_id)
+        embed = request_channel_board_embed(player)
+        if not interaction.response.is_done():
+            await interaction.response.edit_message(embed=embed, view=self)
+        else:
+            try:
+                if interaction.message:
+                    await interaction.message.edit(embed=embed, view=self)
+            except Exception:
+                pass
+

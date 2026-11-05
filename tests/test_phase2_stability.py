@@ -16,8 +16,10 @@ import re
 import time
 from collections import deque
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import discord
 import pytest
 
 import config
@@ -352,7 +354,7 @@ class TestUniversalNineLanguageParity:
                 keys[loc] = set(json.load(f).keys())
 
         base_en = keys["en"]
-        assert len(base_en) == 304, f"Expected 304 keys, got {len(base_en)}"
+        assert len(base_en) == 314, f"Expected 314 keys, got {len(base_en)}"
 
         for loc in self.LOCALES:
             diff = base_en.symmetric_difference(keys[loc])
@@ -398,3 +400,438 @@ class TestUniversalNineLanguageParity:
                     rendered = t(k, loc)
                     assert rendered is not None
                     assert len(rendered.strip()) > 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Domain 6 / Phase 5: Server Automation, Governance & MySQL Scalability
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestPhase5ServerAutomationAndGovernance:
+    """
+    Unit and integration tests for Phase 5:
+    1. Single-Message Clean Player Channel Board
+    2. Server Music Scheduler & Alarm Clock (scheduler/)
+    3. Distributed Voice Persistence & Auto-Resume 2.0
+    """
+
+    def test_server_config_phase5_fields_and_persistence(self):
+        from models.server_config import ServerConfig
+
+        cfg = ServerConfig(
+            guild_id=987654321,
+            clean_mode=True,
+            board_message_id=1122334455,
+            auto_resume=False,
+        )
+        assert cfg.clean_mode is True
+        assert cfg.board_message_id == 1122334455
+        assert cfg.auto_resume is False
+
+        d = cfg.to_dict()
+        assert d["clean_mode"] == 1
+        assert d["board_message_id"] == 1122334455
+        assert d["auto_resume"] == 0
+
+        params = cfg.to_db_params()
+        assert 1 in params
+        assert 1122334455 in params
+        assert 0 in params
+
+        row = {
+            "guild_id": 987654321,
+            "prefix": "!",
+            "default_volume": 100,
+            "dj_role_id": None,
+            "announcements": 1,
+            "auto_leave_alone": 1,
+            "auto_leave_empty": 1,
+            "auto_pause_empty": 1,
+            "bitrate": 128000,
+            "locale": "en",
+            "log_channel_id": None,
+            "request_channel_id": 555666777,
+            "auto_playlist": 0,
+            "idle_timeout": 300,
+            "embed_theme": "classic",
+            "clean_mode": 1,
+            "board_message_id": 1122334455,
+            "auto_resume": 0,
+        }
+        loaded = ServerConfig.from_db_row(row)
+        assert loaded.clean_mode is True
+        assert loaded.board_message_id == 1122334455
+        assert loaded.auto_resume is False
+
+    def test_request_channel_board_embed_rendering(self):
+        from utils.embeds import request_channel_board_embed
+        from models.enums import LoopMode
+
+        player = MagicMock()
+        player.now_playing = None
+        player.queue = []
+        player.loop_mode = LoopMode.OFF
+        player.volume = 1.0
+
+        embed = request_channel_board_embed(player, locale="en")
+        assert "Music Request Board" in embed.title
+        assert "No music is currently playing" in embed.description
+
+        track = Track(
+            title="Lo-Fi Chill Beats",
+            url="https://youtube.com/watch?v=123",
+            duration=180,
+            requested_by_id=1,
+            requested_by_name="Tester",
+        )
+        player.now_playing = track
+        player.elapsed_seconds = 60
+        player.progress_fraction = MagicMock(return_value=60 / 180)
+        player.queue = [
+            Track(title="Next Track 1", url="", duration=120),
+            Track(title="Next Track 2", url="", duration=150),
+        ]
+        embed_active = request_channel_board_embed(player, locale="en")
+        assert "Lo-Fi Chill Beats" in embed_active.title
+        field_names = [f.name for f in embed_active.fields]
+        assert any("Up Next (2)" in name for name in field_names)
+        assert any("Next Track 1" in str(f.value) for f in embed_active.fields)
+
+    @pytest.mark.asyncio
+    async def test_clean_board_control_view_interactions(self):
+        from utils.views import CleanBoardControlView
+        from models.enums import LoopMode
+
+        bot = MagicMock()
+        guild = MagicMock()
+        vc = MagicMock()
+        bot.get_guild.return_value = guild
+        guild.voice_client = vc
+
+        player = MagicMock()
+        player.now_playing = None
+        player.progress_fraction = MagicMock(return_value=0.0)
+        player.elapsed_seconds = 0
+        player.volume = 1.0
+        player.queue = [MagicMock(), MagicMock()]
+        player.loop_mode = LoopMode.OFF
+        bot.get_player.return_value = player
+
+        view = CleanBoardControlView(bot, guild_id=123)
+        interaction = MagicMock()
+        interaction.response.is_done.return_value = False
+        interaction.response.edit_message = AsyncMock()
+
+        # Play/Pause: playing -> pause
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        btn_pp = view.btn_playpause
+        await cast(Any, btn_pp.callback)(interaction)
+        vc.pause.assert_called_once()
+        assert btn_pp.label == "▶ Resume"
+
+        # Play/Pause: paused -> resume
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = True
+        await cast(Any, btn_pp.callback)(interaction)
+        vc.resume.assert_called_once()
+        assert btn_pp.label == "⏸ Pause"
+
+        # Skip button
+        vc.is_playing.return_value = True
+        await cast(Any, view.btn_skip.callback)(interaction)
+        vc.stop.assert_called_once()
+
+        # Stop button
+        await cast(Any, view.btn_stop.callback)(interaction)
+        player.clear_queue.assert_called_once()
+
+        # Shuffle button
+        await cast(Any, view.btn_shuffle.callback)(interaction)
+        player.shuffle.assert_called_once()
+
+        # Loop button
+        player.loop_mode = LoopMode.OFF
+        await cast(Any, view.btn_loop.callback)(interaction)
+        assert player.loop_mode == LoopMode.TRACK
+        assert "Track" in view.btn_loop.label
+
+    @pytest.mark.asyncio
+    async def test_admin_clean_mode_and_autoresume_commands(self):
+        from cogs.admin import AdminCog
+        from models.server_config import ServerConfig
+
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        cfg = ServerConfig(guild_id=456, request_channel_id=789, clean_mode=False)
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.db.save_server_config = AsyncMock()
+
+        player = MagicMock()
+        player.now_playing = None
+        player.progress_fraction = MagicMock(return_value=0.0)
+        player.elapsed_seconds = 0
+        player.volume = 1.0
+        player.loop_mode = MagicMock(value="off")
+        bot.get_player.return_value = player
+
+        cog = AdminCog(bot)
+
+        interaction = MagicMock()
+        interaction.guild_id = 456
+        interaction.user = MagicMock(spec=discord.Member)
+        interaction.user.guild_permissions.administrator = True
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        channel = MagicMock(spec=discord.TextChannel)
+        channel.send = AsyncMock(return_value=MagicMock(id=998877))
+        interaction.guild.get_channel.return_value = channel
+
+        with patch("cogs.admin.get_locale", return_value="en"):
+            await cast(Any, cog.rc_clean_mode.callback)(cog, interaction, enabled=True)
+
+        assert cfg.clean_mode is True
+        assert cfg.board_message_id == 998877
+        bot.db.save_server_config.assert_awaited()
+        interaction.followup.send.assert_awaited()
+
+        # /autoresume state:on and state:off
+        cfg.auto_resume = False
+        with patch("cogs.admin.get_locale", return_value="en"):
+            await cast(Any, cog.autoresume.callback)(cog, interaction, state="on")
+        assert cfg.auto_resume is True
+
+        with patch("cogs.admin.get_locale", return_value="en"):
+            await cast(Any, cog.autoresume.callback)(cog, interaction, state="off")
+        assert cfg.auto_resume is False
+
+    def test_music_scheduler_service_time_normalization(self):
+        from scheduler.service import MusicSchedulerService
+
+        bot = MagicMock()
+        service = MusicSchedulerService(bot)
+
+        assert service.normalize_time("08:00") == "08:00:00"
+        assert service.normalize_time("8:30") == "08:30:00"
+        assert service.normalize_time("23:59:00") == "23:59:00"
+        assert service.normalize_time("00:00") == "00:00:00"
+
+        with pytest.raises(ValueError):
+            service.normalize_time("25:00")
+
+        with pytest.raises(ValueError):
+            service.normalize_time("invalid-time")
+
+    @pytest.mark.asyncio
+    async def test_music_scheduler_service_crud(self):
+        from scheduler.service import MusicSchedulerService
+
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        bot.db.create_scheduled_task = AsyncMock(return_value=42)
+        bot.db.list_scheduled_tasks = AsyncMock(return_value=[
+            {
+                "id": 42,
+                "guild_id": 100,
+                "voice_channel_id": 200,
+                "text_channel_id": 300,
+                "user_id": 400,
+                "scheduled_time": "08:00:00",
+                "days_of_week": "daily",
+                "query": "Lofi hip hop",
+                "is_active": 1,
+            }
+        ])
+        bot.db.delete_scheduled_task = AsyncMock(return_value=True)
+
+        service = MusicSchedulerService(bot)
+        task = await service.add_task(
+            guild_id=100,
+            voice_channel_id=200,
+            text_channel_id=300,
+            user_id=400,
+            time_str="08:00",
+            query="Lofi hip hop",
+            repeat_mode="daily",
+        )
+        assert task.id == 42
+        assert task.scheduled_time.startswith("08:00")
+        assert task.query == "Lofi hip hop"
+
+        tasks = await service.list_tasks(100)
+        assert len(tasks) == 1
+        assert tasks[0].id == 42
+
+        ok = await service.delete_task(100, 42)
+        assert ok is True
+        bot.db.delete_scheduled_task.assert_awaited_once_with(100, 42)
+
+    @pytest.mark.asyncio
+    async def test_scheduler_cog_slash_commands(self):
+        from scheduler.cog import SchedulerCog
+        from scheduler.models import ScheduledTask
+
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        cog = SchedulerCog(bot)
+        cog.service = AsyncMock()
+
+        dummy_task = ScheduledTask(
+            id=10,
+            guild_id=111,
+            voice_channel_id=222,
+            text_channel_id=333,
+            user_id=444,
+            scheduled_time="09:00:00",
+            days_of_week="weekdays",
+            query="Morning Jazz",
+            is_active=True,
+        )
+        cog.service.add_task = AsyncMock(return_value=dummy_task)
+        cog.service.list_tasks = AsyncMock(return_value=[dummy_task])
+        cog.service.delete_task = AsyncMock(return_value=True)
+
+        interaction = MagicMock()
+        interaction.guild.id = 111
+        interaction.channel_id = 333
+        interaction.user = MagicMock(spec=discord.Member)
+        interaction.user.id = 444
+        interaction.user.voice.channel = MagicMock(id=222)
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        # /schedule add
+        await cast(Any, cog.schedule_add.callback)(
+            cog,
+            interaction,
+            time="09:00",
+            query="Morning Jazz",
+            voice_channel=None,
+            repeat="weekdays",
+        )
+        cog.service.add_task.assert_awaited_once()
+        interaction.followup.send.assert_awaited()
+
+        # /schedule list
+        await cast(Any, cog.schedule_list.callback)(cog, interaction)
+        cog.service.list_tasks.assert_awaited_once_with(111)
+
+        # /schedule remove
+        await cast(Any, cog.schedule_remove.callback)(cog, interaction, task_id=10)
+        cog.service.delete_task.assert_awaited_once_with(111, 10)
+
+    @pytest.mark.asyncio
+    async def test_clean_mode_request_channel_message_handling(self):
+        from main import MusicBot
+        from models.server_config import ServerConfig
+
+        bot = MagicMock(spec=MusicBot)
+        bot.db = AsyncMock()
+        cfg = ServerConfig(guild_id=123, request_channel_id=456, clean_mode=True, board_message_id=789)
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.db.save_server_config = AsyncMock()
+
+        message = MagicMock(spec=discord.Message)
+        message.guild.id = 123
+        message.channel.id = 456
+        message.content = "play lofi"
+        message.delete = AsyncMock()
+        board_msg = MagicMock()
+        board_msg.edit = AsyncMock()
+        message.channel.fetch_message = AsyncMock(return_value=board_msg)
+
+        player = MagicMock()
+        player.now_playing = None
+        player.progress_fraction = MagicMock(return_value=0.0)
+        player.elapsed_seconds = 0
+        player.volume = 1.0
+        player.loop_mode = MagicMock(value="off")
+        player.enqueue = AsyncMock(return_value=1)
+        player.queue = []
+        bot.get_player.return_value = player
+        bot.nlu = MagicMock()
+        from models.enums import NLUIntent
+        bot.nlu.parse.return_value = MagicMock(intent=NLUIntent.PLAY, query="lofi")
+
+        music_cog = MagicMock()
+        music_cog._play_next = AsyncMock()
+        bot.cogs = {"Music": music_cog}
+        bot.youtube = MagicMock()
+        bot.youtube.is_youtube_url.return_value = False
+        bot.yt_breaker = MagicMock()
+        dummy_track = Track(title="Lofi Track", url="https://youtube.com/watch?v=xyz")
+        bot.yt_breaker.call = AsyncMock(return_value=[dummy_track])
+
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        message.guild.voice_client = vc
+
+        with patch("main.get_locale_sync", return_value="en"):
+            await MusicBot._handle_request_channel(bot, message)
+
+        message.delete.assert_awaited_once()
+        board_msg.edit.assert_awaited()
+        music_cog._play_next.assert_awaited_once_with(123)
+
+    @pytest.mark.asyncio
+    async def test_main_autoresume_voice_reconnection(self):
+        from main import MusicBot
+        from models.server_config import ServerConfig
+
+        bot = MagicMock(spec=MusicBot)
+        bot.db = AsyncMock()
+        guild = MagicMock()
+        guild.id = 999
+        bot.guilds = [guild]
+
+        cfg = ServerConfig(guild_id=999, auto_resume=True)
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+
+        resumed_track = Track(title="Resumed Song", url="https://yt/abc")
+        saved_state = {
+            "loop_mode": "off",
+            "volume": 0.8,
+            "effects": [],
+            "text_channel_id": 100,
+            "channel_id": 200,
+            "elapsed_secs": 45,
+            "now_playing": resumed_track,
+            "queue": [],
+        }
+        bot.db.load_session_state = AsyncMock(return_value=saved_state)
+        bot.db.clear_session_state = AsyncMock()
+
+        player = MagicMock()
+        player.extend = AsyncMock()
+        bot.get_player.return_value = player
+
+        voice_channel = MagicMock()
+        voice_channel.name = "Music Lounge"
+        voice_channel.connect = AsyncMock(return_value=MagicMock(is_playing=MagicMock(return_value=False), is_paused=MagicMock(return_value=False)))
+        guild.get_channel.side_effect = lambda cid: voice_channel if cid == 200 else MagicMock()
+        guild.voice_client = None
+
+        music_cog = MagicMock()
+        music_cog._play_next = AsyncMock()
+        bot.cogs = {"Music": music_cog}
+
+        await MusicBot._restore_queues(bot)
+
+        assert resumed_track._resume_offset == 45
+        voice_channel.connect.assert_awaited_once()
+        music_cog._play_next.assert_awaited_once_with(999)
+        bot.db.clear_session_state.assert_awaited_once_with(999)
+
+        # When auto_resume is False -> should not connect
+        voice_channel.connect.reset_mock()
+        music_cog._play_next.reset_mock()
+        cfg.auto_resume = False
+        bot.db.load_session_state.return_value = saved_state
+
+        await MusicBot._restore_queues(bot)
+        voice_channel.connect.assert_not_awaited()
+
+        await MusicBot._restore_queues(bot)
+        voice_channel.connect.assert_not_awaited()

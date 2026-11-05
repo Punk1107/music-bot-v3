@@ -108,6 +108,9 @@ MYSQL_SCHEMA_DDL: list[str] = [
         auto_pause_empty BOOLEAN NOT NULL DEFAULT TRUE,
         embed_theme VARCHAR(32) NOT NULL DEFAULT 'classic',
         language VARCHAR(8) NOT NULL DEFAULT 'en',
+        clean_mode BOOLEAN NOT NULL DEFAULT FALSE,
+        board_message_id BIGINT UNSIGNED NULL,
+        auto_resume BOOLEAN NOT NULL DEFAULT TRUE,
         guild_presets JSON NULL,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3)
@@ -1232,14 +1235,14 @@ class DatabaseManager:
                         auto_playlist, auto_playlist_size, smart_autoplay,
                         queue_locked, queue_add_permission, duplicate_mode,
                         auto_leave_alone, auto_pause_empty, embed_theme,
-                        language, guild_presets
+                        language, clean_mode, board_message_id, auto_resume, guild_presets
                     ) VALUES (
                         %s, %s, %s, %s, %s,
                         %s, %s, %s, %s,
                         %s, %s, %s,
                         %s, %s, %s,
                         %s, %s, %s,
-                        %s, %s
+                        %s, %s, %s, %s, %s
                     ) AS new_cfg
                     ON DUPLICATE KEY UPDATE
                         volume               = new_cfg.volume,
@@ -1260,6 +1263,9 @@ class DatabaseManager:
                         auto_pause_empty     = new_cfg.auto_pause_empty,
                         embed_theme          = new_cfg.embed_theme,
                         language             = new_cfg.language,
+                        clean_mode           = new_cfg.clean_mode,
+                        board_message_id     = new_cfg.board_message_id,
+                        auto_resume          = new_cfg.auto_resume,
                         guild_presets        = new_cfg.guild_presets,
                         updated_at           = CURRENT_TIMESTAMP(3)
                     """,
@@ -2417,6 +2423,9 @@ class DatabaseManager:
             )
             await conn.commit()
             return cur.rowcount > 0
+
+    add_scheduled_task = create_scheduled_task
+    get_scheduled_tasks = list_scheduled_tasks
 
     async def claim_due_scheduled_tasks(
         self,
@@ -3606,3 +3615,6 @@ class DatabaseManager:
             )
             await conn.commit()
             return cur.rowcount > 0
+
+    add_scheduled_task = create_scheduled_task
+    get_scheduled_tasks = list_scheduled_tasks

@@ -109,7 +109,7 @@ def normalize_json(val: Any, fallback: Any = None) -> Optional[str]:
 def normalize_server_config_row(sqlite_row: dict[str, Any]) -> tuple:
     """
     Convert a SQLite `server_configs` row (`guild_id, config_data, created_at, updated_at`)
-    into the 22-element tuple required by the normalized MySQL `server_configs` table.
+    into the 25-element tuple required by the normalized MySQL `server_configs` table.
     """
     guild_id = int(sqlite_row["guild_id"])
     raw_json = sqlite_row.get("config_data") or "{}"
@@ -120,7 +120,7 @@ def normalize_server_config_row(sqlite_row: dict[str, Any]) -> tuple:
     except Exception:
         cfg = ServerConfig.default(guild_id)
 
-    base_params = cfg.to_db_params()  # 20 items
+    base_params = cfg.to_db_params()  # 23 items
     created_at = normalize_datetime3(sqlite_row.get("created_at"))
     updated_at = normalize_datetime3(sqlite_row.get("updated_at"))
     return (*base_params, created_at, updated_at)
@@ -242,14 +242,16 @@ class SQLiteToMySQLMigrator:
                 auto_playlist, auto_playlist_size, smart_autoplay,
                 queue_locked, queue_add_permission, duplicate_mode,
                 auto_leave_alone, auto_pause_empty, embed_theme,
-                language, guild_presets, created_at, updated_at
+                language, clean_mode, board_message_id, auto_resume, guild_presets,
+                created_at, updated_at
             ) VALUES (
                 %s, %s, %s, %s, %s,
                 %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s,
                 %s, %s, %s,
-                %s, %s, %s, %s
+                %s, %s, %s, %s, %s,
+                %s, %s
             ) AS new_cfg
             ON DUPLICATE KEY UPDATE
                 volume               = new_cfg.volume,
@@ -270,6 +272,9 @@ class SQLiteToMySQLMigrator:
                 auto_pause_empty     = new_cfg.auto_pause_empty,
                 embed_theme          = new_cfg.embed_theme,
                 language             = new_cfg.language,
+                clean_mode           = new_cfg.clean_mode,
+                board_message_id     = new_cfg.board_message_id,
+                auto_resume          = new_cfg.auto_resume,
                 guild_presets        = new_cfg.guild_presets,
                 updated_at           = new_cfg.updated_at
         """

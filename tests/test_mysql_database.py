@@ -103,7 +103,7 @@ def test_server_config_normalized_roundtrip():
     )
 
     params = cfg.to_db_params()
-    assert len(params) == 20
+    assert len(params) == 23
     assert params[0] == 987654321012345678
     assert params[8] == "Asia/Bangkok"
     assert params[18] == "th"
@@ -115,7 +115,7 @@ def test_server_config_normalized_roundtrip():
         "auto_playlist", "auto_playlist_size", "smart_autoplay",
         "queue_locked", "queue_add_permission", "duplicate_mode",
         "auto_leave_alone", "auto_pause_empty", "embed_theme",
-        "language", "guild_presets",
+        "language", "clean_mode", "board_message_id", "auto_resume", "guild_presets",
     ]
     db_row = dict(zip(col_names, params))
     restored = ServerConfig.from_db_row(db_row)
@@ -315,14 +315,14 @@ def test_migration_data_normalizers():
         "updated_at": "2026-05-20 10:30:00",
     }
     norm_tuple = normalize_server_config_row(raw_cfg_row)
-    assert len(norm_tuple) == 22
+    assert len(norm_tuple) == 25
     assert norm_tuple[0] == 555666
     assert norm_tuple[1] == pytest.approx(0.75)
     assert norm_tuple[5] is True
     assert norm_tuple[8] == "Asia/Bangkok"
     assert norm_tuple[18] == "th"
-    assert norm_tuple[20] == "2026-01-15 08:00:00.000"
-    assert norm_tuple[21] == "2026-05-20 10:30:00.000"
+    assert norm_tuple[23] == "2026-01-15 08:00:00.000"
+    assert norm_tuple[24] == "2026-05-20 10:30:00.000"
 
     assert normalize_json('{"a": 1}') == '{"a": 1}'
     assert normalize_json("invalid json", {"fallback": True}) == '{"fallback": true}'

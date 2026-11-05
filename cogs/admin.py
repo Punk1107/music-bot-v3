@@ -97,11 +97,15 @@ class AdminCog(commands.Cog, name="Admin"):
     )
 
     @rc_group.command(name="set", description="Set a channel where users type song names to play")
-    @app_commands.describe(channel="Text channel to designate as the request channel")
+    @app_commands.describe(
+        channel="Text channel to designate as the request channel",
+        clean_mode="Enable clean mode (single message board, user query auto-deleted)",
+    )
     async def rc_set(
         self,
         interaction: discord.Interaction,
         channel:     discord.TextChannel,
+        clean_mode:  bool = False,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
         locale = await get_locale(interaction.guild_id, self.bot.db)
@@ -113,10 +117,67 @@ class AdminCog(commands.Cog, name="Admin"):
 
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         cfg.request_channel_id = channel.id
+        cfg.clean_mode = clean_mode
+
+        if clean_mode:
+            from utils.embeds import request_channel_board_embed
+            from utils.views import CleanBoardControlView
+            player = self.bot.get_player(interaction.guild_id)
+            embed = request_channel_board_embed(player, locale=locale)
+            view = CleanBoardControlView(self.bot, interaction.guild_id)
+            try:
+                board_msg = await channel.send(embed=embed, view=view)
+                cfg.board_message_id = board_msg.id
+            except Exception as e:
+                logger.warning("Failed sending clean board message: %s", e)
+
         await self.bot.db.save_server_config(cfg)
 
         locale = await get_locale(interaction.guild_id, self.bot.db)
         await interaction.followup.send(embed=request_channel_set_embed(channel, locale=locale), ephemeral=True)
+
+    @rc_group.command(name="clean_mode", description="Toggle single-message clean player board mode")
+    @app_commands.describe(enabled="Enable or disable clean player board mode")
+    async def rc_clean_mode(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool = True,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        if not _is_admin(interaction.user):
+            await interaction.followup.send(
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."), ephemeral=True
+            )
+            return
+
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if not cfg.request_channel_id:
+            await interaction.followup.send("❌ Please set a request channel first with `/requestchannel set`.", ephemeral=True)
+            return
+
+        cfg.clean_mode = enabled
+        if enabled and interaction.guild:
+            channel = interaction.guild.get_channel(cfg.request_channel_id)
+            if channel and isinstance(channel, discord.TextChannel):
+                from utils.embeds import request_channel_board_embed
+                from utils.views import CleanBoardControlView
+                player = self.bot.get_player(interaction.guild_id)
+                embed = request_channel_board_embed(player, locale=locale)
+                view = CleanBoardControlView(self.bot, interaction.guild_id)
+                try:
+                    board_msg = await channel.send(embed=embed, view=view)
+                    cfg.board_message_id = board_msg.id
+                except Exception as e:
+                    logger.warning("Failed sending clean board message: %s", e)
+
+        await self.bot.db.save_server_config(cfg)
+        status_text = "enabled" if enabled else "disabled"
+        desc = t("clean_mode.updated", locale, status=status_text, channel=cfg.request_channel_id)
+        await interaction.followup.send(
+            embed=success_embed("Clean Mode", desc),
+            ephemeral=True,
+        )
 
     @rc_group.command(name="clear", description="Remove the request channel")
     async def rc_clear(self, interaction: discord.Interaction) -> None:
@@ -218,6 +279,42 @@ class AdminCog(commands.Cog, name="Admin"):
             ),
             ephemeral=True,
         )
+
+    # ── /autoresume ───────────────────────────────────────────────────────────
+
+    @app_commands.command(
+        name="autoresume",
+        description="Configure automatic voice reconnection and playback resumption on reboot",
+    )
+    @app_commands.describe(state="Enable or disable auto-resume on bot restart (on/off)")
+    @app_commands.choices(state=[
+        app_commands.Choice(name="On (Automatically resume playback)", value="on"),
+        app_commands.Choice(name="Off (Disabled)", value="off"),
+    ])
+    @app_commands.default_permissions(administrator=True)
+    async def autoresume(
+        self,
+        interaction: discord.Interaction,
+        state: str = "on",
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        if not _is_admin(interaction.user):
+            await interaction.followup.send(
+                embed=error_embed(t("title.permission_denied", locale), "Administrator permission required."),
+                ephemeral=True,
+            )
+            return
+
+        is_on = state.lower().strip() == "on"
+        cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        cfg.auto_resume = is_on
+        await self.bot.db.save_server_config(cfg)
+
+        status_str = "enabled" if is_on else "disabled"
+        desc = t("autoresume.status", locale, status=status_str)
+        embed = success_embed("Auto-Resume 2.0", desc)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 async def setup(bot: "MusicBot") -> None:

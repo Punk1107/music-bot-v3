@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ Enqueued podcast episode: **{title}** from **{show}**",
   "podcast.parse_error": "❌ Failed to parse podcast RSS feed. Please verify the URL.",
   "podcast.no_episodes": "❌ No playable audio episodes found in this podcast feed.",
-  "podcast.select_placeholder": "Select a podcast episode to stream..."
+  "podcast.select_placeholder": "Select a podcast episode to stream...",
+  "clean_mode.updated": "Clean Mode has been **{status}** for <#{channel}>.",
+  "clean_mode.set": "Clean player channel board configured for <#{channel}>.",
+  "autoresume.status": "Auto-Resume 2.0 has been **{status}** for this server.",
+  "schedule.created": "⏰ Successfully scheduled **{query}** at {time} ({repeat})!",
+  "schedule.deleted": "✔ Scheduled alarm #{task_id} successfully deleted.",
+  "schedule.not_found": "❌ Scheduled task #{task_id} not found in this server.",
+  "schedule.empty": "📭 No scheduled music alarms found for this server.",
+  "schedule.list_title": "⏰ Scheduled Music Alarms ({count})",
+  "board.title": "🎵 Music Request Board",
+  "board.empty_desc": "No music is currently playing in this server.\n\n💬 **Type any song title or paste a YouTube/Spotify link below to play!**\n*(Your message will be automatically deleted to keep this channel clean.)*"
 }

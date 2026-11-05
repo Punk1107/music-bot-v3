@@ -104,6 +104,7 @@ _COGS = [
     "playlist.cog",          # Gen 5.0: Multi-Playlist Personal Manager (/playlist)
     "radio.cog",             # Gen 5.0: 24/7 Curated Web Radio & Livestream Directory (/radio)
     "podcast.cog",           # Gen 5.0: Native Podcast & Audio RSS XML Parser (/podcast)
+    "scheduler.cog",         # Gen 5.0 Phase 5: Server Music Scheduler & Alarm Clock (/schedule)
 ]
 
 
@@ -460,6 +461,26 @@ class MusicBot(commands.Bot):
                             [e.value for e in player.effects],
                         )
 
+                    # Auto-Resume 2.0: If enabled and channel_id is saved, reconnect voice & resume
+                    try:
+                        cfg = await self.db.get_server_config(guild.id)
+                        if getattr(cfg, "auto_resume", True) and state.get("channel_id"):
+                            vc_ch = guild.get_channel(state["channel_id"])
+                            if vc_ch and hasattr(vc_ch, "connect"):
+                                vc = guild.voice_client
+                                if not vc or not vc.is_connected():
+                                    vc = await vc_ch.connect(timeout=10.0)
+                                    player.last_channel_id = vc_ch.id
+                                music_cog = self.cogs.get("Music")
+                                if music_cog and (not vc or (not vc.is_playing() and not vc.is_paused())):
+                                    await music_cog._play_next(guild.id)
+                                    logger.info(
+                                        "Auto-Resume 2.0: Reconnected to %s and resumed playback for guild %d (offset: %ss)",
+                                        getattr(vc_ch, "name", vc_ch.id), guild.id, state.get("elapsed_secs", 0),
+                                    )
+                    except Exception as ar_exc:
+                        logger.warning("Auto-Resume 2.0 error for guild %d: %s", guild.id, ar_exc)
+
                     await self.db.clear_session_state(guild.id)
                     continue
 
@@ -634,8 +655,37 @@ class MusicBot(commands.Bot):
         except Exception:
             pass
 
-        result = self.nlu.parse(content)
+        try:
+            cfg = await self.db.get_server_config(message.guild.id)
+        except Exception:
+            cfg = None
+
         locale = get_locale_sync(message.guild.id)
+
+        async def _update_clean_board_if_needed() -> None:
+            if not cfg or not getattr(cfg, "clean_mode", False) or not getattr(cfg, "board_message_id", None):
+                return
+            try:
+                from utils.embeds import request_channel_board_embed
+                from utils.views import CleanBoardControlView
+                board_msg = None
+                try:
+                    board_msg = await message.channel.fetch_message(cfg.board_message_id)
+                except Exception:
+                    pass
+                player = self.get_player(message.guild.id)
+                embed = request_channel_board_embed(player, locale=locale)
+                view = CleanBoardControlView(self, message.guild.id)
+                if board_msg:
+                    await board_msg.edit(embed=embed, view=view)
+                else:
+                    new_msg = await message.channel.send(embed=embed, view=view)
+                    cfg.board_message_id = new_msg.id
+                    await self.db.save_server_config(cfg)
+            except Exception as e:
+                logger.warning("Clean board update failed: %s", e)
+
+        result = self.nlu.parse(content)
         query: Optional[str] = None
 
         if result.intent == NLUIntent.PLAY and result.query:
@@ -645,36 +695,48 @@ class MusicBot(commands.Bot):
             vc    = guild.voice_client
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
-            try:
-                await message.channel.send(t("skip.done", locale), delete_after=5)
-            except Exception:
-                pass
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(t("skip.done", locale), delete_after=5)
+                except Exception:
+                    pass
             return
         elif result.intent == NLUIntent.PAUSE:
             vc = message.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
-            try:
-                await message.channel.send(t("now_playing.paused", locale), delete_after=5)
-            except Exception:
-                pass
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(t("now_playing.paused", locale), delete_after=5)
+                except Exception:
+                    pass
             return
         elif result.intent == NLUIntent.RESUME:
             vc = message.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
-            try:
-                await message.channel.send(t("now_playing.playing", locale), delete_after=5)
-            except Exception:
-                pass
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(t("now_playing.playing", locale), delete_after=5)
+                except Exception:
+                    pass
             return
         elif result.intent == NLUIntent.VOLUME and result.volume is not None:
             player = self.get_player(message.guild.id)
             player.volume = result.volume / 100
-            try:
-                await message.channel.send(t("volume.set", locale, vol=result.volume), delete_after=5)
-            except Exception:
-                pass
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(t("volume.set", locale, vol=result.volume), delete_after=5)
+                except Exception:
+                    pass
             return
         elif result.intent == NLUIntent.UNKNOWN and self.nlu.is_music_query(content):
             query = content
@@ -743,19 +805,24 @@ class MusicBot(commands.Bot):
             self.db.save_queue(message.guild.id, vc.channel.id, player.queue)
         )
 
-        from utils.embeds import track_added_embed
-        from utils.color_thief import get_dominant_color
-        color = await get_dominant_color(track.thumbnail, self.http_session)
-        try:
-            await message.channel.send(
-                embed=track_added_embed(track, pos, color, message.author),
-                delete_after=15,
-            )
-        except Exception:
-            pass
+        if cfg and cfg.clean_mode:
+            await _update_clean_board_if_needed()
+        else:
+            from utils.embeds import track_added_embed
+            from utils.color_thief import get_dominant_color
+            color = await get_dominant_color(track.thumbnail, self.http_session)
+            try:
+                await message.channel.send(
+                    embed=track_added_embed(track, pos, color, message.author),
+                    delete_after=15,
+                )
+            except Exception:
+                pass
 
         if not vc.is_playing() and not vc.is_paused():
             await music_cog._play_next(message.guild.id)
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
 
     # ── Background Tasks ──────────────────────────────────────────────────────
 

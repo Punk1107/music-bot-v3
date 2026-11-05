@@ -734,3 +734,67 @@ def duplicate_mode_embed(mode: str, locale: str = "en") -> discord.Embed:
         description = t("queue.duplicate_mode", locale, mode=labels.get(mode, mode)),
         color       = 0x5865F2,
     )
+
+
+def request_channel_board_embed(
+    player: Optional["GuildPlayer"] = None,
+    locale: str = "en",
+    color: int = 0x5865F2,
+) -> discord.Embed:
+    """Single-Message Clean Player Channel Board Embed (Phase 5)."""
+    if not player or not player.now_playing:
+        board_title = t("board.title", locale)
+        if board_title == "board.title":
+            board_title = "🎵 Music Request Board"
+        embed = discord.Embed(
+            title=board_title,
+            description=t("board.empty_desc", locale),
+            color=0x2B2D31,
+        )
+        embed.add_field(name="📋 Queue", value="*Empty*", inline=True)
+        embed.add_field(name="🔊 Volume", value="100%", inline=True)
+        embed.add_field(name="🔁 Loop", value="Off", inline=True)
+        embed.set_footer(text="Single-Message Clean Player Mode · Powered by Music Bot V3 & MySQL")
+        return embed
+
+    track = player.now_playing
+    try:
+        fraction = float(player.progress_fraction())
+    except (TypeError, ValueError):
+        fraction = 0.0
+    elapsed_val = getattr(player, "elapsed_seconds", 0)
+    try:
+        elapsed = format_duration(int(elapsed_val))
+    except (TypeError, ValueError):
+        elapsed = "0:00"
+    total    = format_duration(track.duration) if getattr(track, "duration", 0) else "?"
+    paused   = bool(getattr(player, "is_paused", False))
+    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=getattr(track, "url", "") or "")
+
+    embed = discord.Embed(
+        title=f"🎵 {truncate(track.title, 80)}",
+        url=track.url or None,
+        description=f"**Artist:** {truncate(track.uploader or 'Unknown', 40)}\n{bar_line}",
+        color=color,
+    )
+    if track.thumbnail:
+        embed.set_thumbnail(url=track.thumbnail)
+
+    req_str = f"@{track.requested_by_name}" if track.requested_by_name else "—"
+    embed.add_field(name="👤 Requested By", value=req_str, inline=True)
+    embed.add_field(name="🔊 Volume", value=f"{int(player.volume * 100)}%", inline=True)
+    embed.add_field(name="🔁 Loop", value=str(player.loop_mode.value).capitalize(), inline=True)
+
+    # Up next preview (first 3 tracks)
+    q_tracks = list(player.queue)[:3]
+    if q_tracks:
+        up_next_lines = [f"`{i+1}.` [{truncate(t.title, 40)}]({t.url})" for i, t in enumerate(q_tracks)]
+        total_q = len(player.queue)
+        more = f"\n*...and {total_q - len(q_tracks)} more in queue*" if total_q > 3 else ""
+        embed.add_field(name=f"📋 Up Next ({total_q})", value="\n".join(up_next_lines) + more, inline=False)
+    else:
+        embed.add_field(name="📋 Up Next", value="*Queue is empty*", inline=False)
+
+    embed.set_footer(text="Type any song title or URL below to queue. Messages are automatically cleaned.")
+    return embed
+
