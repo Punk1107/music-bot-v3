@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Music Bot V3 — Local Dashboard 2.0</title>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polygon points="10 8 16 12 10 16 10 8" fill="#fff"></polygon>
+        </svg>
+      </div>
+      <div>
+        <h1>Music Bot V3</h1>
+        <div class="brand-sub">Dashboard 2.0</div>
+      </div>
+    </div>
+
+    <!-- Web Search & Direct Enqueue Bar -->
+    <div class="nav-search-bar">
+      <div class="nav-search-input-group">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" class="nav-search-input search-input" id="search-input" placeholder="Search YouTube / Spotify or paste direct audio URL…" autocomplete="off" />
+        <button class="btn-nav-search" id="btn-nav-search-go">Search</button>
+      </div>
+      <!-- Instant Search Results Dropdown -->
+      <div class="search-results-dropdown" id="nav-search-results" style="display:none"></div>
+    </div>
+
+    <div class="nav-controls">
+      <!-- Theme Switcher -->
+      <div class="theme-select-wrapper">
+        <button class="btn-preset" id="btn-theme-toggle" data-theme="violet" title="Switch Theme Palette">🎨 Theme</button>
+      </div>
+
+      <!-- Guild Selector -->
+      <div class="guild-select-wrapper">
+        <label for="guild-select">Server:</label>
+        <select class="guild-select" id="guild-select">
+          <option value="">Loading…</option>
+        </select>
+      </div>
+
+      <!-- WebSocket Connection Status -->
+      <div class="ws-indicator" id="ws-indicator">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="ws-status-text">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Container -->
+  <main class="container">
+    <div class="dashboard-grid">
+
+      <!-- Left Column: Player, Canvas Visualizer & Equalizer -->
+      <div class="left-col">
+        <!-- Interactive Now Playing Card -->
+        <section class="card player-card">
+          <div class="card-header" style="width:100%">
+            <div class="card-title">
+              <span>Interactive Player</span>
+              <div class="soundwave" id="soundwave" title="Audio Activity">
+                <span class="sw-bar"></span><span class="sw-bar"></span><span class="sw-bar"></span>
+              </div>
+            </div>
+            <div class="badge-voice" id="voice-status">Connected</div>
+          </div>
+
+          <!-- Album Art -->
+          <div class="art-container" id="art-container">
+            <img id="track-art" src="" alt="Album Artwork" style="display:none" />
+            <div class="art-placeholder" id="art-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Offline HTML5 Canvas Audio Waveform Spectrum Animation -->
+          <div class="canvas-wrapper">
+            <canvas id="audio-spectrum-canvas"></canvas>
+          </div>
+
+          <!-- Track Metadata -->
+          <div class="track-meta">
+            <h2 class="track-title" id="track-title">Playback Idle</h2>
+            <div class="track-author" id="track-author">—</div>
+            <div class="track-requester" id="track-requester">Use search bar above to queue tracks</div>
+          </div>
+
+          <!-- Scrubber Seekbar -->
+          <div class="scrubber-container">
+            <div class="scrubber-bar" id="scrubber-bar" title="Click to seek">
+              <div class="scrubber-progress" id="scrubber-progress"></div>
+            </div>
+            <div class="scrubber-times">
+              <span id="time-elapsed">0:00</span>
+              <span id="time-remaining">-0:00</span>
+            </div>
+          </div>
+
+          <!-- Player Controls -->
+          <div class="player-controls">
+            <button class="btn-control" id="btn-rewind" title="Rewind 15s">⏪</button>
+            <button class="btn-control btn-control-main" id="btn-play-pause" title="Play/Pause">▶</button>
+            <button class="btn-control" id="btn-forward" title="Forward 15s">⏩</button>
+            <button class="btn-control" id="btn-skip" title="Skip Track">⏭</button>
+            <button class="btn-control" id="btn-loop" title="Toggle Loop Mode">🔁</button>
+          </div>
+
+          <!-- Volume Slider -->
+          <div class="volume-box">
+            <span>🔊</span>
+            <input type="range" class="volume-slider" id="volume-slider" min="0" max="200" value="100" />
+            <span class="volume-value" id="volume-text">100%</span>
+          </div>
+        </section>
+
+        <!-- Interactive 4-Band Graphic EQ Card -->
+        <section class="card eq-card">
+          <div class="card-header">
+            <div class="card-title">🎚️ 4-Band Graphic Equalizer</div>
+          </div>
+
+          <!-- Studio Preset Buttons -->
+          <div class="eq-presets-row">
+            <button class="btn-preset active" data-preset="flat">Flat (0dB)</button>
+            <button class="btn-preset" data-preset="pop">Pop</button>
+            <button class="btn-preset" data-preset="rock">Rock</button>
+            <button class="btn-preset" data-preset="electronic">Electronic</button>
+            <button class="btn-preset" data-preset="vocal">Vocal</button>
+          </div>
+
+          <!-- 4 Equalizer Sliders -->
+          <div class="eq-sliders-grid">
+            <div class="eq-band-col">
+              <span class="eq-band-label">Sub-Bass<br><small>60Hz</small></span>
+              <input type="range" class="eq-band-slider" id="eq-sub-bass" min="-10" max="10" step="0.5" value="0" />
+              <span class="eq-band-value" id="eq-sub-bass-val">0.0 dB</span>
+            </div>
+            <div class="eq-band-col">
+              <span class="eq-band-label">Bass<br><small>250Hz</small></span>
+              <input type="range" class="eq-band-slider" id="eq-bass" min="-10" max="10" step="0.5" value="0" />
+              <span class="eq-band-value" id="eq-bass-val">0.0 dB</span>
+            </div>
+            <div class="eq-band-col">
+              <span class="eq-band-label">Mid<br><small>1kHz</small></span>
+              <input type="range" class="eq-band-slider" id="eq-mid" min="-10" max="10" step="0.5" value="0" />
+              <span class="eq-band-value" id="eq-mid-val">0.0 dB</span>
+            </div>
+            <div class="eq-band-col">
+              <span class="eq-band-label">Treble<br><small>8kHz</small></span>
+              <input type="range" class="eq-band-slider" id="eq-treble" min="-10" max="10" step="0.5" value="0" />
+              <span class="eq-band-value" id="eq-treble-val">0.0 dB</span>
+            </div>
+          </div>
+
+          <!-- MySQL Presets Manager -->
+          <div class="preset-manager-row">
+            <input type="text" class="preset-input" id="custom-preset-input" placeholder="New preset name…" maxlength="30" />
+            <button class="btn-save-preset" id="btn-save-preset">Save Preset</button>
+            <select class="preset-input" id="custom-preset-select" style="max-width:140px"></select>
+            <button class="btn-load-preset" id="btn-load-preset">Load</button>
+            <button class="btn-del-preset" id="btn-del-preset">✕</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- Right Column: 18-Effects Board, Drag-and-Drop Queue, Karaoke Lyrics -->
+      <div class="right-col">
+
+        <!-- 18 Audio Effects Toggle Board -->
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">🎛️ 18 Audio Effects Toggle Board</div>
+          </div>
+          <div class="effects-board-grid effects-pills" id="effects-board-grid">
+            <!-- 18 Cards populated dynamically by equalizer.js with glowing LED indicators -->
+          </div>
+        </section>
+
+        <!-- Queue Management Card -->
+        <section class="card queue-card">
+          <div class="card-header">
+            <div class="card-title">📋 Queue Management</div>
+            <div class="queue-actions">
+              <button class="btn-preset" id="btn-shuffle">🔀 Shuffle</button>
+              <button class="btn-preset" id="btn-clear">🗑️ Clear</button>
+            </div>
+          </div>
+
+          <div class="queue-toolbar">
+            <input type="text" class="queue-filter-input" id="queue-filter-input" placeholder="Filter queue tracks…" />
+            <div style="display:flex; gap:1rem; align-items:center">
+              <span id="queue-count" style="font-size:0.8rem; color:var(--text-muted)">0 tracks</span>
+              <span class="queue-total-dur" id="queue-total-dur">Total: 0:00</span>
+            </div>
+          </div>
+
+          <!-- Drag and Drop Queue List -->
+          <ul class="queue-list" id="queue-list">
+            <li style="text-align:center; padding:2rem; color:var(--text-dim)">Queue is empty.</li>
+          </ul>
+        </section>
+
+        <!-- Real-Time Synced Karaoke Lyrics Teleprompter -->
+        <section class="card lyrics-card lyrics-drawer" id="lyrics-drawer">
+          <div class="card-header">
+            <div class="card-title">🎤 Synced Karaoke Lyrics Teleprompter</div>
+            <span id="lyrics-track-title" style="font-size:0.8rem; color:var(--text-muted)">—</span>
+          </div>
+          <div class="lyrics-teleprompter-box" id="lyrics-teleprompter-box">
+            <div style="color:var(--text-dim); margin-top:2rem">No track playing or loading lyrics…</div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Clear Queue Confirmation Modal -->
+  <div class="modal-overlay clear-modal" id="clear-modal" style="display:none"></div>
+
+  <!-- Keyboard Shortcuts Modal -->
+  <div class="modal-overlay shortcuts-modal" id="shortcuts-modal" style="display:none"></div>
+
+  <!-- Hidden template hook for item-playnext -->
+  <div style="display:none" class="item-playnext"></div>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    Music Bot V3 · Next-Gen Web Dashboard 2.0 · 100% Offline Single-Page Architecture
+  </footer>
+
+  <!-- Runtime Config -->
+  <script>
+    window.DASHBOARD_CONFIG = {
+      apiSecret: "{{API_SECRET}}",
+      port: parseInt("{{PORT}}", 10) || 8080
+    };
+  </script>
+
+  <!-- Offline JS Scripts -->
+  <script src="/static/js/visualizer.js"></script>
+  <script src="/static/js/equalizer.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
