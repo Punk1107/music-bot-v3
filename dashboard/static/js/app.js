@@ -194,14 +194,16 @@
     /* ── WebSocket Management ────────────────────────────────────────────── */
     connectWebSocket() {
       const loc = window.location;
+      const port = (window.DASHBOARD_CONFIG && window.DASHBOARD_CONFIG.port) || 8080;
+      const host = loc.host || `127.0.0.1:${port}`;
       const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-      let wsUrl = `${proto}//${loc.host}/ws/dashboard`;
+      let wsUrl = `${proto}//${host}/ws/dashboard`;
       if (this.apiSecret) {
         wsUrl += `?token=${encodeURIComponent(this.apiSecret)}`;
       }
 
       if (this.ws) {
-        try { this.ws.close(); } catch (_) {}
+        try { this.ws.close(); } catch (_) { }
       }
 
       this.ws = new WebSocket(wsUrl);
@@ -274,6 +276,10 @@
       options.headers = options.headers || {};
       if (this.apiSecret) {
         options.headers['Authorization'] = `Bearer ${this.apiSecret}`;
+      }
+      if (window.location.protocol === 'file:') {
+        const port = (window.DASHBOARD_CONFIG && window.DASHBOARD_CONFIG.port) || 8080;
+        endpoint = `http://127.0.0.1:${port}${endpoint}`;
       }
       return fetch(endpoint, options);
     }
@@ -495,7 +501,7 @@
           const data = await res.json();
           this.renderLyrics(data);
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     renderLyrics(data) {
