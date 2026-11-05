@@ -12,13 +12,12 @@ Covers:
 
 from __future__ import annotations
 
-import asyncio
 from collections import deque
 import os
-import subprocess
 import json
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, cast
 import pytest
 import discord
 
@@ -32,9 +31,9 @@ from cogs.queue_cog import QueueCog
 from cogs.playback_cog import PlaybackCog
 from cogs.music import MusicCog
 from utils.views import MusicControlView
-from radio.watchdog import RadioWatchdog, RadioSession
-from podcast.parser import parse_podcast_xml, _parse_itunes_duration, PodcastEpisode, PodcastShow
-from podcast.views import PodcastEpisodeSelect, PodcastEpisodeSelectView
+from radio.watchdog import RadioWatchdog
+from podcast.parser import parse_podcast_xml, PodcastEpisode, PodcastShow
+from podcast.views import PodcastEpisodeSelectView
 
 
 # ── 1. Interactive Blind Music Quiz Tests ────────────────────────────────────
@@ -241,7 +240,7 @@ class TestFairShareQueue:
         bot.db.get_server_config = AsyncMock(return_value=cfg)
         bot.db.set_server_config = AsyncMock()
 
-        cog = QueueCog(bot)
+        cog: Any = QueueCog(bot)
         interaction = MagicMock()
         interaction.guild_id = 123
         interaction.user.guild_permissions.administrator = True
@@ -251,7 +250,7 @@ class TestFairShareQueue:
 
         with patch("cogs.queue_cog.get_locale", return_value="en"):
             # Set mode fair and limit 3
-            await cog.queue_cmd.callback(cog, interaction, page=1, mode="fair", per_user_limit=3)
+            await cast(Any, cog.queue_cmd.callback)(cog, interaction, page=1, mode="fair", per_user_limit=3)  # type: ignore
 
         assert player.queue_mode == "fair"
         assert player.per_user_limit == 3
@@ -341,7 +340,7 @@ class TestAudioClipCutter:
         player.now_playing = track
         bot.get_player.return_value = player
 
-        cog = PlaybackCog(bot)
+        cog: Any = PlaybackCog(bot)
         interaction = MagicMock()
         interaction.guild_id = 123
         interaction.response.defer = AsyncMock()
@@ -360,7 +359,7 @@ class TestAudioClipCutter:
              patch("cogs.playback_cog.get_locale", return_value="en"):
 
             # Request 45s (should clamp to 30s)
-            await cog.clip.callback(cog, interaction, duration=45)
+            await cast(Any, cog.clip.callback)(cog, interaction, duration=45)  # type: ignore
 
         interaction.followup.send.assert_awaited_once()
         kwargs = interaction.followup.send.call_args[1]
@@ -643,6 +642,7 @@ class TestStreamingAndSourcesExpansion:
         show = PodcastShow(title="Test Pod", description="Desc", image_url=None, episodes=episodes)
 
         selected_ep = None
+
         async def on_select(interaction, ep):
             nonlocal selected_ep
             selected_ep = ep
@@ -694,4 +694,3 @@ class TestStreamingAndSourcesExpansion:
         assert "🔍" in hist_hit["name"]
 
         await db.close()
-

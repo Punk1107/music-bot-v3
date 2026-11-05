@@ -176,6 +176,28 @@ class DashboardWebSocketManager:
         elif action in ("toggle_effect", "effect"):
             effect = data.get("effect", "")
             result = await self.service.toggle_effect(guild_id, effect)
+        elif action in ("set_equalizer", "equalizer"):
+            bands = data.get("bands")
+            preset = data.get("preset")
+            result = await self.service.set_equalizer(guild_id, bands=bands, preset=preset)
+        elif action == "get_presets":
+            result = await self.service.get_guild_presets(guild_id)
+            await ws.send_json({"type": "presets_list", "guild_id": str(guild_id), "data": result})
+            return
+        elif action == "save_preset":
+            name = str(data.get("name", "")).strip()
+            settings = data.get("settings")
+            result = await self.service.save_guild_preset(guild_id, name=name, settings=settings)
+        elif action == "load_preset":
+            name = str(data.get("name", "")).strip()
+            result = await self.service.load_guild_preset(guild_id, name=name)
+        elif action == "delete_preset":
+            name = str(data.get("name", "")).strip()
+            result = await self.service.delete_guild_preset(guild_id, name=name)
+        elif action in ("get_lyrics", "lyrics"):
+            result = await self.service.get_lyrics(guild_id)
+            await ws.send_json({"type": "lyrics", "guild_id": str(guild_id), "data": result})
+            return
         elif action == "add_to_queue":
             query = data.get("query", "")
             play_next = bool(data.get("play_next", False))

@@ -12,7 +12,7 @@ Tests:
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -26,6 +26,7 @@ from dashboard.routes import DashboardRouter
 from dashboard.service import DashboardService
 from dashboard.templates import render_dashboard_html
 from dashboard.websocket import DashboardWebSocketManager
+from equalizer.presets import EQ_PRESETS
 from models.enums import AudioEffect, LoopMode
 from models.track import Track
 
@@ -87,6 +88,16 @@ def mock_bot(dummy_track):
     bot.spotify.is_spotify_url = MagicMock(return_value=False)
     bot.http_session = MagicMock()
     bot.get_cog = MagicMock(return_value=None)
+
+    # Mock DB on bot
+    cfg_mock = MagicMock()
+    cfg_mock.guild_presets = {}
+    cfg_mock.audio_quality = MagicMock(value="high")
+    bot.db = MagicMock()
+    bot.db.get_server_config = AsyncMock(return_value=cfg_mock)
+    bot.db.save_server_config = AsyncMock()
+    bot.db.save_queue = AsyncMock()
+    bot.db.clear_queue = AsyncMock()
 
     return bot
 
@@ -326,20 +337,22 @@ class TestDashboardWebSocketManager:
 
 # ── Test REST Endpoints via Aiohttp ───────────────────────────────────────────
 
+@pytest.fixture
+def app(mock_bot, dummy_track, monkeypatch):
+    monkeypatch.setattr(config, "API_SECRET", "")
+    service = DashboardService(mock_bot)
+    ws_mgr = DashboardWebSocketManager(service)
+    router = DashboardRouter(service, ws_mgr)
+
+    player = mock_bot.get_player(111)
+    player.now_playing = dummy_track
+
+    app_instance = web.Application()
+    router.register_routes(app_instance)
+    return app_instance
+
+
 class TestDashboardRoutes:
-    @pytest.fixture
-    def app(self, mock_bot, dummy_track, monkeypatch):
-        monkeypatch.setattr(config, "API_SECRET", "")
-        service = DashboardService(mock_bot)
-        ws_mgr = DashboardWebSocketManager(service)
-        router = DashboardRouter(service, ws_mgr)
-
-        player = mock_bot.get_player(111)
-        player.now_playing = dummy_track
-
-        app = web.Application()
-        router.register_routes(app)
-        return app
 
     @pytest.mark.asyncio
     async def test_get_dashboard_page(self, app):
@@ -519,3 +532,268 @@ class TestDashboardCog:
         assert "Local Web Dashboard" in embed.title
         assert f"localhost:{config.WEB_PORT}" in embed.description
         assert kwargs.get("ephemeral") is True
+
+
+# ── Test Next-Gen Web Dashboard 2.0 ──────────────────────────────────────────
+
+class TestDashboardNextGenV2:
+    """Comprehensive test suite for Phase 4: Next-Gen Web Dashboard 2.0."""
+
+    @pytest.mark.asyncio
+    async def test_equalizer_bands_and_clamping(self, mock_bot):
+        service = DashboardService(mock_bot)
+
+        # 1. Custom bands setting with clamping
+        res = await service.set_equalizer(
+            111,
+            bands={"sub_bass": 5.0, "bass": -2.5, "mid": 3.0, "treble": 99.0},
+        )
+        assert res["success"] is True
+        assert res["equalizer_bands"]["sub_bass"] == 5.0
+        assert res["equalizer_bands"]["bass"] == -2.5
+        assert res["equalizer_bands"]["mid"] == 3.0
+        # Clamped to +10.0 dB
+        assert res["equalizer_bands"]["treble"] == 10.0
+        assert res["equalizer_preset"] == "custom"
+        assert mock_bot.seek.hot_reload.called
+
+        # 2. Studio preset application
+        res_preset = await service.set_equalizer(111, preset="rock")
+        assert res_preset["success"] is True
+        assert res_preset["equalizer_preset"] == "rock"
+        assert res_preset["equalizer_bands"] == EQ_PRESETS["rock"]
+
+        # 3. Invalid preset
+        res_inv = await service.set_equalizer(111, preset="nonexistent_preset")
+        assert res_inv["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_mysql_presets_crud_lifecycle(self, mock_bot):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+        player.volume = 0.85
+        player.equalizer_bands = {"sub_bass": 4.0, "bass": 2.0, "mid": 0.0, "treble": 3.0}
+
+        # 1. Save custom preset
+        res_save = await service.save_guild_preset(111, "StudioSession")
+        assert res_save["success"] is True
+        assert res_save["name"] == "studiosession"
+        assert mock_bot.db.save_server_config.called
+
+        # Verify saved in config
+        cfg = await mock_bot.db.get_server_config(111)
+        assert "studiosession" in cfg.guild_presets
+        assert cfg.guild_presets["studiosession"]["volume"] == 0.85
+
+        # 2. Get presets list
+        res_list = await service.get_guild_presets(111)
+        assert res_list["success"] is True
+        assert "gaming" in res_list["presets"]
+        assert "studiosession" in res_list["presets"]
+
+        # 3. Load preset
+        player.volume = 0.20
+        res_load = await service.load_guild_preset(111, "studiosession")
+        assert res_load["success"] is True
+        assert player.volume == 0.85
+        assert player.equalizer_bands["sub_bass"] == 4.0
+
+        # 4. Delete preset
+        res_del = await service.delete_guild_preset(111, "studiosession")
+        assert res_del["success"] is True
+        assert "studiosession" not in cfg.guild_presets
+
+        # 5. Cannot delete built-in preset
+        res_del_builtin = await service.delete_guild_preset(111, "gaming")
+        assert res_del_builtin["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_18_effects_toggle_and_all_effects_state(self, mock_bot):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+
+        # Toggle effects
+        res1 = await service.toggle_effect(111, "nightcore")
+        assert res1["success"] is True
+        assert res1["enabled"] is True
+        assert AudioEffect.NIGHTCORE in player.effects
+
+        res2 = await service.toggle_effect(111, "8d_audio")
+        assert res2["success"] is True
+        assert res2["enabled"] is True
+
+        # Check state includes all 18 effects with enabled boolean for LED indicator
+        state = service.get_guild_state(111)
+        assert "all_effects" in state
+        assert len(state["all_effects"]) == 18
+        nc_info = next(e for e in state["all_effects"] if e["id"] == "nightcore")
+        assert nc_info["enabled"] is True
+        bb_info = next(e for e in state["all_effects"] if e["id"] == "bass_boost")
+        assert bb_info["enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_synced_karaoke_lyrics_and_click_to_seek(self, mock_bot, dummy_track):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+        player.now_playing = dummy_track
+
+        mock_line = MagicMock()
+        mock_line.start_sec = 42.0
+        mock_line.timestamp_str = "0:42"
+        mock_line.text = "Hello from the other side"
+
+        with patch("lyrics.service.LyricsService.get_lyrics", AsyncMock(return_value=([mock_line], False))):
+            res = await service.get_lyrics(111)
+            assert res["success"] is True
+            assert len(res["lines"]) == 1
+            assert res["lines"][0]["start"] == 42.0
+            assert res["lines"][0]["text"] == "Hello from the other side"
+
+        # Click-to-seek jump to line timestamp
+        seek_res = await service.seek(111, int(res["lines"][0]["start"]))
+        assert seek_res["success"] is True
+        assert seek_res["position"] == 42
+        mock_bot.seek.seek_to.assert_called_with(111, 42)
+
+    @pytest.mark.asyncio
+    async def test_web_search_and_direct_enqueue_persists_mysql(self, mock_bot, dummy_track):
+        service = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+
+        # 1. Search tracks
+        results = await service.search_tracks("Test Song", limit=3)
+        assert len(results) >= 1
+        assert results[0]["title"] == "Test Song"
+
+        # 2. Add to queue directly from web search bar
+        res_add = await service.add_to_queue(111, "https://youtube.com/watch?v=12345", play_next=False)
+        assert res_add["success"] is True
+        assert len(player.queue) == 1
+        assert player.queue[0].title == "Test Song"
+        # Verify persisted immediately to MySQL queue table
+        assert mock_bot.db.save_queue.called
+
+        # 3. Play next directly from web
+        t2 = Track(title="Next Track", url="https://youtube.com/watch?v=next", duration=200)
+        mock_bot.youtube.get_track = AsyncMock(return_value=t2)
+        mock_bot.youtube.is_youtube_url = MagicMock(return_value=True)
+
+        res_next = await service.add_to_queue(111, "https://youtube.com/watch?v=next", play_next=True)
+        assert res_next["success"] is True
+        assert player.queue[0].title == "Next Track"
+
+    @pytest.mark.asyncio
+    async def test_rest_api_equalizer_and_presets_endpoints(self, app):
+        async with TestClient(TestServer(app)) as client:
+            # 1. Set Equalizer
+            eq_resp = await client.post(
+                "/api/v1/guild/111/equalizer",
+                json={"bands": {"sub_bass": 3.0, "bass": 1.5}},
+            )
+            assert eq_resp.status == 200
+            eq_data = await eq_resp.json()
+            assert eq_data["success"] is True
+            assert eq_data["equalizer_bands"]["sub_bass"] == 3.0
+
+            # 2. Save Preset
+            save_resp = await client.post(
+                "/api/v1/guild/111/presets/save",
+                json={"name": "Acoustic"},
+            )
+            assert save_resp.status == 200
+            save_data = await save_resp.json()
+            assert save_data["success"] is True
+
+            # 3. Get Presets
+            get_resp = await client.get("/api/v1/guild/111/presets")
+            assert get_resp.status == 200
+            get_data = await get_resp.json()
+            assert "acoustic" in get_data["presets"]
+
+            # 4. Load Preset
+            load_resp = await client.post(
+                "/api/v1/guild/111/presets/load",
+                json={"name": "acoustic"},
+            )
+            assert load_resp.status == 200
+
+            # 5. Delete Preset
+            del_resp = await client.delete("/api/v1/guild/111/presets/acoustic")
+            assert del_resp.status == 200
+
+    @pytest.mark.asyncio
+    async def test_websocket_nextgen_actions_dispatch(self, app):
+        async with TestClient(TestServer(app)) as client:
+            ws = await client.ws_connect("/ws/dashboard?guild_id=111")
+
+            init_msg = await ws.receive_json()
+            assert init_msg["type"] == "init"
+
+            async def recv_type(expected):
+                while True:
+                    msg = await ws.receive_json()
+                    if msg.get("type") == expected:
+                        return msg
+
+            # 1. WS set_equalizer
+            await ws.send_json({"action": "set_equalizer", "preset": "electronic"})
+            res1 = await recv_type("action_result")
+            assert res1["action"] == "set_equalizer"
+            assert res1["result"]["success"] is True
+
+            # 2. WS save_preset
+            await ws.send_json({"action": "save_preset", "name": "BassVibe"})
+            res2 = await recv_type("action_result")
+            assert res2["action"] == "save_preset"
+            assert res2["result"]["success"] is True
+
+            # 3. WS get_presets
+            await ws.send_json({"action": "get_presets"})
+            res3 = await recv_type("presets_list")
+            assert "bassvibe" in res3["data"]["presets"]
+
+            # 4. WS load_preset
+            await ws.send_json({"action": "load_preset", "name": "bassvibe"})
+            res4 = await recv_type("action_result")
+            assert res4["action"] == "load_preset"
+            assert res4["result"]["success"] is True
+
+            # 5. WS get_lyrics
+            with patch("lyrics.service.LyricsService.get_lyrics", AsyncMock(return_value=([], False))):
+                await ws.send_json({"action": "get_lyrics"})
+                res5 = await recv_type("lyrics")
+                assert res5["type"] == "lyrics"
+
+            await ws.close()
+
+    def test_offline_canvas_spectrum_and_file_separation(self):
+        base_dir = Path(__file__).parent.parent / "dashboard"
+
+        # Verify separate frontend files exist
+        assert (base_dir / "static" / "css" / "dashboard.css").exists()
+        assert (base_dir / "static" / "js" / "visualizer.js").exists()
+        assert (base_dir / "static" / "js" / "equalizer.js").exists()
+        assert (base_dir / "static" / "js" / "app.js").exists()
+        assert (base_dir / "templates" / "index.html").exists()
+
+        # Verify visualizer uses pure Math.sin and canvas
+        vis_code = (base_dir / "static" / "js" / "visualizer.js").read_text(encoding="utf-8")
+        assert "Math.sin" in vis_code
+        assert "requestAnimationFrame" in vis_code
+        assert "AudioSpectrumVisualizer" in vis_code
+
+        # Verify equalizer script has 4 bands and LED support
+        eq_code = (base_dir / "static" / "js" / "equalizer.js").read_text(encoding="utf-8")
+        assert "sub_bass" in eq_code
+        assert "savePresetToMySQL" in eq_code
+        assert "led-indicator" in eq_code
+
+        # Verify HTML template contains canvas and zero external CDNs
+        html = render_dashboard_html()
+        assert "audio-spectrum-canvas" in html
+        assert "4-Band Graphic Equalizer" in html
+        assert "18 Audio Effects Toggle Board" in html
+        assert "Synced Karaoke Lyrics Teleprompter" in html
+        assert "fonts.googleapis.com" not in html
+        assert "cdnjs.cloudflare.com" not in html
+        assert "cdn.jsdelivr.net" not in html

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from aiohttp import web
 
@@ -259,10 +260,58 @@ class DashboardRouter:
         status = 200 if res.get("success") else 404
         return web.json_response(res, status=status)
 
+    async def api_equalizer(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        bands = body.get("bands")
+        preset = body.get("preset")
+        res = await self.service.set_equalizer(gid, bands=bands, preset=preset)
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_get_presets(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        res = await self.service.get_guild_presets(gid)
+        return web.json_response(res)
+
+    async def api_save_preset(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        name = body.get("name", "").strip()
+        settings = body.get("settings")
+        res = await self.service.save_guild_preset(gid, name=name, settings=settings)
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_load_preset(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        body = await self._parse_json_body(request)
+        name = body.get("name", "").strip()
+        res = await self.service.load_guild_preset(gid, name=name)
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
+    async def api_delete_preset(self, request: web.Request) -> web.Response:
+        self._require_auth(request)
+        gid = self._parse_guild_id(request)
+        name = request.match_info.get("name", "").strip()
+        res = await self.service.delete_guild_preset(gid, name=name)
+        status = 200 if res.get("success") else 400
+        return web.json_response(res, status=status)
+
     # ── Router Registration ───────────────────────────────────────────────────
 
     def register_routes(self, app: web.Application) -> None:
         """Register all dashboard routes with an aiohttp Application."""
+        # Static files
+        static_dir = Path(__file__).parent / "static"
+        if static_dir.exists():
+            app.router.add_static("/static", path=str(static_dir), name="dashboard_static")
+
         # Pages & WebSocket
         app.router.add_get("/", self.handle_dashboard_page)
         app.router.add_get("/dashboard", self.handle_dashboard_page)
@@ -273,6 +322,13 @@ class DashboardRouter:
         app.router.add_get("/api/v1/dashboard/search", self.api_search)
         app.router.add_get("/api/v1/guild/{id}/state", self.api_get_guild_state)
         app.router.add_get("/api/v1/guild/{id}/lyrics", self.api_lyrics)
+
+        # Equalizer & Presets
+        app.router.add_post("/api/v1/guild/{id}/equalizer", self.api_equalizer)
+        app.router.add_get("/api/v1/guild/{id}/presets", self.api_get_presets)
+        app.router.add_post("/api/v1/guild/{id}/presets/save", self.api_save_preset)
+        app.router.add_post("/api/v1/guild/{id}/presets/load", self.api_load_preset)
+        app.router.add_delete("/api/v1/guild/{id}/presets/{name}", self.api_delete_preset)
 
         # Player Controls
         app.router.add_post("/api/v1/guild/{id}/pause", self.api_pause)

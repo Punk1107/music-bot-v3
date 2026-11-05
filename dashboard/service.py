@@ -18,6 +18,9 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional
 
 import discord
 
+from models.enums import AudioEffect, LoopMode
+from equalizer.presets import EQ_PRESETS, clamp_gain
+
 if TYPE_CHECKING:
     from main import MusicBot
     from core.player import GuildPlayer
@@ -117,6 +120,28 @@ class DashboardService:
         if player.now_playing and player.now_playing.duration:
             total_dur += player.remaining_seconds
 
+        active_effects_set = {e.value for e in player.effects} if hasattr(player, "effects") else set()
+        all_effects_info = []
+        for ae in AudioEffect:
+            all_effects_info.append(
+                {
+                    "id": ae.value,
+                    "name": ae.display_name(),
+                    "enabled": ae.value in active_effects_set,
+                }
+            )
+
+        eq_bands = getattr(player, "equalizer_bands", None) or {}
+        eq_preset = getattr(player, "equalizer_preset", None) or ("flat" if not eq_bands else "custom")
+
+        presets_list = ["flat", "pop", "rock", "electronic", "vocal"]
+        if hasattr(self.bot, "db") and hasattr(self.bot.db, "_server_configs_cache"):
+            cached = self.bot.db._server_configs_cache.get(guild_id)
+            if cached and cached[1] and cached[1].guild_presets:
+                for k in cached[1].guild_presets:
+                    if k not in presets_list:
+                        presets_list.append(k)
+
         return {
             "guild_id": str(guild_id),
             "guild_name": guild.name if guild else str(guild_id),
@@ -131,6 +156,10 @@ class DashboardService:
             "volume_percent": int(round(player.volume * 100)),
             "loop_mode": player.loop_mode.value,
             "effects": [e.value for e in player.effects] if hasattr(player, "effects") else [],
+            "all_effects": all_effects_info,
+            "equalizer_bands": eq_bands,
+            "equalizer_preset": eq_preset,
+            "presets": presets_list,
             "total_duration": total_dur,
         }
 
@@ -346,7 +375,6 @@ class DashboardService:
 
     async def set_loop_mode(self, guild_id: int, mode: str) -> dict:
         """Set loop mode ('off', 'track', 'queue')."""
-        from models.enums import LoopMode
         mode_str = str(mode).lower().strip()
         if mode_str not in ("off", "track", "queue"):
             return {"success": False, "error": f"Invalid loop mode: {mode}"}
@@ -470,6 +498,9 @@ class DashboardService:
             else:
                 await player.extend(tracks)
 
+        # Atomic persistence of updated queue to MySQL queue table
+        await self._persist_queue(guild_id, player)
+
         # Trigger playback if idle and voice connected
         vc = guild.voice_client
         if vc and not vc.is_playing() and not vc.is_paused():
@@ -484,6 +515,167 @@ class DashboardService:
             "tracks": [t.to_dict() for t in tracks],
             "play_next": play_next,
         }
+
+    async def set_equalizer(
+        self,
+        guild_id: int,
+        bands: Optional[dict[str, float]] = None,
+        preset: Optional[str] = None,
+    ) -> dict:
+        """Set 4-band equalizer gains or apply a studio preset."""
+        player = self.bot.get_player(guild_id)
+        if preset:
+            p_lower = preset.lower().strip()
+            if p_lower not in EQ_PRESETS:
+                return {
+                    "success": False,
+                    "error": f"Unknown preset: {preset}. Choose from {list(EQ_PRESETS.keys())}",
+                }
+            player.equalizer_bands = EQ_PRESETS[p_lower].copy()
+            player.equalizer_preset = p_lower
+        elif bands:
+            new_bands = {}
+            for band_key in ("sub_bass", "bass", "mid", "treble"):
+                if band_key in bands:
+                    new_bands[band_key] = clamp_gain(bands[band_key])
+                else:
+                    new_bands[band_key] = (
+                        player.equalizer_bands.get(band_key, 0.0)
+                        if player.equalizer_bands
+                        else 0.0
+                    )
+            player.equalizer_bands = new_bands
+            player.equalizer_preset = "custom"
+        else:
+            player.equalizer_bands = {}
+            player.equalizer_preset = "flat"
+
+        # Hot-reload audio filter
+        seek_svc = getattr(self.bot, "seek", None)
+        if not seek_svc:
+            try:
+                from seek.service import SeekService
+                seek_svc = SeekService(self.bot)
+            except Exception:
+                seek_svc = None
+        if seek_svc and hasattr(seek_svc, "hot_reload"):
+            asyncio.create_task(seek_svc.hot_reload(guild_id))
+
+        await self.broadcast_state(guild_id)
+        return {
+            "success": True,
+            "equalizer_bands": player.equalizer_bands,
+            "equalizer_preset": player.equalizer_preset,
+        }
+
+    async def get_guild_presets(self, guild_id: int) -> dict:
+        """Return all available built-in and custom guild presets."""
+        from cogs.presets_cog import _BUILTIN_PRESETS
+        cfg = await self.bot.db.get_server_config(guild_id)
+        merged = dict(_BUILTIN_PRESETS)
+        if cfg and cfg.guild_presets:
+            merged.update(cfg.guild_presets)
+        return {"success": True, "presets": merged}
+
+    async def save_guild_preset(
+        self, guild_id: int, name: str, settings: Optional[dict] = None
+    ) -> dict:
+        """Save a custom preset into MySQL server_configs.guild_presets (Native JSON)."""
+        from cogs.presets_cog import _BUILTIN_PRESETS, _player_to_preset
+        name_clean = name.strip().lower()
+        if not name_clean:
+            return {"success": False, "error": "Preset name cannot be empty"}
+        if len(name_clean) > 30:
+            return {"success": False, "error": "Preset name must be <= 30 characters"}
+        if name_clean in _BUILTIN_PRESETS:
+            return {"success": False, "error": f"'{name_clean}' is a reserved built-in preset"}
+
+        cfg = await self.bot.db.get_server_config(guild_id)
+        player = self.bot.get_player(guild_id)
+
+        if settings:
+            preset_data = dict(settings)
+        else:
+            quality_val = (
+                cfg.audio_quality.value
+                if hasattr(cfg.audio_quality, "value")
+                else str(cfg.audio_quality)
+            )
+            preset_data = _player_to_preset(player, quality_val)
+            preset_data["equalizer_bands"] = getattr(player, "equalizer_bands", {}).copy()
+            preset_data["equalizer_preset"] = getattr(player, "equalizer_preset", "custom")
+
+        preset_data["_label"] = name.strip()
+        preset_data["_desc"] = "Custom preset saved from Web Dashboard"
+
+        cfg.guild_presets[name_clean] = preset_data
+        await self.bot.db.save_server_config(cfg)
+        await self.broadcast_state(guild_id)
+
+        return {"success": True, "name": name_clean, "preset": preset_data}
+
+    async def load_guild_preset(self, guild_id: int, name: str) -> dict:
+        """Load and apply a preset (built-in or custom) to guild player."""
+        from cogs.presets_cog import _BUILTIN_PRESETS, _apply_preset
+        from models.enums import AudioQuality
+
+        name_clean = name.strip().lower()
+        cfg = await self.bot.db.get_server_config(guild_id)
+        all_presets = dict(_BUILTIN_PRESETS)
+        if cfg and cfg.guild_presets:
+            all_presets.update(cfg.guild_presets)
+
+        preset = all_presets.get(name_clean)
+        if not preset:
+            return {"success": False, "error": f"Preset '{name_clean}' not found"}
+
+        player = self.bot.get_player(guild_id)
+        _apply_preset(player, preset)
+
+        # Apply equalizer bands if present in preset
+        if "equalizer_bands" in preset:
+            player.equalizer_bands = preset["equalizer_bands"].copy()
+            player.equalizer_preset = preset.get("equalizer_preset", "custom")
+
+        # Update server config quality if specified
+        if "quality" in preset:
+            try:
+                cfg.audio_quality = AudioQuality(preset["quality"])
+                await self.bot.db.save_server_config(cfg)
+            except Exception:
+                pass
+
+        # Hot-reload audio filter
+        seek_svc = getattr(self.bot, "seek", None)
+        if not seek_svc:
+            try:
+                from seek.service import SeekService
+                seek_svc = SeekService(self.bot)
+            except Exception:
+                seek_svc = None
+        if seek_svc and hasattr(seek_svc, "hot_reload"):
+            asyncio.create_task(seek_svc.hot_reload(guild_id))
+
+        await self.broadcast_state(guild_id)
+        return {"success": True, "name": name_clean, "preset": preset}
+
+    async def delete_guild_preset(self, guild_id: int, name: str) -> dict:
+        """Delete a custom preset from MySQL server_configs.guild_presets."""
+        from cogs.presets_cog import _BUILTIN_PRESETS
+
+        name_clean = name.strip().lower()
+        if name_clean in _BUILTIN_PRESETS:
+            return {"success": False, "error": "Cannot delete built-in preset"}
+
+        cfg = await self.bot.db.get_server_config(guild_id)
+        if not cfg or name_clean not in cfg.guild_presets:
+            return {"success": False, "error": f"Preset '{name_clean}' not found in custom presets"}
+
+        del cfg.guild_presets[name_clean]
+        await self.bot.db.save_server_config(cfg)
+        await self.broadcast_state(guild_id)
+
+        return {"success": True, "name": name_clean}
 
     async def get_lyrics(self, guild_id: int) -> dict:
         """Fetch synced lyrics for currently playing track."""
