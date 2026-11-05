@@ -91,6 +91,25 @@ def _build_pitch_filter(semitones: int) -> str:
     return f"{base},{tempo_chain}" if tempo_chain else base
 
 
+# -- Synthetic Audio Chimes (Gen 5.0) -------------------------------------------
+SYNTHETIC_CHIME_EXPR = (
+    "0.15*sin(2*PI*880*t)*exp(-4*t)+0.15*sin(2*PI*1760*t)*exp(-6*t):d=0.35:s=48000:c=stereo"
+)
+
+
+def build_chime_lavfi_source() -> str:
+    """Return lavfi expression for synthetic harmonic notification chime."""
+    return f"aevalsrc={SYNTHETIC_CHIME_EXPR}"
+
+
+def build_chime_ffmpeg_options() -> dict:
+    """Return options dict for playing synthetic chime with discord.FFmpegPCMAudio."""
+    return {
+        "before_options": "-nostdin -f lavfi",
+        "options": "-vn",
+    }
+
+
 class AudioEffectsProcessor:
     """Builds FFmpeg before_options / options for a given effect + quality + volume."""
 
@@ -112,6 +131,11 @@ class AudioEffectsProcessor:
         stereo_filter:    Optional[str]     = None,  # F2.8 Stereo Enhancer / Wide Soundstage
         to_seconds:       Optional[int]     = None,  # F2.7 Loop A-B end cutoff timestamp
         track_duration:   Optional[int]     = None,  # Total track duration for crossfade
+        vocal_filter:     Optional[str]     = None,  # Gen 5.0 Mid-Side Vocal Remover / Acapella
+        spatial_filter:   Optional[str]     = None,  # Gen 5.0 Spatial 3D / Binaural
+        remaster_filter:  Optional[str]     = None,  # Gen 5.0 Clarity & Sub-Harmonic Remaster
+        loudnorm_filter:  Optional[str]     = None,  # Gen 5.0 Multi-Profile EBU R128 Loudnorm
+        gapless:          bool              = False, # Gen 5.0 Gapless low-latency buffering
     ) -> dict:
         """
         Return a dict with keys `before_options` and `options` suitable for
@@ -120,12 +144,14 @@ class AudioEffectsProcessor:
         # Merge both seek aliases
         seek_sec = seek_sec or seek_seconds
 
+        probesize = "32768" if gapless else "65536"
+        delay_max = "2" if gapless else "5"
         before_opts: list[str] = [
             "-nostdin",
             "-reconnect", "1",
             "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-probesize", "65536",
+            "-reconnect_delay_max", delay_max,
+            "-probesize", probesize,
             "-analyzeduration", "0",
         ]
         if seek_sec > 0:
@@ -151,9 +177,17 @@ class AudioEffectsProcessor:
         if speed_chain:
             filters.append(speed_chain)
 
+        # Gen 5.0: Mid-Side Vocal Remover / Acapella (applied early before reverb/echo)
+        if vocal_filter:
+            filters.append(vocal_filter)
+
         # F2.5: Frequency Equalizer
         if equalizer_filter:
             filters.append(equalizer_filter)
+
+        # Gen 5.0: Spatial 3D & Binaural Virtualizer
+        if spatial_filter:
+            filters.append(spatial_filter)
 
         # F2.8: Audio Pan (balance)
         if pan_filter:
@@ -169,8 +203,14 @@ class AudioEffectsProcessor:
             if f:
                 filters.append(f)
 
-        # F2.6: EBU R128 Loudnorm (takes priority over legacy dynaudnorm)
-        if loudnorm:
+        # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster
+        if remaster_filter:
+            filters.append(remaster_filter)
+
+        # F2.6 / Gen 5.0: EBU R128 Loudnorm (Multi-profile or standard, priority over legacy dynaudnorm)
+        if loudnorm_filter:
+            filters.append(loudnorm_filter)
+        elif loudnorm:
             filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
         elif replay_gain:
             # F25: Legacy Replay Gain / Normalize

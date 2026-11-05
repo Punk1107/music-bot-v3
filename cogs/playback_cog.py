@@ -17,7 +17,7 @@ immediately on the playing track.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
@@ -223,6 +223,62 @@ class PlaybackCog(commands.Cog, name="Playback"):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
+    # ── Gen 5.0: Gapless Audio Mixing ─────────────────────────────────────────
+
+    @app_commands.command(name="gapless", description="Toggle seamless gapless audio mixing between tracks (no dead air)")
+    @app_commands.describe(enabled="Enable or disable gapless transition (leave blank to toggle)")
+    async def gapless(self, interaction: discord.Interaction, enabled: Optional[bool] = None) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
+
+        if enabled is None:
+            player.gapless = not player.gapless
+        else:
+            player.gapless = enabled
+
+        state = player.gapless
+        desc = t("gapless.enabled", locale) if state else t("gapless.disabled", locale)
+        embed = discord.Embed(
+            title="📻 Gapless Audio Mixing",
+            description=desc,
+            color=0x2ED573 if state else 0x747F8D,
+        )
+        if state:
+            embed.set_footer(text="Pre-buffers incoming stream for near-zero dead air transition.")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # ── Gen 5.0: Synthetic Audio Chimes ───────────────────────────────────────
+
+    @app_commands.command(name="chimes", description="Toggle fileless synthesized notification chimes on track skip / completion")
+    @app_commands.describe(enabled="Enable or disable synthetic chimes (leave blank to toggle)")
+    async def chimes(self, interaction: discord.Interaction, enabled: Optional[bool] = None) -> None:
+        await interaction.response.defer(ephemeral=True)
+        if not await self._check_dj(interaction):
+            return
+
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+        player = self.bot.get_player(interaction.guild_id)
+
+        if enabled is None:
+            player.chimes_enabled = not player.chimes_enabled
+        else:
+            player.chimes_enabled = enabled
+
+        state = player.chimes_enabled
+        desc = t("chimes.enabled", locale) if state else t("chimes.disabled", locale)
+        embed = discord.Embed(
+            title="🔔 Synthetic Audio Chimes",
+            description=desc,
+            color=0x2ED573 if state else 0x747F8D,
+        )
+        if state:
+            embed.set_footer(text="Pure math harmonic sine synthesis (A5 + A6) via FFmpeg aevalsrc.")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
     # ── Status: show all A+ settings ─────────────────────────────────────────
 
     @app_commands.command(name="playbackinfo", description="Show current playback enhancement settings")
@@ -242,7 +298,9 @@ class PlaybackCog(commands.Cog, name="Playback"):
         embed.add_field(name="🎚️ Crossfade",   value=f"`{player.crossfade_seconds}s`" if player.crossfade_seconds else "`Off`", inline=True)
         embed.add_field(name="✂️ Silence Trim", value=toggle_str(player.silence_trim),         inline=True)
         embed.add_field(name="📊 Replay Gain",  value=toggle_str(player.replay_gain),           inline=True)
-        embed.set_footer(text="Use /speed, /pitch, /crossfade, /silencetrim, /replaygain to change settings.")
+        embed.add_field(name="📻 Gapless",      value=toggle_str(player.gapless),               inline=True)
+        embed.add_field(name="🔔 Chimes",       value=toggle_str(player.chimes_enabled),        inline=True)
+        embed.set_footer(text="Use /speed, /pitch, /crossfade, /silencetrim, /replaygain, /gapless, /chimes to change settings.")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 

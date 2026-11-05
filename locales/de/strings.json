@@ -257,5 +257,19 @@
   "error.internal_incident": "Ein unerwarteter interner Fehler ist aufgetreten. Bitte melden Sie die Vorfalls-ID `{incident_id}` dem Support.",
   "health.backup_status": "Datenbank-Sicherung",
   "health.backup_details": "Gesamt: `{total}` | Neueste: `{latest}` (`{size}MB`)",
-  "health.backup_none": "Noch keine Sicherungen erstellt"
+  "health.backup_none": "Noch keine Sicherungen erstellt",
+  "vocal.mode_set": "🎤 Vokalverarbeitung auf **{mode}** eingestellt (Unterdrückung: `{suppression}%`).",
+  "vocal.suppression_set": "🎤 Vokalunterdrückungsstufe auf **{suppression}%** eingestellt.",
+  "vocal.off": "🎤 Vokalverarbeitung ist jetzt **deaktiviert** (Originalmischung wiederhergestellt).",
+  "vocal.invalid_suppression": "Die Unterdrückungsintensität muss zwischen 1 und 100 liegen.",
+  "spatial.preset_set": "🎧 Räumliche 3D-Akustik auf **{preset}** eingestellt.",
+  "spatial.off": "🎧 Räumliche 3D-Verarbeitung ist jetzt **deaktiviert** (Standard-Stereo).",
+  "gapless.enabled": "📻 Lückenlose Audiowiedergabe (Gapless) ist jetzt **aktiviert** (nahtloser Übergang).",
+  "gapless.disabled": "📻 Lückenlose Audiowiedergabe (Gapless) ist jetzt **deaktiviert**.",
+  "remaster.enabled": "💎 Studio Remaster Engine ist jetzt **aktiviert**.",
+  "remaster.disabled": "💎 Studio Remaster Engine ist jetzt **deaktiviert**.",
+  "clarity.level_set": "💎 Harmonische Klarheitsstufe auf **Stufe {level}** eingestellt.",
+  "loudnorm.profile_set": "📊 EBU R128 Profil auf **{profile}** umgestellt.",
+  "chimes.enabled": "🔔 Synthetische Benachrichtigungstöne sind jetzt **aktiviert**.",
+  "chimes.disabled": "🔔 Synthetische Benachrichtigungstöne sind jetzt **deaktiviert**."
 }

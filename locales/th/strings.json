@@ -257,5 +257,19 @@
   "error.internal_incident": "เกิดข้อผิดพลาดภายในที่ไม่คาดคิด โปรดแจ้งรหัสเหตุการณ์ `{incident_id}` แก่ผู้ดูแลระบบ",
   "health.backup_status": "สำรองข้อมูลฐานข้อมูล",
   "health.backup_details": "ทั้งหมด: `{total}` ไฟล์ | ล่าสุด: `{latest}` (`{size}MB`)",
-  "health.backup_none": "ยังไม่มีไฟล์สำรองข้อมูล"
+  "health.backup_none": "ยังไม่มีไฟล์สำรองข้อมูล",
+  "vocal.mode_set": "🎤 ตั้งค่าระบบประมวลผลเสียงร้องเป็น **{mode}** (ระดับการตัดเสียง: `{suppression}%`)",
+  "vocal.suppression_set": "🎤 ปรับระดับการตัดเสียงร้องเป็น **{suppression}%** แล้ว",
+  "vocal.off": "🎤 ปิดการทำงานของระบบประมวลผลเสียงร้องแล้ว (กลับสู่มิกซ์เสียงปกติ)",
+  "vocal.invalid_suppression": "ระดับการตัดเสียงต้องอยู่ระหว่าง 1 ถึง 100",
+  "spatial.preset_set": "🎧 ตั้งค่ามิติเสียง Spatial 3D เป็น **{preset}** แล้ว",
+  "spatial.off": "🎧 ปิดการทำงานของระบบมิติเสียง Spatial 3D แล้ว (สเตอริโอมาตรฐาน)",
+  "gapless.enabled": "📻 เปิดใช้งานการเล่นเพลงต่อเนื่อง Gapless แล้ว (ไร้ช่วงเงียบ Dead Air)",
+  "gapless.disabled": "📻 ปิดใช้งานการเล่นเพลงต่อเนื่อง Gapless แล้ว",
+  "remaster.enabled": "💎 เปิดใช้งานโหมด Studio Remaster เสียงใสเบสแน่นแล้ว",
+  "remaster.disabled": "💎 ปิดใช้งานโหมด Studio Remaster แล้ว",
+  "clarity.level_set": "💎 ปรับระดับความใสของเสียงแหลม (Clarity) เป็น **ระดับ {level}** แล้ว",
+  "loudnorm.profile_set": "📊 สลับโปรไฟล์ EBU R128 เป็น **{profile}** แล้ว",
+  "chimes.enabled": "🔔 เปิดใช้งานเสียงแจ้งเตือนสังเคราะห์ไร้ไฟล์ (Chimes) แล้ว",
+  "chimes.disabled": "🔔 ปิดใช้งานเสียงแจ้งเตือนสังเคราะห์ไร้ไฟล์ (Chimes) แล้ว"
 }

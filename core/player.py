@@ -160,6 +160,16 @@ class GuildPlayer:
         self.pan_balance:       float                     = 0.0    # F2.8: -1.0 to 1.0 (0.0 = center)
         self.stereo_width:      float                     = 1.0    # F2.8: 1.0 = normal
 
+        # ── Studio DSP & Audio Engine (Gen 5.0) ──────────────────────────────
+        self.vocal_mode:        Optional[str]             = None   # 'remove', 'isolate', or None
+        self.vocal_suppression: int                       = 100    # 1 to 100 percent
+        self.spatial_preset:    Optional[str]             = None   # 'binaural', 'hall', 'studio', 'club', or None
+        self.gapless:           bool                      = False  # Gapless transition
+        self.remaster:          bool                      = False  # Sub-harmonic & clarity remaster
+        self.clarity_level:     int                       = 2      # 1 to 5
+        self.loudnorm_profile:  str                       = 'broadcast'  # broadcast, podcast, background, party
+        self.chimes_enabled:    bool                      = False  # Fileless synthetic chimes
+
         # ── Tier B: Embed Theme (F27) ─────────────────────────────────
         self.embed_theme: str = "classic"  # matches EmbedTheme values
 
@@ -509,6 +519,15 @@ class GuildPlayer:
         self.loudnorm              = False
         self.pan_balance           = 0.0
         self.stereo_width          = 1.0
+        # Studio DSP & Audio Engine reset
+        self.vocal_mode            = None
+        self.vocal_suppression     = 100
+        self.spatial_preset        = None
+        self.gapless               = False
+        self.remaster              = False
+        self.clarity_level         = 2
+        self.loudnorm_profile      = 'broadcast'
+        self.chimes_enabled        = False
         # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
         # and replace the playing lock (may be locked from a concurrent call).
         self._play_seq     += 1

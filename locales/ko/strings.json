@@ -257,5 +257,19 @@
   "error.internal_incident": "예기치 않은 내부 오류가 발생했습니다. 지원팀에 인시던트 ID `{incident_id}` 를 제보해 주세요。",
   "health.backup_status": "데이터베이스 백업",
   "health.backup_details": "총 `{total}` 개 | 최신: `{latest}` (`{size}MB`)",
-  "health.backup_none": "생성된 백업이 아직 없습니다"
+  "health.backup_none": "생성된 백업이 아직 없습니다",
+  "vocal.mode_set": "🎤 보컬 처리 모드가 **{mode}**(으)로 설정되었습니다(억제 강도: `{suppression}%`).",
+  "vocal.suppression_set": "🎤 보컬 억제 강도가 **{suppression}%**(으)로 설정되었습니다.",
+  "vocal.off": "🎤 보컬 처리가 **비활성화**되었습니다(원래 믹스로 복원).",
+  "vocal.invalid_suppression": "억제 강도는 1에서 100 사이여야 합니다.",
+  "spatial.preset_set": "🎧 3D 공간 음향이 **{preset}**(으)로 설정되었습니다.",
+  "spatial.off": "🎧 3D 공간 음향이 **비활성화**되었습니다(표준 스테레오).",
+  "gapless.enabled": "📻 무음 없는 끊김 없는 재생(Gapless)이 **활성화**되었습니다.",
+  "gapless.disabled": "📻 끊김 없는 재생(Gapless)이 **비활성화**되었습니다.",
+  "remaster.enabled": "💎 스튜디오 리마스터 모드가 **활성화**되었습니다.",
+  "remaster.disabled": "💎 스튜디오 리마스터 모드가 **비활성화**되었습니다.",
+  "clarity.level_set": "💎 고음 선명도 복원 수준이 **{level}단계**로 설정되었습니다.",
+  "loudnorm.profile_set": "📊 EBU R128 프로필이 **{profile}**(으)로 변경되었습니다.",
+  "chimes.enabled": "🔔 합성 알림음(Chimes)이 **활성화**되었습니다.",
+  "chimes.disabled": "🔔 합성 알림음(Chimes)이 **비활성화**되었습니다."
 }

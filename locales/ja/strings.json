@@ -257,5 +257,19 @@
   "error.internal_incident": "予期しない内部エラーが発生しました。インシデントID `{incident_id}` をサポートに報告してください。",
   "health.backup_status": "データベースバックアップ",
   "health.backup_details": "合計: `{total}` 件 | 最新: `{latest}` (`{size}MB`)",
-  "health.backup_none": "まだバックアップが作成されていません"
+  "health.backup_none": "まだバックアップが作成されていません",
+  "vocal.mode_set": "🎤 ボーカル処理モードを **{mode}** に設定しました（抑制強度：`{suppression}%`）。",
+  "vocal.suppression_set": "🎤 ボーカル抑制強度を **{suppression}%** に設定しました。",
+  "vocal.off": "🎤 ボーカル処理を**無効**にしました（元のミックスに復元）。",
+  "vocal.invalid_suppression": "抑制強度は 1 から 100 の間で指定してください。",
+  "spatial.preset_set": "🎧 3D 空間オーディオプリセットを **{preset}** に設定しました。",
+  "spatial.off": "🎧 3D 空間オーディオを**無効**にしました（標準ステレオ）。",
+  "gapless.enabled": "📻 ギャップレス再生が**有効**になりました（無音時間を解消）。",
+  "gapless.disabled": "📻 ギャップレス再生が**無効**になりました。",
+  "remaster.enabled": "💎 スタジオリマスターモードが**有効**になりました。",
+  "remaster.disabled": "💎 スタジオリマスターモードが**無効**になりました。",
+  "clarity.level_set": "💎 高域クラリティレベルを **レベル {level}** に設定しました。",
+  "loudnorm.profile_set": "📊 EBU R128 プロファイルを **{profile}** に切り替えました。",
+  "chimes.enabled": "🔔 合成チャイム通知音を**有効**にしました。",
+  "chimes.disabled": "🔔 合成チャイム通知音を**無効**にしました。"
 }

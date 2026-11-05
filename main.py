@@ -97,6 +97,9 @@ _COGS = [
     "loop_ab.cog",           # Feature 2.7: Loop A-B Segment Repeat (/loopab)
     "pan.cog",               # Feature 2.8: Audio Pan & Stereo Widening (/pan /stereowide)
     "dashboard.cog",         # Feature 4: Local Web Dashboard (/dashboard)
+    "vocal.cog",             # Gen 5.0: Mid-Side Vocal Remover & Acapella Isolator (/vocal)
+    "spatial.cog",           # Gen 5.0: Spatial 3D & Binaural Virtualizer (/spatial)
+    "remaster.cog",          # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster (/remaster /clarity)
 ]
 
 
