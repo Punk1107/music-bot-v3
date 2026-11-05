@@ -247,5 +247,12 @@
   "queue.dup_block": "阻止重复",
   "autoplay.mode_off": "关闭",
   "autoplay.mode_smart": "智能自动播放",
-  "autoplay.mode_queue": "队列自动播放"
+  "autoplay.mode_queue": "队列自动播放",
+  "health.gateway": "Discord 网关",
+  "health.gateway_optimal": "🟢 极佳",
+  "health.gateway_acceptable": "🟡 良好",
+  "health.gateway_degraded": "🟠 延迟偏高",
+  "health.gateway_critical": "🔴 严重延迟",
+  "health.gateway_details": "延迟: `{current}ms` (平均: `{avg}ms` ± `{jitter}ms`)\n恢复会话: `{resumes}` | 重新连接: `{reconnects}`",
+  "error.internal_incident": "发生意外内部错误。请向支持人员提供事件编号 `{incident_id}`。"
 }

@@ -247,5 +247,12 @@
   "queue.dup_block": "Block Duplicates",
   "autoplay.mode_off": "Off",
   "autoplay.mode_smart": "Smart Autoplay",
-  "autoplay.mode_queue": "Queue Autoplay"
+  "autoplay.mode_queue": "Queue Autoplay",
+  "health.gateway": "Discord Gateway",
+  "health.gateway_optimal": "🟢 Optimal",
+  "health.gateway_acceptable": "🟡 Acceptable",
+  "health.gateway_degraded": "🟠 Degraded",
+  "health.gateway_critical": "🔴 Critical",
+  "health.gateway_details": "Latency: `{current}ms` (Avg: `{avg}ms` ± `{jitter}ms`)\nResumes: `{resumes}` | Reconnects: `{reconnects}`",
+  "error.internal_incident": "An unexpected internal error occurred. Please report Incident ID `{incident_id}` to support."
 }

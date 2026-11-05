@@ -247,5 +247,12 @@
   "queue.dup_block": "重複をブロック",
   "autoplay.mode_off": "オフ",
   "autoplay.mode_smart": "スマート自動再生",
-  "autoplay.mode_queue": "キュー自動再生"
+  "autoplay.mode_queue": "キュー自動再生",
+  "health.gateway": "Discord ゲートウェイ",
+  "health.gateway_optimal": "🟢 最適",
+  "health.gateway_acceptable": "🟡 良好",
+  "health.gateway_degraded": "🟠 低下",
+  "health.gateway_critical": "🔴 危険",
+  "health.gateway_details": "レイテンシ: `{current}ms` (平均: `{avg}ms` ± `{jitter}ms`)\n再開: `{resumes}` | 再接続: `{reconnects}`",
+  "error.internal_incident": "予期しない内部エラーが発生しました。インシデントID `{incident_id}` をサポートに報告してください。"
 }

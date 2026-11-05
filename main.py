@@ -57,7 +57,8 @@ from core.stability      import (                    # Stability suite
     DeadTaskWatchdog, MemoryLeakDetector,
 )
 from core import metrics as metrics_module           # Runtime metrics snapshots
-from core.startup_validator import validate_pre_login  # Pre-login validation
+from core.startup_validator import validate_pre_login
+from core.gateway_monitor import GatewayLatencyMonitor  # Pre-login validation
 from webserver           import WebServer
 from autoplay.service    import AutoplayService      # Feature 1.4: Smart Autoplay
 from seek.service        import SeekService          # Features 2.1-2.4: Seek & Hot-Reload
@@ -162,6 +163,9 @@ class MusicBot(commands.Bot):
         self.task_watchdog:     Optional[DeadTaskWatchdog]             = None
         self.mem_leak_detector: Optional[MemoryLeakDetector]           = None
         self.metrics:           Optional[metrics_module.MetricsCollector] = None
+
+        # ── Gateway Latency & Resilience Monitor ─────────────────────────────
+        self.gateway_monitor: GatewayLatencyMonitor = GatewayLatencyMonitor()
 
         # ── Background task tracker ───────────────────────────────────────────
         self._background_tasks: set[asyncio.Task] = set()
@@ -382,7 +386,17 @@ class MusicBot(commands.Bot):
 
     # ── Events ────────────────────────────────────────────────────────────────
 
+    async def on_connect(self) -> None:
+        self.gateway_monitor.on_connect()
+
+    async def on_disconnect(self) -> None:
+        self.gateway_monitor.on_disconnect()
+
+    async def on_resumed(self) -> None:
+        self.gateway_monitor.on_resumed()
+
     async def on_ready(self) -> None:
+        self.gateway_monitor.record_latency(self.latency)
         logger.info(
             "✅ Logged in as %s (ID: %d) | %d guilds",
             self.user, self.user.id, len(self.guilds)
@@ -457,7 +471,7 @@ class MusicBot(commands.Bot):
         logger.info("Left guild: %s (ID: %d)", guild.name, guild.id)
         player = self._players.pop(guild.id, None)
         if player:
-            player.reset()
+            player.destroy()
 
     async def on_voice_state_update(
         self,
@@ -790,10 +804,11 @@ class MusicBot(commands.Bot):
                     pass
                 stale_guilds.append(guild_id)
 
+        self.gateway_monitor.record_latency(self.latency)
         for gid in stale_guilds:
             p = self._players.pop(gid, None)
             if p:
-                p.reset()
+                p.destroy()
         if stale_guilds:
             logger.debug(
                 "Pruned %d stale GuildPlayer entries from _players registry",
@@ -806,8 +821,10 @@ class MusicBot(commands.Bot):
 
     @tasks.loop(seconds=config.QUEUE_SAVE_INTERVAL)
     async def _queue_save(self) -> None:
-        """Periodic queue persistence (write-ahead saves happen on enqueue too)."""
+        """Periodic queue persistence (skips unmodified queues to save DB IOPS)."""
         for guild_id, player in self._players.items():
+            if not getattr(player, "_queue_dirty", False):
+                continue
             q = player.queue
             if not q:
                 continue
@@ -817,6 +834,7 @@ class MusicBot(commands.Bot):
                 continue
             try:
                 await self.db.save_queue(guild_id, vc.channel.id, q)
+                player._queue_dirty = False
             except Exception as exc:
                 logger.debug("Periodic queue save error guild %d: %s", guild_id, exc)
 
@@ -1042,6 +1060,8 @@ class MusicBot(commands.Bot):
     async def _memory_pressure(self) -> None:
         """Check bot process RSS and evict caches if pressure thresholds exceeded (F32)."""
         try:
+            self.gateway_monitor.record_latency(self.latency)
+            self._background_tasks = {t for t in self._background_tasks if not t.done()}
             result = await check_memory_pressure()
             if result["level"] >= 2:
                 logger.warning(
@@ -1114,9 +1134,21 @@ class MusicBot(commands.Bot):
         interaction: discord.Interaction,
         error: Exception,
     ) -> None:
+        import secrets
         from utils.embeds import error_embed
         kind = log_with_kind(error, logger, context="app_command", include_traceback=True)
-        embed = error_embed("Unexpected Error", str(error)[:200])
+        locale = get_locale_sync(interaction.guild_id)
+
+        if kind == ExceptionKind.EXPECTED:
+            embed = error_embed(t("error.unexpected", locale), str(error)[:200])
+        else:
+            incident_id = secrets.token_hex(4).upper()
+            logger.error("Command error [Incident %s]: %s", incident_id, error)
+            embed = error_embed(
+                t("error.unexpected", locale),
+                t("error.internal_incident", locale, incident_id=incident_id),
+            )
+
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(embed=embed, ephemeral=True)

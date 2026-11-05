@@ -247,5 +247,12 @@
   "queue.dup_block": "Duplikate blockieren",
   "autoplay.mode_off": "Aus",
   "autoplay.mode_smart": "Intelligente Autowiedergabe",
-  "autoplay.mode_queue": "Warteschlangen-Autowiedergabe"
+  "autoplay.mode_queue": "Warteschlangen-Autowiedergabe",
+  "health.gateway": "Discord-Gateway",
+  "health.gateway_optimal": "🟢 Optimal",
+  "health.gateway_acceptable": "🟡 Akzeptabel",
+  "health.gateway_degraded": "🟠 Beeinträchtigt",
+  "health.gateway_critical": "🔴 Kritisch",
+  "health.gateway_details": "Latenz: `{current}ms` (Durchschnitt: `{avg}ms` ± `{jitter}ms`)\nFortsetzungen: `{resumes}` | Wiederverbindungen: `{reconnects}`",
+  "error.internal_incident": "Ein unerwarteter interner Fehler ist aufgetreten. Bitte melden Sie die Vorfalls-ID `{incident_id}` dem Support."
 }

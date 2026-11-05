@@ -63,6 +63,7 @@ class GuildPlayer:
         # ── Queue ──────────────────────────────────────────────────────────────
         self._queue: deque[Track] = deque()
         self.queue_lock: asyncio.Lock = asyncio.Lock()
+        self._queue_dirty: bool = False
 
         # ── Playback concurrency guard (Bug 1 + 3) ────────────────────────────
         # Prevents two coroutines from entering _play_next simultaneously.
@@ -182,12 +183,14 @@ class GuildPlayer:
         """Add one track and return new queue length."""
         async with self.queue_lock:
             self._queue.append(track)
+            self._queue_dirty = True
             return len(self._queue)
 
     async def extend(self, tracks: list[Track]) -> int:
         """Bulk-add tracks. Returns new queue length."""
         async with self.queue_lock:
             self._queue.extend(tracks)
+            self._queue_dirty = True
             return len(self._queue)
 
     async def enqueue_next(self, track: Track) -> int:
@@ -195,6 +198,7 @@ class GuildPlayer:
         Returns new queue length."""
         async with self.queue_lock:
             self._queue.appendleft(track)
+            self._queue_dirty = True
             return len(self._queue)
 
     async def extend_next(self, tracks: list[Track]) -> int:
@@ -203,6 +207,7 @@ class GuildPlayer:
         async with self.queue_lock:
             for track in reversed(tracks):
                 self._queue.appendleft(track)
+            self._queue_dirty = True
             return len(self._queue)
 
     async def dequeue(self) -> Optional[Track]:
@@ -224,6 +229,7 @@ class GuildPlayer:
 
             if self.loop_mode == LoopMode.QUEUE:
                 self._queue.append(track)
+            self._queue_dirty = True
 
             return track
 
@@ -235,6 +241,7 @@ class GuildPlayer:
                 return None
             removed = lst.pop(index)
             self._queue = deque(lst)
+            self._queue_dirty = True
             return removed
 
     async def move(self, from_idx: int, to_idx: int) -> bool:
@@ -247,6 +254,7 @@ class GuildPlayer:
             track = lst.pop(from_idx)
             lst.insert(to_idx, track)
             self._queue = deque(lst)
+            self._queue_dirty = True
             return True
 
     async def shuffle(self) -> None:
@@ -254,12 +262,14 @@ class GuildPlayer:
             lst = list(self._queue)
             random.shuffle(lst)
             self._queue = deque(lst)
+            self._queue_dirty = True
 
     async def clear(self) -> int:
         """Clear queue and return how many tracks were removed."""
         async with self.queue_lock:
             count = len(self._queue)
             self._queue.clear()
+            self._queue_dirty = True
             return count
 
     def cancel_loop_ab(self) -> None:
@@ -281,6 +291,8 @@ class GuildPlayer:
         # Perf-1: clear embed color cache so the next track re-resolves its color
         self._cached_base_color = None
         self._np_last_bar_step  = -1
+        self.now_playing_msg    = None
+        self.now_playing_msg_id = None
 
     # ── Tier A: Undo (F19) ─────────────────────────────────────────
 
@@ -298,6 +310,7 @@ class GuildPlayer:
         """Restore the queue from an UndoEntry snapshot."""
         async with self.queue_lock:
             self._queue = deque(entry.snapshot)
+            self._queue_dirty = True
 
     # ── Tier A: Transaction (F20) ─────────────────────────────────────
 
@@ -321,6 +334,7 @@ class GuildPlayer:
             return False
         async with self.queue_lock:
             self._queue = deque(self._transaction)
+            self._queue_dirty = True
         self._transaction = None
         return True
 
@@ -419,6 +433,7 @@ class GuildPlayer:
             # Drop everything before the target
             self._queue = deque(lst[index:])
             self._history_track = None  # Ensure dequeue() yields the target track even under LoopMode.TRACK
+            self._queue_dirty = True
             return target
 
     # ── Prefetch ──────────────────────────────────────────────────────────────
@@ -464,6 +479,7 @@ class GuildPlayer:
         self.alone_since       = None
 
         self._queue.clear()
+        self._queue_dirty          = True
         self.now_playing           = None
         self.play_start_time       = None
         self.now_playing_msg       = None
@@ -504,3 +520,20 @@ class GuildPlayer:
         # Note: intentional_disconnect is NOT reset here on purpose.
         # It is set True after reset() in /stop and /leave, then cleared
         # in _ensure_voice() when a new voice connection is established.
+
+    def destroy(self) -> None:
+        """Explicitly cleanup and cancel all player tasks and release resources."""
+        self.reset()
+        if self.alone_leave_task and not self.alone_leave_task.done():
+            self.alone_leave_task.cancel()
+            self.alone_leave_task = None
+        if self.sleep_timer_task and not self.sleep_timer_task.done():
+            self.sleep_timer_task.cancel()
+            self.sleep_timer_task = None
+        if self.loop_ab_task and not self.loop_ab_task.done():
+            self.loop_ab_task.cancel()
+            self.loop_ab_task = None
+        if self._prefetch_task and not self._prefetch_task.done():
+            self._prefetch_task.cancel()
+            self._prefetch_task = None
+        self.voice_client = None

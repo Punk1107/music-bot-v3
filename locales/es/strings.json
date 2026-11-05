@@ -247,5 +247,12 @@
   "queue.dup_block": "Bloquear duplicados",
   "autoplay.mode_off": "Desactivado",
   "autoplay.mode_smart": "Reproducción automática inteligente",
-  "autoplay.mode_queue": "Reproducción automática de cola"
+  "autoplay.mode_queue": "Reproducción automática de cola",
+  "health.gateway": "Pasarela Discord",
+  "health.gateway_optimal": "🟢 Óptimo",
+  "health.gateway_acceptable": "🟡 Aceptable",
+  "health.gateway_degraded": "🟠 Degradado",
+  "health.gateway_critical": "🔴 Crítico",
+  "health.gateway_details": "Latencia: `{current}ms` (Media: `{avg}ms` ± `{jitter}ms`)\nReanudaciones: `{resumes}` | Reconexiones: `{reconnects}`",
+  "error.internal_incident": "Ocurrió un error interno inesperado. Informe el ID de incidente `{incident_id}` al soporte técnico."
 }

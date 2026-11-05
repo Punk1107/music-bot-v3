@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import gc
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -278,10 +279,12 @@ async def check_memory_pressure() -> dict:
         for c in all_caches():
             freed += await c.clear()
         result["freed"] = freed
+        freed_gc = gc.collect(2)
+        result["gc_freed"] = freed_gc
         logger.warning(
             "🔴 Memory pressure CRITICAL — bot RSS=%.0fMiB (threshold %.0fMiB) | "
-            "system RAM=%.1f%% — cleared all caches (%d entries freed)",
-            rss_mb, aggressive_mb, sys_ram_pct, freed,
+            "system RAM=%.1f%% — cleared all caches (%d entries freed, %d gc objects collected)",
+            rss_mb, aggressive_mb, sys_ram_pct, freed, freed_gc,
         )
         _last_action_level = 3
 
@@ -292,10 +295,12 @@ async def check_memory_pressure() -> dict:
         for c in all_caches():
             freed += await c.evict_fraction(0.5)
         result["freed"] = freed
+        freed_gc = gc.collect(1)
+        result["gc_freed"] = freed_gc
         logger.warning(
             "🟠 Memory pressure HIGH — bot RSS=%.0fMiB (threshold %.0fMiB) | "
-            "system RAM=%.1f%% — evicted 50%% of each cache (%d entries freed)",
-            rss_mb, moderate_mb, sys_ram_pct, freed,
+            "system RAM=%.1f%% — evicted 50%% of each cache (%d entries freed, %d gc objects collected)",
+            rss_mb, moderate_mb, sys_ram_pct, freed, freed_gc,
         )
         _last_action_level = 2
 

@@ -12,7 +12,9 @@ V3 Stability additions:
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import time
 import traceback
 from typing import Optional, TYPE_CHECKING, Any
 
@@ -148,22 +150,58 @@ async def notify_playback_error(
         pass
 
 
+_recent_errors: dict[str, float] = {}
+_suppressed_counts: dict[str, int] = {}
+
+
+def _compute_error_fingerprint(error: Exception) -> str:
+    """Compute a deterministic hash fingerprint from the exception type and traceback frames."""
+    tb_lines = traceback.format_exception(type(error), error, error.__traceback__)
+    sig = f"{type(error).__name__}:" + "".join(tb_lines[-3:])
+    return hashlib.md5(sig.encode("utf-8", errors="replace")).hexdigest()
+
+
 async def forward_to_dev_channel(
     bot:   "MusicBot",
     error: Exception,
     ctx:   Optional[discord.Interaction] = None,
 ) -> None:
-    """Forward a full traceback to all configured developer log channels."""
+    """Forward a full traceback to all configured developer log channels with deduplication & rate limiting."""
+    global _recent_errors, _suppressed_counts
     import config as cfg
     channel_ids: list[int] = getattr(cfg, "DEV_LOG_CHANNEL_IDS", [])
     if not channel_ids:
         return
 
+    rate_limit_secs = getattr(cfg, "DEV_LOG_RATE_LIMIT_SECS", 60.0)
+    fp = _compute_error_fingerprint(error)
+    now = time.time()
+    last_sent = _recent_errors.get(fp, 0.0)
+
+    if now - last_sent < rate_limit_secs:
+        _suppressed_counts[fp] = _suppressed_counts.get(fp, 0) + 1
+        logger.debug(
+            "forward_to_dev_channel: suppressed duplicate error fingerprint %s (count: %d)",
+            fp, _suppressed_counts[fp],
+        )
+        return
+
+    suppressed = _suppressed_counts.pop(fp, 0)
+    _recent_errors[fp] = now
+
+    # Housekeeping
+    if len(_recent_errors) > 200:
+        cutoff = now - (2 * rate_limit_secs)
+        _recent_errors = {k: v for k, v in _recent_errors.items() if v >= cutoff}
+
     tb = "".join(traceback.format_exception(type(error), error, error.__traceback__))
     ctx_info = ""
     if ctx:
-        ctx_info = f"Guild: {ctx.guild_id} | User: {ctx.user.id} | Command: {ctx.command}\n"
-    content = f"```\n{ctx_info}{tb[:1800]}\n```"
+        cmd_name = getattr(ctx.command, "name", str(ctx.command)) if ctx.command else "Unknown"
+        ctx_info = f"Guild: {ctx.guild_id} | User: {ctx.user.id} | Command: {cmd_name}\n"
+
+    suppress_suffix = f"\n*(suppressed {suppressed} identical occurrences in last {int(rate_limit_secs)}s)*" if suppressed > 0 else ""
+    content = f"```\n{ctx_info}{tb[:1700]}\n```{suppress_suffix}"
 
     for cid in channel_ids:
         channel = bot.get_channel(cid)
