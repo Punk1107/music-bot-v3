@@ -50,6 +50,7 @@ EXPECTED_TOP_LEVEL_COMMANDS = {
     # 7. Audio DSP, Equalizer & Soundstage
     "volume", "effects", "effects_list", "effects_clear", "quality", "equalizer", "eq",
     "loudnorm", "pan", "stereowide", "speed", "pitch", "crossfade", "silencetrim", "replaygain", "playbackinfo",
+    "gapless", "vocal", "spatial", "remaster", "clarity", "chimes",
     # 8. Customization, Favorites & Presets
     "favorite", "bookmark", "preset", "theme", "themeinfo", "sleep", "sleepstatus", "language", "languageinfo",
     # 9. Administration & Diagnostics

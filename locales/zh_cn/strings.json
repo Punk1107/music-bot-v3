@@ -257,5 +257,19 @@
   "error.internal_incident": "发生意外内部错误。请向支持人员提供事件编号 `{incident_id}`。",
   "health.backup_status": "数据库备份",
   "health.backup_details": "总计: `{total}` 份 | 最新: `{latest}` (`{size}MB`)",
-  "health.backup_none": "尚未创建任何备份"
+  "health.backup_none": "尚未创建任何备份",
+  "vocal.mode_set": "🎤 人声处理模式已设置为 **{mode}**（消除强度：`{suppression}%`）。",
+  "vocal.suppression_set": "🎤 人声消除强度已设置为 **{suppression}%**。",
+  "vocal.off": "🎤 人声处理已**禁用**（恢复原始混音）。",
+  "vocal.invalid_suppression": "消除强度必须在 1 到 100 之间。",
+  "spatial.preset_set": "🎧 3D 空间声学已设置为 **{preset}**。",
+  "spatial.off": "🎧 3D 空间音频已**禁用**（标准立体声）。",
+  "gapless.enabled": "📻 无缝音频衔接已**启用**（消除歌曲间隙）。",
+  "gapless.disabled": "📻 无缝音频衔接已**禁用**。",
+  "remaster.enabled": "💎 母带重制模式已**启用**（高频复原与次低音增强）。",
+  "remaster.disabled": "💎 母带重制模式已**禁用**。",
+  "clarity.level_set": "💎 高频清晰度已设置为 **第 {level} 级**。",
+  "loudnorm.profile_set": "📊 EBU R128 响度配置文件已切换为 **{profile}**。",
+  "chimes.enabled": "🔔 合成提示音已**启用**。",
+  "chimes.disabled": "🔔 合成提示音已**禁用**。"
 }

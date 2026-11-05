@@ -107,6 +107,18 @@ music-bot-v3/
 │   ├── router.py               # MultiSourceRouter (YouTube, Spotify, SoundCloud, Bandcamp)
 │   └── soundcloud.py           # Native SoundCloud track, set & search extractor
 │
+├── vocal/                      # Gen 5.0: Mid-Side Stereo Vocal Remover & Acapella Isolator
+│   ├── cog.py                  # Slash command: /vocal
+│   └── filter.py               # stereotools Mid-Side separation & bandpass filter
+│
+├── spatial/                    # Gen 5.0: Spatial 3D & Binaural Headphone Virtualizer
+│   ├── cog.py                  # Slash command: /spatial
+│   └── filter.py               # earwax HRTF, hall, studio, club acoustic presets
+│
+├── remaster/                   # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster
+│   ├── cog.py                  # Slash commands: /remaster, /clarity
+│   └── filter.py               # crystalizer high-frequency recovery & 45Hz sub-bass punch
+│
 ├── cogs/                       # 14 Standard Discord Slash Cogs
 │   ├── music.py                # /play, /playnext, /search, /pause, /resume, /skip, /stop, /nowplaying
 │   ├── queue_cog.py            # /queue, /shuffle, /voteskip, /voteshuffle, /voteclear, /undo, /jump
@@ -426,7 +438,7 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/effects_clear` | — | Disable all active audio effects simultaneously. |
 | `/quality` | `preset: str` | Set audio quality: `low`, `medium`, `high`, `ultra`. |
 | `/equalizer` / `/eq` | `subcommand: ...` | 4-Band Equalizer: `preset <name>`, `custom <b m1 m2 t>`, `view`, `reset`. |
-| `/loudnorm` | `[enabled: bool]` | Toggle EBU R128 smart broadcast loudness normalization. |
+| `/loudnorm` | `[profile: str] [enabled: bool]` | EBU R128 Smart Loudnorm: `broadcast`, `podcast`, `background`, `party`. |
 | `/pan` | `balance: float` | Adjust audio balance from full left (`-1.0`) to full right (`+1.0`). |
 | `/stereowide` | `width: float` | Set stereo soundstage width: Mono (`0.0x`) to Ultra-Wide (`2.0x`). |
 | `/speed` | `rate: float` | Set playback speed (0.75× to 2.0×) without pitch changes. |
@@ -434,6 +446,12 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/crossfade` | `duration: int` | Set track crossfade duration (0s, 3s, 5s, 8s). |
 | `/silencetrim` | — | Toggle automatic silence trimming from track intro and outro. |
 | `/replaygain` | — | Toggle dynamic audio loudness normalization (`dynaudnorm`). |
+| `/gapless` | `[enabled: bool]` | Toggle seamless gapless audio mixing between tracks (no dead air). |
+| `/vocal` | `[mode: str] [suppression: 1-100]` | Mid-Side vocal remover (`remove`, `isolate`, `off`) with adjustable suppression. |
+| `/spatial` | `preset: str` | Spatial 3D & binaural virtualizer: `binaural`, `hall`, `studio`, `club`, `off`. |
+| `/remaster` | `[enabled: bool]` | Toggle Studio Remaster (crystalizer + 45Hz sub-harmonic punch). |
+| `/clarity` | `level: 1–5` | Set high-frequency harmonic clarity restoration level (capped <= 3.0). |
+| `/chimes` | `[enabled: bool]` | Toggle fileless synthesized notification chimes on track skip / completion. |
 | `/playbackinfo` | — | Display all active audio enhancement and DSP settings. |
 
 ### 8. 🎨 Customization, Favorites & Presets

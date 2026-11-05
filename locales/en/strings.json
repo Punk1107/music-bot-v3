@@ -257,5 +257,19 @@
   "error.internal_incident": "An unexpected internal error occurred. Please report Incident ID `{incident_id}` to support.",
   "health.backup_status": "Database Backup",
   "health.backup_details": "Total: `{total}` | Latest: `{latest}` (`{size}MB`)",
-  "health.backup_none": "No backups created yet"
+  "health.backup_none": "No backups created yet",
+  "vocal.mode_set": "🎤 Vocal processing set to **{mode}** (Suppression: `{suppression}%`).",
+  "vocal.suppression_set": "🎤 Vocal suppression level set to **{suppression}%**.",
+  "vocal.off": "🎤 Vocal processing is now **disabled** (original vocal mix restored).",
+  "vocal.invalid_suppression": "Suppression intensity must be between 1 and 100.",
+  "spatial.preset_set": "🎧 Spatial 3D acoustics set to **{preset}**.",
+  "spatial.off": "🎧 Spatial 3D processing is now **disabled** (standard stereo).",
+  "gapless.enabled": "📻 Gapless audio mixing is now **enabled** (seamless transition).",
+  "gapless.disabled": "📻 Gapless audio mixing is now **disabled**.",
+  "remaster.enabled": "💎 Studio Remaster Engine is now **enabled**.",
+  "remaster.disabled": "💎 Studio Remaster Engine is now **disabled**.",
+  "clarity.level_set": "💎 Harmonic clarity restoration level set to **Level {level}**.",
+  "loudnorm.profile_set": "📊 EBU R128 profile set to **{profile}**.",
+  "chimes.enabled": "🔔 Synthetic notification chimes are now **enabled**.",
+  "chimes.disabled": "🔔 Synthetic notification chimes are now **disabled**."
 }

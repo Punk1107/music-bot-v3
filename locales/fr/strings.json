@@ -257,5 +257,19 @@
   "error.internal_incident": "Une erreur interne inattendue s'est produite. Veuillez signaler l'identifiant d'incident `{incident_id}` à l'assistance.",
   "health.backup_status": "Sauvegarde de la BDD",
   "health.backup_details": "Total: `{total}` | Dernière: `{latest}` (`{size}MB`)",
-  "health.backup_none": "Aucune sauvegarde créée pour le moment"
+  "health.backup_none": "Aucune sauvegarde créée pour le moment",
+  "vocal.mode_set": "🎤 Traitement vocal réglé sur **{mode}** (Suppression : `{suppression}%`).",
+  "vocal.suppression_set": "🎤 Niveau de suppression vocale réglé sur **{suppression}%**.",
+  "vocal.off": "🎤 Le traitement vocal est désormais **désactivé** (mixage original restauré).",
+  "vocal.invalid_suppression": "L'intensité de suppression doit être comprise entre 1 et 100.",
+  "spatial.preset_set": "🎧 Acoustique spatiale 3D réglée sur **{preset}**.",
+  "spatial.off": "🎧 Le traitement spatial 3D est désormais **désactivé** (stéréo standard).",
+  "gapless.enabled": "📻 La lecture continue (gapless) est désormais **activée** (transition fluide).",
+  "gapless.disabled": "📻 La lecture continue (gapless) est désormais **désactivée**.",
+  "remaster.enabled": "💎 Le moteur Studio Remaster est désormais **activé**.",
+  "remaster.disabled": "💎 Le moteur Studio Remaster est désormais **désactivé**.",
+  "clarity.level_set": "💎 Niveau de clarté harmonique réglé sur **Niveau {level}**.",
+  "loudnorm.profile_set": "📊 Profil EBU R128 basculé sur **{profile}**.",
+  "chimes.enabled": "🔔 Les carillons de notification synthétisés sont désormais **activés**.",
+  "chimes.disabled": "🔔 Les carillons de notification synthétisés sont désormais **désactivés**."
 }

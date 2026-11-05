@@ -257,5 +257,19 @@
   "error.internal_incident": "Ocurrió un error interno inesperado. Informe el ID de incidente `{incident_id}` al soporte técnico.",
   "health.backup_status": "Copia de Seguridad de BD",
   "health.backup_details": "Total: `{total}` | Último: `{latest}` (`{size}MB`)",
-  "health.backup_none": "No se han creado copias de seguridad todavía"
+  "health.backup_none": "No se han creado copias de seguridad todavía",
+  "vocal.mode_set": "🎤 Modo de procesamiento vocal establecido en **{mode}** (Supresión: `{suppression}%`).",
+  "vocal.suppression_set": "🎤 Nivel de supresión vocal establecido en **{suppression}%**.",
+  "vocal.off": "🎤 El procesamiento vocal ahora está **desactivado** (mezcla original restaurada).",
+  "vocal.invalid_suppression": "La intensidad de supresión debe estar entre 1 y 100.",
+  "spatial.preset_set": "🎧 Acústica espacial 3D establecida en **{preset}**.",
+  "spatial.off": "🎧 El procesamiento espacial 3D ahora está **desactivado** (estéreo estándar).",
+  "gapless.enabled": "📻 Mezcla de audio continua (gapless) ahora está **activada** (transición fluida).",
+  "gapless.disabled": "📻 Mezcla de audio continua (gapless) ahora está **desactivada**.",
+  "remaster.enabled": "💎 El motor Studio Remaster ahora está **activado**.",
+  "remaster.disabled": "💎 El motor Studio Remaster ahora está **desactivado**.",
+  "clarity.level_set": "💎 Nivel de claridad armónica establecido en **Nivel {level}**.",
+  "loudnorm.profile_set": "📊 Perfil EBU R128 cambiado a **{profile}**.",
+  "chimes.enabled": "🔔 Tonos sintetizados de notificación ahora están **activados**.",
+  "chimes.disabled": "🔔 Tonos sintetizados de notificación ahora están **desactivados**."
 }

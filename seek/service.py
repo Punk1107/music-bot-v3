@@ -80,11 +80,23 @@ class SeekService:
         # ── Build FFmpeg options with seek offset ─────────────────────────────
         from equalizer.presets import build_equalizer_filter
         from pan.filter import build_pan_filter, build_stereo_enhance_filter
+        from vocal.filter import build_vocal_filter
+        from spatial.filter import build_spatial_filter
+        from remaster.filter import build_remaster_filter
+        from loudnorm.filter import build_loudnorm_filter
 
         eq_filter = build_equalizer_filter(getattr(player, "equalizer_bands", None))
         pan_filter = build_pan_filter(getattr(player, "pan_balance", 0.0))
         stereo_filter = build_stereo_enhance_filter(getattr(player, "stereo_width", 1.0))
+        vocal_filter = build_vocal_filter(getattr(player, "vocal_mode", None), getattr(player, "vocal_suppression", 100))
+        spatial_filter = build_spatial_filter(getattr(player, "spatial_preset", None))
+        remaster_filter = build_remaster_filter(getattr(player, "remaster", False), getattr(player, "clarity_level", 2))
         loudnorm_flag = getattr(player, "loudnorm", False)
+        loudnorm_filter = (
+            build_loudnorm_filter(profile=getattr(player, "loudnorm_profile", "broadcast"))
+            if loudnorm_flag else None
+        )
+        gapless_flag = getattr(player, "gapless", False)
 
         cfg_server = await self.bot.db.get_server_config(guild_id)
         ffmpeg_opts = self.bot.audio_processor.build_ffmpeg_options(
@@ -101,6 +113,11 @@ class SeekService:
             loudnorm=loudnorm_flag,
             pan_filter=pan_filter,
             stereo_filter=stereo_filter,
+            vocal_filter=vocal_filter,
+            spatial_filter=spatial_filter,
+            remaster_filter=remaster_filter,
+            loudnorm_filter=loudnorm_filter,
+            gapless=gapless_flag,
         )
 
         before_opts = ffmpeg_opts.get("before_options", "")
