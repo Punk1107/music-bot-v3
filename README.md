@@ -96,6 +96,15 @@ music-bot-v3/
 │   ├── cog.py                  # Slash commands: /pan, /stereowide
 │   └── filter.py               # FFmpeg pan balance & extrastereo widening filter builder
 │
+├── playlist/                   # Feature: Multi-Playlist Personal Manager (MySQL 8.0+ 1:N)
+│   ├── cog.py                  # Slash commands: /playlist create, add, remove, play, share, list, delete
+│   └── service.py              # Relational playlist service and list embed formatter
+│
+├── quiz/                       # Feature: Interactive Blind Music Quiz (B-Tree Instant Sampling)
+│   ├── cog.py                  # Slash commands: /quiz start, /quiz leaderboard
+│   ├── engine.py               # Game session, difflib title matching, random track fetcher
+│   └── views.py                # 4-option UI buttons with atomic lock and answer validation
+│
 ├── seek/                       # Feature: Hot-reload audio seeking
 │   ├── cog.py                  # Slash commands: /seek, /forward, /rewind, /replay, /restart
 │   ├── parser.py               # Human timestamp parser (HH:MM:SS, MM:SS, seconds, 1m30s)
@@ -379,6 +388,8 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/nowplaying` | — | Display the Gen-2 Now Playing embed with live two-tone progress bar. |
 | `/join` | — | Join the user's current voice channel. |
 | `/leave` | — | Disconnect the bot from voice and clear the queue. |
+| `/clip` | `[duration: 10-30s]` | Cut a 10–30s audio segment from currently playing track and send as MP3 file. |
+| `/grab` | — | Send current playing track details, URL, and high-res cover art directly to your DMs. |
 
 ### 2. 🗳️ Democratic Voice Voting
 | Command | Description |
@@ -390,7 +401,7 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 ### 3. 📋 Queue Operations & Control
 | Command | Arguments | Description |
 |---|---|---|
-| `/queue` | `[page: int]` | View the paginated server queue with total duration. |
+| `/queue` | `[page: int] [mode: fifo\|fair] [per_user_limit: int]` | View server queue, toggle fair-share round-robin scheduling, or configure per-user limit. |
 | `/shuffle` | — | Randomize the order of tracks in the queue. |
 | `/clear` | — | Clear all tracks from the queue (DJ/Admin). |
 | `/loop` | — | Cycle loop mode: `Off` ➔ `Track` ➔ `Queue`. |
@@ -454,9 +465,16 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/chimes` | `[enabled: bool]` | Toggle fileless synthesized notification chimes on track skip / completion. |
 | `/playbackinfo` | — | Display all active audio enhancement and DSP settings. |
 
-### 8. 🎨 Customization, Favorites & Presets
+### 8. 🎨 Customization, Favorites & Playlists
 | Command | Arguments | Description |
 |---|---|---|
+| `/playlist create` | `name: str [public: bool]` | Create a personal or guild-shared playlist. |
+| `/playlist add` | `name: str [query: str]` | Add current track or query to playlist. |
+| `/playlist remove` | `name: str position: int` | Remove a track from playlist by position. |
+| `/playlist play` | `name: str [shuffle: bool]` | Enqueue all tracks from a playlist. |
+| `/playlist share` | `name: str public: bool` | Toggle playlist public sharing in server. |
+| `/playlist list` | `[user: member]` | Browse personal or public playlists. |
+| `/playlist delete` | `name: str` | Delete a playlist and its tracks. |
 | `/favorite add` | `[name: str]` | Save the currently playing track to your personal favorites (up to 50). |
 | `/favorite list` | `[user: member]` | Browse your (or another user's) saved favorite tracks. |
 | `/favorite play` | `name: str` | Enqueue a saved favorite with fuzzy title matching. |
@@ -492,23 +510,29 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/cacheinfo` | — | Detailed statistics on LRU caches, hit rates, and evictions. |
 | `/help` | — | Interactive command guide and documentation. |
 
+### 10. 🎮 Community & Gamification
+| Command | Arguments | Description |
+|---|---|---|
+| `/quiz start` | `[rounds: int] [source: history\|favorites\|playlist]` | Launch interactive blind music quiz with 4-choice buttons and chat guesses. |
+| `/quiz leaderboard`| — | View server music quiz top score leaderboard. |
+
 ---
 
 ## 🌍 Universal 9-Language Localization (i18n)
 
-Music Bot Gen 4.0 achieves **100% translation parity across 9 major global languages**. Every language catalogue contains an identical set of **249 localized keys** with matching string formatting placeholders:
+Music Bot Gen 4.0 achieves **100% translation parity across 9 major global languages**. Every language catalogue contains an identical set of **294 localized keys** with matching string formatting placeholders:
 
 | Flag | Language | Locale Code | Aliases | Key Count | Parity Status |
 |:---:|---|:---:|---|:---:|:---:|
-| 🇺🇸 | **English** (Default) | `en` | `en-us`, `en-gb` | 249 | 100% Complete |
-| 🇹🇭 | **Thai** | `th` | `th-th` | 249 | 100% Complete |
-| 🇨🇳 | **Chinese (Simplified)**| `zh_cn` | `zh`, `zh-cn`, `zh_hans` | 249 | 100% Complete |
-| 🇯🇵 | **Japanese** | `ja` | `ja-jp` | 249 | 100% Complete |
-| 🇰🇷 | **Korean** | `ko` | `ko-kr` | 249 | 100% Complete |
-| 🇪🇸 | **Spanish** | `es` | `es-es` | 249 | 100% Complete |
-| 🇷🇺 | **Russian** | `ru` | `ru-ru` | 249 | 100% Complete |
-| 🇫🇷 | **French** | `fr` | `fr-fr` | 249 | 100% Complete |
-| 🇩🇪 | **German** | `de` | `de-de` | 249 | 100% Complete |
+| 🇺🇸 | **English** (Default) | `en` | `en-us`, `en-gb` | 294 | 100% Complete |
+| 🇹🇭 | **Thai** | `th` | `th-th` | 294 | 100% Complete |
+| 🇨🇳 | **Chinese (Simplified)**| `zh_cn` | `zh`, `zh-cn`, `zh_hans` | 294 | 100% Complete |
+| 🇯🇵 | **Japanese** | `ja` | `ja-jp` | 294 | 100% Complete |
+| 🇰🇷 | **Korean** | `ko` | `ko-kr` | 294 | 100% Complete |
+| 🇪🇸 | **Spanish** | `es` | `es-es` | 294 | 100% Complete |
+| 🇷🇺 | **Russian** | `ru` | `ru-ru` | 294 | 100% Complete |
+| 🇫🇷 | **French** | `fr` | `fr-fr` | 294 | 100% Complete |
+| 🇩🇪 | **German** | `de` | `de-de` | 294 | 100% Complete |
 
 Change the language for your server at any time using:
 ```bash

@@ -16,6 +16,7 @@ immediately on the playing track.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -278,6 +279,86 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if state:
             embed.set_footer(text="Pure math harmonic sine synthesis (A5 + A6) via FFmpeg aevalsrc.")
         await interaction.followup.send(embed=embed, ephemeral=True)
+
+    # ── Gen 5.0: Audio Clip Cutter & Ringer Generator ─────────────────────────
+
+    @app_commands.command(name="clip", description="Cut a 10–30s high-quality MP3 audio clip of the currently playing track")
+    @app_commands.describe(duration="Clip duration in seconds (10 to 30, default: 15)")
+    async def clip(self, interaction: discord.Interaction, duration: int = 15) -> None:
+        await interaction.response.defer()
+        guild_id = interaction.guild_id
+        if not guild_id:
+            return
+
+        player = self.bot.get_player(guild_id)
+        locale = await get_locale(guild_id, self.bot.db)
+
+        if not player.now_playing:
+            await interaction.followup.send(
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)),
+                ephemeral=True,
+            )
+            return
+
+        track = player.now_playing
+        clamped_dur = max(10, min(30, int(duration)))
+        start_sec = max(0, int(player.elapsed_seconds))
+        if track.duration and start_sec + clamped_dur > track.duration:
+            start_sec = max(0, int(track.duration - clamped_dur))
+
+        # Resolve stream URL
+        stream_url = track.stream_url_cache
+        if not stream_url:
+            try:
+                stream_url = await self.bot.youtube.get_stream_url(track.url, track)
+            except Exception as e:
+                logger.error("Clip URL resolve failed: %s", e)
+
+        if not stream_url:
+            await interaction.followup.send(
+                embed=error_embed("Clip Failed", t("clip.failed", locale)), ephemeral=True
+            )
+            return
+
+        import tempfile
+        import os
+        import subprocess
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            cmd = [
+                "ffmpeg", "-nostdin", "-y",
+                "-ss", str(start_sec),
+                "-i", stream_url,
+                "-t", str(clamped_dur),
+                "-vn", "-acodec", "libmp3lame", "-b:a", "192k",
+                tmp_path,
+            ]
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, lambda: subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+
+            if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
+                safe_title = "".join(c for c in track.title if c.isalnum() or c in (" ", "_", "-")).rstrip()[:30]
+                discord_file = discord.File(tmp_path, filename=f"clip_{safe_title}.mp3")
+                embed = discord.Embed(
+                    title="✂️ Audio Clip Ready",
+                    description=t("clip.success", locale, duration=clamped_dur, title=track.title, start=start_sec),
+                    color=0x2ED573,
+                )
+                embed.set_footer(text=f"Exported at 192kbps MP3 • Range: {start_sec}s - {start_sec + clamped_dur}s")
+                await interaction.followup.send(embed=embed, file=discord_file)
+            else:
+                await interaction.followup.send(
+                    embed=error_embed("Clip Failed", t("clip.failed", locale)), ephemeral=True
+                )
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
     # ── Status: show all A+ settings ─────────────────────────────────────────
 

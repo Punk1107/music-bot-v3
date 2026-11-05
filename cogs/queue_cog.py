@@ -19,7 +19,7 @@ import csv
 import io
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import app_commands
@@ -83,12 +83,57 @@ class QueueCog(commands.Cog, name="Queue"):
 
     # ── Core Queue Commands ───────────────────────────────────────────────────
 
-    @app_commands.command(name="queue", description="Show the current queue")
-    @app_commands.describe(page="Page number (default: 1)")
-    async def queue_cmd(self, interaction: discord.Interaction, page: int = 1) -> None:
+    @app_commands.command(name="queue", description="Show the current queue or configure scheduling mode and limits")
+    @app_commands.describe(
+        page="Page number (default: 1)",
+        mode="Queue mode: fifo (standard) or fair (round-robin fair-share)",
+        per_user_limit="Maximum tracks a user can queue (0 = unlimited)",
+    )
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Standard FIFO (First-In-First-Out)", value="fifo"),
+        app_commands.Choice(name="Fair-Share (Round-Robin by user)", value="fair"),
+    ])
+    async def queue_cmd(
+        self,
+        interaction: discord.Interaction,
+        page: int = 1,
+        mode: Optional[str] = None,
+        per_user_limit: Optional[int] = None,
+    ) -> None:
         await interaction.response.defer()
         locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
+
+        # Handle mode / per_user_limit configuration if supplied
+        if mode is not None or per_user_limit is not None:
+            if not await self._check_dj(interaction):
+                return
+
+            changes = []
+            if mode is not None:
+                norm_mode = mode.lower().strip()
+                if norm_mode in ("fifo", "fair"):
+                    player.queue_mode = norm_mode
+                    if norm_mode == "fair":
+                        await player.reorder_fair_share()
+                        if interaction.guild and interaction.guild.voice_client:
+                            vc = interaction.guild.voice_client
+                            channel_id = vc.channel.id if vc and vc.channel else 0
+                            self.bot.track_task(
+                                self.bot.db.save_queue(interaction.guild_id, channel_id, player.queue)
+                            )
+                    changes.append(t("queue.mode_changed", locale, mode=norm_mode.upper()))
+
+            if per_user_limit is not None:
+                limit_val = max(0, int(per_user_limit))
+                player.per_user_limit = limit_val
+                limit_str = str(limit_val) if limit_val > 0 else "Unlimited"
+                changes.append(t("queue.limit_changed", locale, limit=limit_str))
+
+            embed = success_embed("Queue Settings Updated", "\n".join(changes))
+            await interaction.followup.send(embed=embed)
+            return
+
         now    = player.now_playing
         color  = await get_dominant_color(now.thumbnail if now else None, self.bot.http_session)
         embed  = queue_embed(player, page, color=color, locale=locale)

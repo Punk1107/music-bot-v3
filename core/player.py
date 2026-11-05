@@ -170,6 +170,11 @@ class GuildPlayer:
         self.loudnorm_profile:  str                       = 'broadcast'  # broadcast, podcast, background, party
         self.chimes_enabled:    bool                      = False  # Fileless synthetic chimes
 
+        # ── Community & Fairness (GEN 5.0) ───────────────────────────────────
+        self.queue_mode:         str                       = "fifo" # "fifo" or "fair"
+        self.per_user_limit:     int                       = 0      # 0 = unlimited, otherwise max tracks per user
+        self._last_requested_by: Optional[int]             = None   # Track last user in round-robin cycle
+
         # ── Tier B: Embed Theme (F27) ─────────────────────────────────
         self.embed_theme: str = "classic"  # matches EmbedTheme values
 
@@ -220,11 +225,33 @@ class GuildPlayer:
             self._queue_dirty = True
             return len(self._queue)
 
+    def user_track_count(self, user_id: int) -> int:
+        """Count active tracks queued by a specific user."""
+        return sum(1 for t in self._queue if t.requested_by_id == user_id)
+
+    async def reorder_fair_share(self) -> None:
+        """Atomically reorder all tracks currently in queue using Round-Robin by requested_by_id."""
+        from collections import defaultdict
+        async with self.queue_lock:
+            if len(self._queue) <= 1:
+                return
+            user_buckets: dict[int, deque[Track]] = defaultdict(deque)
+            for t in self._queue:
+                uid = t.requested_by_id or 0
+                user_buckets[uid].append(t)
+            ordered: list[Track] = []
+            while any(user_buckets.values()):
+                for uid in list(user_buckets.keys()):
+                    if user_buckets[uid]:
+                        ordered.append(user_buckets[uid].popleft())
+            self._queue = deque(ordered)
+            self._queue_dirty = True
+
     async def dequeue(self) -> Optional[Track]:
         """
-        Pop the next track respecting loop mode.
+        Pop the next track respecting loop mode and queue mode (FIFO vs Fair-Share Round-Robin).
 
-        - OFF / QUEUE: pop left (next in line)
+        - OFF / QUEUE: pop next in line or next user in round-robin cycle
         - TRACK: return the current track again (no pop)
         - QUEUE with empty deque: no-op → returns None
         """
@@ -235,9 +262,28 @@ class GuildPlayer:
             if not self._queue:
                 return None
 
-            track = self._queue.popleft()
+            track: Optional[Track] = None
 
-            if self.loop_mode == LoopMode.QUEUE:
+            if self.queue_mode == "fair" and len(self._queue) > 1:
+                # Find the next track by a user different from the last played user
+                target_idx = None
+                for idx, t in enumerate(self._queue):
+                    if t.requested_by_id and t.requested_by_id != self._last_requested_by:
+                        target_idx = idx
+                        break
+                if target_idx is not None:
+                    lst = list(self._queue)
+                    track = lst.pop(target_idx)
+                    self._queue = deque(lst)
+                else:
+                    track = self._queue.popleft()
+            else:
+                track = self._queue.popleft()
+
+            if track and track.requested_by_id:
+                self._last_requested_by = track.requested_by_id
+
+            if self.loop_mode == LoopMode.QUEUE and track:
                 self._queue.append(track)
             self._queue_dirty = True
 
@@ -528,6 +574,10 @@ class GuildPlayer:
         self.clarity_level         = 2
         self.loudnorm_profile      = 'broadcast'
         self.chimes_enabled        = False
+        # Community & Fairness reset
+        self.queue_mode            = "fifo"
+        self.per_user_limit        = 0
+        self._last_requested_by    = None
         # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
         # and replace the playing lock (may be locked from a concurrent call).
         self._play_seq     += 1

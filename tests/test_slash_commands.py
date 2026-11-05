@@ -35,7 +35,7 @@ from models.track import Track
 
 EXPECTED_TOP_LEVEL_COMMANDS = {
     # 1. Core Playback
-    "play", "playnext", "search", "pause", "resume", "skip", "stop", "nowplaying", "join", "leave",
+    "play", "playnext", "search", "pause", "resume", "skip", "stop", "nowplaying", "join", "leave", "clip", "grab",
     # 2. Democratic Voice Voting
     "voteskip", "voteshuffle", "voteclear",
     # 3. Queue Operations & Control
@@ -51,9 +51,11 @@ EXPECTED_TOP_LEVEL_COMMANDS = {
     "volume", "effects", "effects_list", "effects_clear", "quality", "equalizer", "eq",
     "loudnorm", "pan", "stereowide", "speed", "pitch", "crossfade", "silencetrim", "replaygain", "playbackinfo",
     "gapless", "vocal", "spatial", "remaster", "clarity", "chimes",
-    # 8. Customization, Favorites & Presets
-    "favorite", "bookmark", "preset", "theme", "themeinfo", "sleep", "sleepstatus", "language", "languageinfo",
-    # 9. Administration & Diagnostics
+    # 8. Customization, Favorites, Playlists & Presets
+    "favorite", "bookmark", "preset", "playlist", "theme", "themeinfo", "sleep", "sleepstatus", "language", "languageinfo",
+    # 9. Community & Gamification
+    "quiz",
+    # 10. Administration & Diagnostics
     "djset", "requestchannel", "autoplaylist", "idletimeout", "history", "stats", "botstats", "health", "cacheinfo", "help",
     # Local Web Dashboard & Tier Analytics
     "dashboard", "analytics",
@@ -133,6 +135,18 @@ class TestSlashCommandParity:
         assert isinstance(rc_group, discord.app_commands.Group)
         rc_subs = {c.name for c in rc_group.commands}
         assert {"set", "clear"}.issubset(rc_subs)
+
+        # 7. Quiz group: start, leaderboard
+        quiz_group = tree_cmds.get("quiz")
+        assert isinstance(quiz_group, discord.app_commands.Group)
+        quiz_subs = {c.name for c in quiz_group.commands}
+        assert {"start", "leaderboard"}.issubset(quiz_subs)
+
+        # 8. Playlist group: create, add, remove, play, share, list, delete
+        pl_group = tree_cmds.get("playlist")
+        assert isinstance(pl_group, discord.app_commands.Group)
+        pl_subs = {c.name for c in pl_group.commands}
+        assert {"create", "add", "remove", "play", "share", "list", "delete"}.issubset(pl_subs)
 
 
 # ── 2. /voteskip Command Logic Tests ─────────────────────────────────────────
