@@ -118,13 +118,21 @@ class HealthCog(commands.Cog, name="Health"):
             pool_detail = ""
             if hasattr(self.bot.db, "pool_stats"):
                 ps = self.bot.db.pool_stats()
+                bk = ps.get("backup", {})
+                bk_detail = ""
+                if bk.get("total_backups", 0) > 0:
+                    bk_detail = f"\nBackup: `{bk.get('total_backups')}` saved (latest `{bk.get('latest_backup_mb')}MB`)"
+                elif bk.get("backup_enabled"):
+                    bk_detail = f"\nBackup: {t('health.backup_none', locale)}"
+
                 if ps.get("status") == "connected":
                     pool_detail = (
                         f"\nPool: `{ps.get('used', 0)}/{ps.get('size', 0)}` active (max `{ps.get('maxsize', 25)}`, peak `{ps.get('peak_busy', 0)}`)"
                         f"\nQueries: `{ps.get('total_queries', 0)}` (avg `{ps.get('avg_query_ms', 0.0)}ms`, slow `{ps.get('slow_queries_count', 0)}`)"
+                        f"{bk_detail}"
                     )
                 else:
-                    pool_detail = f"\nMode: `{ps.get('mode', 'sqlite_fallback')}`"
+                    pool_detail = f"\nMode: `{ps.get('mode', 'sqlite_fallback')}`{bk_detail}"
             db_status  = f"{db_icon} {db_latency:.0f}ms ping{pool_detail}"
         except asyncio.TimeoutError:
             db_status = "❌ Timed out (>5s)"

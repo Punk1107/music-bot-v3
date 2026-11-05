@@ -254,5 +254,8 @@
   "health.gateway_degraded": "🟠 Beeinträchtigt",
   "health.gateway_critical": "🔴 Kritisch",
   "health.gateway_details": "Latenz: `{current}ms` (Durchschnitt: `{avg}ms` ± `{jitter}ms`)\nFortsetzungen: `{resumes}` | Wiederverbindungen: `{reconnects}`",
-  "error.internal_incident": "Ein unerwarteter interner Fehler ist aufgetreten. Bitte melden Sie die Vorfalls-ID `{incident_id}` dem Support."
+  "error.internal_incident": "Ein unerwarteter interner Fehler ist aufgetreten. Bitte melden Sie die Vorfalls-ID `{incident_id}` dem Support.",
+  "health.backup_status": "Datenbank-Sicherung",
+  "health.backup_details": "Gesamt: `{total}` | Neueste: `{latest}` (`{size}MB`)",
+  "health.backup_none": "Noch keine Sicherungen erstellt"
 }

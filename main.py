@@ -254,6 +254,7 @@ class MusicBot(commands.Bot):
                 (self._np_refresh,         "np_refresh"),
                 (self._cache_prune,        "cache_prune"),
                 (self._analytics_prune,    "analytics_prune"),
+                (self._daily_backup,        "daily_backup"),
                 (self._session_heartbeat,  "session_heartbeat"),
                 (self._scheduled_playback, "scheduled_playback"),
                 (self._memory_pressure,    "memory_pressure"),
@@ -268,6 +269,7 @@ class MusicBot(commands.Bot):
         self._np_refresh.start()
         self._cache_prune.start()
         self._analytics_prune.start()
+        self._daily_backup.start()
         self._session_heartbeat.start()   # Tier-S+ F11: session state heartbeat
         self._scheduled_playback.start()  # Gen 5.0: scheduled playback runner
         self._memory_pressure.start()     # Tier Performance F32: memory pressure handler
@@ -952,6 +954,31 @@ class MusicBot(commands.Bot):
 
     @_analytics_prune.before_loop
     async def _before_analytics_prune(self) -> None:
+        await self.wait_until_ready()
+
+    @tasks.loop(hours=24)
+    async def _daily_backup(self) -> None:
+        """
+        Phase 3 Automated Backup Task: Run daily backup if DB_BACKUP_ENABLED is set,
+        and prune backup files older than DB_BACKUP_RETENTION_DAYS.
+        """
+        if not getattr(config, "DB_BACKUP_ENABLED", False):
+            return
+
+        try:
+            backup_path = await asyncio.to_thread(self.db.create_backup)
+            logger.info("📦 Daily automated database backup created: %s", backup_path)
+            pruned = await asyncio.to_thread(
+                self.db.prune_backups,
+                retention_days=getattr(config, "DB_BACKUP_RETENTION_DAYS", 7),
+            )
+            if pruned > 0:
+                logger.info("🧹 Pruned %d expired database backup(s)", pruned)
+        except Exception as exc:
+            logger.error("Daily database backup failed: %s", exc)
+
+    @_daily_backup.before_loop
+    async def _before_daily_backup(self) -> None:
         await self.wait_until_ready()
 
     # Gen 5.0 Feature: Scheduled Playback Tasks Runner ────────────────────────

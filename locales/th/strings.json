@@ -254,5 +254,8 @@
   "health.gateway_degraded": "🟠 ช้ากว่าปกติ",
   "health.gateway_critical": "🔴 วิกฤต",
   "health.gateway_details": "ความหน่วง: `{current}ms` (เฉลี่ย: `{avg}ms` ± `{jitter}ms`)\nกู้คืนเซสชัน: `{resumes}` | เชื่อมต่อใหม่: `{reconnects}`",
-  "error.internal_incident": "เกิดข้อผิดพลาดภายในที่ไม่คาดคิด โปรดแจ้งรหัสเหตุการณ์ `{incident_id}` แก่ผู้ดูแลระบบ"
+  "error.internal_incident": "เกิดข้อผิดพลาดภายในที่ไม่คาดคิด โปรดแจ้งรหัสเหตุการณ์ `{incident_id}` แก่ผู้ดูแลระบบ",
+  "health.backup_status": "สำรองข้อมูลฐานข้อมูล",
+  "health.backup_details": "ทั้งหมด: `{total}` ไฟล์ | ล่าสุด: `{latest}` (`{size}MB`)",
+  "health.backup_none": "ยังไม่มีไฟล์สำรองข้อมูล"
 }

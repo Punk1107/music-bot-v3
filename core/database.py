@@ -124,7 +124,6 @@ MYSQL_SCHEMA_DDL: list[str] = [
         position INT UNSIGNED NOT NULL,
         user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
         added_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-        INDEX idx_queue_guild_pos (guild_id, position),
         UNIQUE KEY uk_guild_position (guild_id, position),
         INDEX idx_queue_user (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -146,7 +145,8 @@ MYSQL_SCHEMA_DDL: list[str] = [
         PRIMARY KEY (id, played_at),
         INDEX idx_history_guild_played (guild_id, played_at DESC),
         INDEX idx_history_user (user_id),
-        INDEX idx_history_played_at (played_at)
+        INDEX idx_history_played_at (played_at),
+        INDEX idx_history_played_skipped (played_at, skipped)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     PARTITION BY RANGE (TO_DAYS(played_at)) (
         PARTITION p_initial VALUES LESS THAN (TO_DAYS('2026-01-01')),
@@ -199,7 +199,8 @@ MYSQL_SCHEMA_DDL: list[str] = [
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
         updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
         UNIQUE KEY uk_user_playlist_name (user_id, name),
-        INDEX idx_playlists_guild_public (guild_id, is_public)
+        INDEX idx_playlists_guild_public (guild_id, is_public),
+        INDEX idx_playlists_scope_public (scope, is_public)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
     """
@@ -229,6 +230,7 @@ MYSQL_SCHEMA_DDL: list[str] = [
         last_run_at DATETIME(3) NULL,
         locked_by VARCHAR(64) NULL,
         created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+        INDEX idx_scheduled_guild (guild_id, scheduled_time),
         INDEX idx_scheduled_active (is_active, scheduled_time)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
@@ -566,6 +568,9 @@ class DatabaseManager:
         self._slow_queries_count: int = 0
         self._total_query_time_ms: float = 0.0
 
+        # ── Concurrency & Serialization Guards (Phase 3) ─────────────────────
+        self._guild_write_locks: dict[int, asyncio.Lock] = {}
+
     @property
     def mode(self) -> str:
         """Current database mode ('mysql', 'dual_write', or 'sqlite_fallback')."""
@@ -593,6 +598,7 @@ class DatabaseManager:
             try:
                 await self._init_mysql_pools()
                 await self._init_mysql_schema()
+                await self.ensure_schema_indexes()
                 await self.ensure_history_partitions()
                 logger.info(
                     "✅ MySQL 8.0+ Pool initialised (%s:%d/%s, min=%d, max=%d, mode=%s)",
@@ -940,8 +946,77 @@ class DatabaseManager:
             "total_queries":         self._total_queries,
             "slow_queries_count":    self._slow_queries_count,
             "avg_query_ms":          avg_query_ms,
+            "backup":                self.backup_stats(),
         })
         return base
+
+    # ── Concurrency Serialization Helper (Phase 3) ────────────────────────────
+
+    def _get_guild_write_lock(self, guild_id: int) -> asyncio.Lock:
+        """Return or create an asyncio.Lock for serializing queue mutations to a specific guild."""
+        if guild_id not in self._guild_write_locks:
+            self._guild_write_locks[guild_id] = asyncio.Lock()
+        return self._guild_write_locks[guild_id]
+
+    # ── Dynamic Schema Index Migration Runner (Phase 3) ───────────────────────
+
+    async def ensure_schema_indexes(self) -> None:
+        """
+        Dynamically ensure high-performance Phase 3 indexes exist on live MySQL tables.
+        Adds indexes if missing and removes duplicate/redundant indexes safely.
+        """
+        if not self.is_mysql_active:
+            return
+
+        async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
+            async def _get_indexes(table: str) -> set[str]:
+                try:
+                    await cur.execute(f"SHOW INDEX FROM `{table}`")
+                    rows = await cur.fetchall()
+                    return {r["Key_name"] for r in rows if "Key_name" in r}
+                except Exception:
+                    return set()
+
+            # Table: scheduled_tasks -> add idx_scheduled_guild if missing
+            st_indexes = await _get_indexes("scheduled_tasks")
+            if st_indexes and "idx_scheduled_guild" not in st_indexes:
+                logger.info("Adding missing index idx_scheduled_guild on scheduled_tasks")
+                try:
+                    await cur.execute("ALTER TABLE scheduled_tasks ADD INDEX idx_scheduled_guild (guild_id, scheduled_time)")
+                except Exception as exc:
+                    logger.debug("Failed adding idx_scheduled_guild: %s", exc)
+
+            # Table: user_playlists -> add idx_playlists_scope_public if missing
+            up_indexes = await _get_indexes("user_playlists")
+            if up_indexes and "idx_playlists_scope_public" not in up_indexes:
+                logger.info("Adding missing index idx_playlists_scope_public on user_playlists")
+                try:
+                    await cur.execute("ALTER TABLE user_playlists ADD INDEX idx_playlists_scope_public (scope, is_public)")
+                except Exception as exc:
+                    logger.debug("Failed adding idx_playlists_scope_public: %s", exc)
+
+            # Table: history -> add idx_history_played_skipped if missing
+            hist_indexes = await _get_indexes("history")
+            if hist_indexes and "idx_history_played_skipped" not in hist_indexes:
+                logger.info("Adding missing index idx_history_played_skipped on history")
+                try:
+                    await cur.execute("ALTER TABLE history ADD INDEX idx_history_played_skipped (played_at, skipped)")
+                except Exception as exc:
+                    logger.debug("Failed adding idx_history_played_skipped: %s", exc)
+
+            # Table: queue -> drop redundant idx_queue_guild_pos if both exist
+            q_indexes = await _get_indexes("queue")
+            if "idx_queue_guild_pos" in q_indexes and "uk_guild_position" in q_indexes:
+                logger.info("Dropping redundant index idx_queue_guild_pos from queue (uk_guild_position exists)")
+                try:
+                    await cur.execute("ALTER TABLE queue DROP INDEX idx_queue_guild_pos")
+                except Exception as exc:
+                    logger.debug("Failed dropping redundant idx_queue_guild_pos: %s", exc)
+
+        try:
+            await self._run_mysql(_op)
+        except Exception as exc:
+            logger.debug("ensure_schema_indexes warning: %s", exc)
 
     # ── History Partition Auto-Management (MySQL 8.0) ─────────────────────────
 
@@ -989,6 +1064,64 @@ class DatabaseManager:
         except Exception as exc:
             logger.debug("History partition check skipped/warning: %s", exc)
 
+    # ── Database Backup & Disaster Recovery (Phase 3) ─────────────────────────
+
+    def create_backup(self, dest_dir: Optional[str | Path] = None, compress: bool = True) -> Path:
+        """Create a full MySQL backup archive (mysqldump or JSON snapshot)."""
+        from scripts.backup_manager import create_backup as _cb
+        return _cb(
+            dest_dir=dest_dir,
+            compress=compress,
+            host=self._host,
+            port=self._port,
+            user=self._user,
+            password=self._password,
+            db_name=self._db_name,
+        )
+
+    def restore_backup(self, backup_file: str | Path) -> dict[str, Any]:
+        """Restore database from a backup archive."""
+        from scripts.backup_manager import restore_backup as _rb
+        return _rb(
+            backup_file=backup_file,
+            host=self._host,
+            port=self._port,
+            user=self._user,
+            password=self._password,
+            db_name=self._db_name,
+        )
+
+    def list_backups(self, dest_dir: Optional[str | Path] = None) -> list[dict[str, Any]]:
+        """List all available backup archives."""
+        from scripts.backup_manager import list_backups as _lb
+        return _lb(dest_dir=dest_dir)
+
+    def prune_backups(self, dest_dir: Optional[str | Path] = None, retention_days: int = 7) -> int:
+        """Prune backup files older than retention_days."""
+        from scripts.backup_manager import prune_backups as _pb
+        return _pb(dest_dir=dest_dir, retention_days=retention_days)
+
+    def backup_stats(self) -> dict[str, Any]:
+        """Return summary of backup status for /health and telemetry."""
+        try:
+            from scripts.backup_manager import list_backups as _lb
+            backups = _lb()
+            return {
+                "backup_enabled": getattr(config, "DB_BACKUP_ENABLED", False),
+                "total_backups": len(backups),
+                "latest_backup": backups[0]["filename"] if backups else None,
+                "latest_backup_mb": backups[0]["size_mb"] if backups else 0.0,
+                "latest_backup_time": backups[0]["created_at"] if backups else None,
+            }
+        except Exception:
+            return {
+                "backup_enabled": getattr(config, "DB_BACKUP_ENABLED", False),
+                "total_backups": 0,
+                "latest_backup": None,
+                "latest_backup_mb": 0.0,
+                "latest_backup_time": None,
+            }
+
     # ── 1. Server Config (Normalized 20-Column Design) ────────────────────────
 
     async def get_server_config(self, guild_id: int) -> ServerConfig:
@@ -1016,7 +1149,14 @@ class DatabaseManager:
                 )
                 return await cur.fetchone()
 
-            row = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
+            try:
+                row = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
+            except Exception as exc:
+                logger.warning(
+                    "⚠️ Database unreachable while fetching server_config for guild %d (%s); returning default config fallback.",
+                    guild_id, exc,
+                )
+                row = None
         else:
             async with self._sqlite_connect() as conn:
                 cursor = await conn.execute(
@@ -1132,38 +1272,39 @@ class DatabaseManager:
         channel_id: int,
         tracks: list[Track],
     ) -> None:
-        """Persist the full queue for a guild in a single atomic transaction."""
-        rows = [
-            (guild_id, channel_id, track.to_json(), pos, track.requested_by_id or 0)
-            for pos, track in enumerate(tracks)
-        ]
+        """Persist the full queue for a guild in a single atomic transaction, serialized per guild."""
+        async with self._get_guild_write_lock(guild_id):
+            rows = [
+                (guild_id, channel_id, track.to_json(), pos, track.requested_by_id or 0)
+                for pos, track in enumerate(tracks)
+            ]
 
-        if self.is_mysql_active:
-            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
-                await cur.execute("DELETE FROM queue WHERE guild_id = %s", (guild_id,))
-                if rows:
-                    await cur.executemany(
-                        """
-                        INSERT INTO queue (guild_id, channel_id, track_data, position, user_id)
-                        VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        rows,
-                    )
+            if self.is_mysql_active:
+                async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
+                    await cur.execute("DELETE FROM queue WHERE guild_id = %s", (guild_id,))
+                    if rows:
+                        await cur.executemany(
+                            """
+                            INSERT INTO queue (guild_id, channel_id, track_data, position, user_id)
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            rows,
+                        )
 
-            await self._run_mysql(_op, guild_id=guild_id)
+                await self._run_mysql(_op, guild_id=guild_id)
 
-        if self._migration_mode in ("dual_write", "sqlite_fallback"):
-            async with self._sqlite_connect() as conn:
-                await conn.execute("DELETE FROM queue WHERE guild_id = ?", (guild_id,))
-                if rows:
-                    await conn.executemany(
-                        """
-                        INSERT INTO queue (guild_id, channel_id, track_data, position, user_id)
-                        VALUES (?, ?, ?, ?, ?)
-                        """,
-                        rows,
-                    )
-                await conn.commit()
+            if self._migration_mode in ("dual_write", "sqlite_fallback"):
+                async with self._sqlite_connect() as conn:
+                    await conn.execute("DELETE FROM queue WHERE guild_id = ?", (guild_id,))
+                    if rows:
+                        await conn.executemany(
+                            """
+                            INSERT INTO queue (guild_id, channel_id, track_data, position, user_id)
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            rows,
+                        )
+                    await conn.commit()
 
     async def load_queue(self, guild_id: int) -> list[Track]:
         """Load persisted queue for a guild, ordered by position."""
@@ -1187,16 +1328,18 @@ class DatabaseManager:
         return [Track.from_json(row["track_data"]) for row in rows]
 
     async def clear_queue(self, guild_id: int) -> None:
-        if self.is_mysql_active:
-            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
-                await cur.execute("DELETE FROM queue WHERE guild_id = %s", (guild_id,))
+        """Clear all active queue entries for a guild, serialized per guild."""
+        async with self._get_guild_write_lock(guild_id):
+            if self.is_mysql_active:
+                async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
+                    await cur.execute("DELETE FROM queue WHERE guild_id = %s", (guild_id,))
 
-            await self._run_mysql(_op, guild_id=guild_id)
+                await self._run_mysql(_op, guild_id=guild_id)
 
-        if self._migration_mode in ("dual_write", "sqlite_fallback"):
-            async with self._sqlite_connect() as conn:
-                await conn.execute("DELETE FROM queue WHERE guild_id = ?", (guild_id,))
-                await conn.commit()
+            if self._migration_mode in ("dual_write", "sqlite_fallback"):
+                async with self._sqlite_connect() as conn:
+                    await conn.execute("DELETE FROM queue WHERE guild_id = ?", (guild_id,))
+                    await conn.commit()
 
     # ── 3 & 4. Play History & User Stats ──────────────────────────────────────
 

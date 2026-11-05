@@ -254,5 +254,8 @@
   "health.gateway_degraded": "🟠 Dégradé",
   "health.gateway_critical": "🔴 Critique",
   "health.gateway_details": "Latence: `{current}ms` (Moyenne: `{avg}ms` ± `{jitter}ms`)\nReprises: `{resumes}` | Reconnexions: `{reconnects}`",
-  "error.internal_incident": "Une erreur interne inattendue s'est produite. Veuillez signaler l'identifiant d'incident `{incident_id}` à l'assistance."
+  "error.internal_incident": "Une erreur interne inattendue s'est produite. Veuillez signaler l'identifiant d'incident `{incident_id}` à l'assistance.",
+  "health.backup_status": "Sauvegarde de la BDD",
+  "health.backup_details": "Total: `{total}` | Dernière: `{latest}` (`{size}MB`)",
+  "health.backup_none": "Aucune sauvegarde créée pour le moment"
 }

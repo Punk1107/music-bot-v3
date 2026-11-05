@@ -87,6 +87,11 @@ DB_SHARDS_JSON: str = os.getenv("DB_SHARDS_JSON", "[]")
 # Analytics automated retention policy (default: 90 days per MySQL DDL spec)
 ANALYTICS_RETENTION_DAYS: int = int(os.getenv("ANALYTICS_RETENTION_DAYS", "90"))
 
+# Phase 3 (Gen 5.0): Automated MySQL Backup & Restore Strategy
+DB_BACKUP_ENABLED: bool = os.getenv("DB_BACKUP_ENABLED", "false").lower() == "true"
+DB_BACKUP_DIR: str = os.getenv("DB_BACKUP_DIR", "backups")
+DB_BACKUP_RETENTION_DAYS: int = int(os.getenv("DB_BACKUP_RETENTION_DAYS", "7"))
+
 # ── Developer channels (error forwarding) ─────────────────────────────────────
 # Supports multiple channel IDs separated by commas.
 # e.g. DEV_LOG_CHANNEL_IDS=123456789,987654321
