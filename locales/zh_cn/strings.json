@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ 已将播客单集加入队列：**{show}** - **{title}**",
   "podcast.parse_error": "❌ 解析播客 RSS 订阅失败。请检查该 URL。",
   "podcast.no_episodes": "❌ 在此播客订阅中未找到可播放的音频单集。",
-  "podcast.select_placeholder": "请选择要播放的播客单集..."
+  "podcast.select_placeholder": "请选择要播放的播客单集...",
+  "clean_mode.updated": "已为 <#{channel}> **{status}** 纯净播放器模式。",
+  "clean_mode.set": "已为 <#{channel}> 配置纯净播放器面板。",
+  "autoresume.status": "此服务器已 **{status}** 自动恢复 2.0。",
+  "schedule.created": "⏰ 成功安排在 {time} ({repeat}) 播放 **{query}**！",
+  "schedule.deleted": "✔ 已成功删除定时任务 #{task_id}。",
+  "schedule.not_found": "❌ 在此服务器中找不到定时任务 #{task_id}。",
+  "schedule.empty": "📭 此服务器没有任何定时音乐闹钟。",
+  "schedule.list_title": "⏰ 定时音乐任务 ({count})",
+  "board.title": "🎵 点歌控制面板",
+  "board.empty_desc": "当前没有音乐在此服务器中播放。\n\n💬 **在下方输入歌曲名称或粘贴 YouTube/Spotify 链接即可开始播放！**\n*(您的消息将被自动删除以保持频道整洁。)*"
 }

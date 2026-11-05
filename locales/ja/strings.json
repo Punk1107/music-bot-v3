@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ ポッドキャストエピソードを追加しました: **{show}** の **{title}**",
   "podcast.parse_error": "❌ ポッドキャストのRSSフィードの解析に失敗しました。URLをご確認ください。",
   "podcast.no_episodes": "❌ このポッドキャストフィードに再生可能なエピソードが見つかりませんでした。",
-  "podcast.select_placeholder": "再生するポッドキャストエピソードを選択..."
+  "podcast.select_placeholder": "再生するポッドキャストエピソードを選択...",
+  "clean_mode.updated": "<#{channel}> のクリーンプレイヤーモードを **{status}** に設定しました。",
+  "clean_mode.set": "<#{channel}> にクリーンプレイヤーボードを設定しました。",
+  "autoresume.status": "このサーバーの自動再開 2.0 が **{status}** に設定されました。",
+  "schedule.created": "⏰ {time} ({repeat}) に **{query}** の再生を予約しました！",
+  "schedule.deleted": "✔ 予約アラーム #{task_id} を正常に削除しました。",
+  "schedule.not_found": "❌ このサーバーに予約タスク #{task_id} が見つかりませんでした。",
+  "schedule.empty": "📭 このサーバーには予約された音楽アラームがありません。",
+  "schedule.list_title": "⏰ 予約された音楽アラーム ({count})",
+  "board.title": "🎵 音楽リクエストボード",
+  "board.empty_desc": "現在このサーバーでは音楽が再生されていません。\n\n💬 **曲名を入力するか、YouTube/Spotifyのリンクを貼り付けて再生してください！**\n*(チャンネルを綺麗に保つため、メッセージは自動的に削除されます。)*"
 }

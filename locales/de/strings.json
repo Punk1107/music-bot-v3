@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ Podcast-Episode zur Warteschlange hinzugefügt: **{title}** von **{show}**",
   "podcast.parse_error": "❌ Podcast-RSS-Feed konnte nicht analysiert werden. Bitte überprüfe die URL.",
   "podcast.no_episodes": "❌ Keine abspielbaren Audio-Episoden in diesem Podcast-Feed gefunden.",
-  "podcast.select_placeholder": "Wähle eine Podcast-Episode zum Abspielen aus..."
+  "podcast.select_placeholder": "Wähle eine Podcast-Episode zum Abspielen aus...",
+  "clean_mode.updated": "Der saubere Player-Modus wurde für <#{channel}> **{status}**.",
+  "clean_mode.set": "Sauberes Player-Board für <#{channel}> konfiguriert.",
+  "autoresume.status": "Auto-Resume 2.0 wurde für diesen Server **{status}**.",
+  "schedule.created": "⏰ **{query}** wurde erfolgreich für {time} ({repeat}) geplant!",
+  "schedule.deleted": "✔ Geplanter Alarm #{task_id} erfolgreich gelöscht.",
+  "schedule.not_found": "❌ Geplante Aufgabe #{task_id} auf diesem Server nicht gefunden.",
+  "schedule.empty": "📭 Keine geplanten Musik-Alarme für diesen Server gefunden.",
+  "schedule.list_title": "⏰ Geplante Musik-Alarme ({count})",
+  "board.title": "🎵 Musik-Anfrage-Board",
+  "board.empty_desc": "Derzeit wird auf diesem Server keine Musik abgespielt.\n\n💬 **Geben Sie unten einen Songtitel ein oder fügen Sie einen YouTube/Spotify-Link ein, um abzuspielen!**\n*(Ihre Nachricht wird automatisch gelöscht, um den Kanal sauber zu halten.)*"
 }

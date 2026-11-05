@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ Épisode de podcast ajouté à la file : **{title}** de **{show}**",
   "podcast.parse_error": "❌ Impossible d'analyser le flux RSS du podcast. Veuillez vérifier l'URL.",
   "podcast.no_episodes": "❌ Aucun épisode audio lisible trouvé dans ce flux de podcast.",
-  "podcast.select_placeholder": "Sélectionnez un épisode de podcast à écouter..."
+  "podcast.select_placeholder": "Sélectionnez un épisode de podcast à écouter...",
+  "clean_mode.updated": "Le mode lecteur épuré a été **{status}** pour <#{channel}>.",
+  "clean_mode.set": "Panneau de lecteur épuré configuré pour <#{channel}>.",
+  "autoresume.status": "La reprise automatique 2.0 a été **{status}** pour ce serveur.",
+  "schedule.created": "⏰ **{query}** a été programmé avec succès à {time} ({repeat}) !",
+  "schedule.deleted": "✔ Alarme programmée #{task_id} supprimée avec succès.",
+  "schedule.not_found": "❌ Tâche programmée #{task_id} introuvable sur ce serveur.",
+  "schedule.empty": "📭 Aucune alarme musicale programmée trouvée pour ce serveur.",
+  "schedule.list_title": "⏰ Alarmes musicales programmées ({count})",
+  "board.title": "🎵 Tableau de demande de musique",
+  "board.empty_desc": "Aucune musique n'est en cours de lecture sur ce serveur.\n\n💬 **Tapez un titre de chanson ou collez un lien YouTube/Spotify ci-dessous pour jouer !**\n*(Votre message sera automatiquement supprimé pour garder le salon propre.)*"
 }

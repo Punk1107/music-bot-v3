@@ -58,6 +58,11 @@ class ServerConfig:
 
     # V3 NEW: Request channel
     request_channel_id: Optional[int] = None
+    clean_mode: bool = False
+    board_message_id: Optional[int] = None
+
+    # Gen 5.0 Phase 5: Distributed Voice Persistence & Auto-Resume 2.0
+    auto_resume: bool = True
 
     # Gen 5.0 NEW: Guild timezone for scheduled playback tasks
     timezone: str = "UTC"
@@ -124,6 +129,10 @@ class ServerConfig:
             "guild_presets":        self.guild_presets,
             # Tier Performance
             "language":             self.language,
+            # Phase 5 Server Automation & Governance
+            "clean_mode":           self.clean_mode,
+            "board_message_id":     self.board_message_id,
+            "auto_resume":          self.auto_resume,
         }
 
     def to_json(self) -> str:
@@ -163,6 +172,9 @@ class ServerConfig:
             bool(self.auto_pause_empty),
             self.embed_theme.value if hasattr(self.embed_theme, "value") else str(self.embed_theme),
             str(self.language or "en")[:8],
+            bool(self.clean_mode),
+            int(self.board_message_id) if self.board_message_id is not None else None,
+            bool(self.auto_resume),
             presets_json,
         )
 
@@ -214,6 +226,9 @@ class ServerConfig:
             embed_theme          = _safe_enum(EmbedTheme, row.get("embed_theme", "classic"), EmbedTheme.CLASSIC),
             guild_presets        = presets,
             language             = str(row.get("language") or "en"),
+            clean_mode           = bool(row.get("clean_mode", False)),
+            board_message_id     = int(row["board_message_id"]) if row.get("board_message_id") is not None else None,
+            auto_resume          = bool(row.get("auto_resume", True)),
         )
 
     @classmethod

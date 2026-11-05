@@ -302,5 +302,15 @@
   "podcast.loaded": "🎙️ Episodio de podcast añadido a la cola: **{title}** de **{show}**",
   "podcast.parse_error": "❌ Error al analizar el canal RSS del podcast. Comprueba la URL.",
   "podcast.no_episodes": "❌ No se encontraron episodios de audio reproducibles en este canal de podcast.",
-  "podcast.select_placeholder": "Selecciona un episodio de podcast para reproducir..."
+  "podcast.select_placeholder": "Selecciona un episodio de podcast para reproducir...",
+  "clean_mode.updated": "El modo de reproductor limpio ha sido **{status}** para <#{channel}>.",
+  "clean_mode.set": "Panel de control limpio configurado para <#{channel}>.",
+  "autoresume.status": "La reanudación automática 2.0 ha sido **{status}** para este servidor.",
+  "schedule.created": "⏰ ¡Se ha programado **{query}** a las {time} ({repeat}) con éxito!",
+  "schedule.deleted": "✔ Alarma programada #{task_id} eliminada con éxito.",
+  "schedule.not_found": "❌ Tarea programada #{task_id} no encontrada en este servidor.",
+  "schedule.empty": "📭 No se encontraron alarmas de música programadas para este servidor.",
+  "schedule.list_title": "⏰ Alarmas de música programadas ({count})",
+  "board.title": "🎵 Panel de solicitudes de música",
+  "board.empty_desc": "No se está reproduciendo música actualmente en este servidor.\n\n💬 **¡Escribe el título de una canción o pega un enlace de YouTube/Spotify abajo para reproducir!**\n*(Tu mensaje se eliminará automáticamente para mantener limpio el canal.)*"
 }
