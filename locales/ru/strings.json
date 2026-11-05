@@ -247,5 +247,12 @@
   "queue.dup_block": "Блокировать дубликаты",
   "autoplay.mode_off": "Выкл",
   "autoplay.mode_smart": "Умное автовоспроизведение",
-  "autoplay.mode_queue": "Автовоспроизведение очереди"
+  "autoplay.mode_queue": "Автовоспроизведение очереди",
+  "health.gateway": "Шлюз Discord",
+  "health.gateway_optimal": "🟢 Оптимально",
+  "health.gateway_acceptable": "🟡 Приемлемо",
+  "health.gateway_degraded": "🟠 Замедленно",
+  "health.gateway_critical": "🔴 Критично",
+  "health.gateway_details": "Задержка: `{current}ms` (Средняя: `{avg}ms` ± `{jitter}ms`)\nВозобновлений: `{resumes}` | Переподключений: `{reconnects}`",
+  "error.internal_incident": "Произошла непредвиденная внутренняя ошибка. Сообщите ID инцидента `{incident_id}` в службу поддержки."
 }

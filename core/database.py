@@ -58,6 +58,11 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+
+class DatabasePoolExhaustedError(RuntimeError):
+    """Raised when acquiring a connection from the MySQL connection pool times out."""
+    pass
+
 # ── Analytics write buffer ────────────────────────────────────────────────────
 ANALYTICS_FLUSH_INTERVAL: float = 5.0    # seconds between auto-flushes
 ANALYTICS_FLUSH_SIZE:     int   = 50     # flush early if buffer this full
@@ -554,6 +559,13 @@ class DatabaseManager:
         self._deadlock_retry_count: int = 0
         self._dual_write_diffs: int = 0
 
+        # ── Query & Pool Telemetry (Phase 2) ──────────────────────────────────
+        self._pool_exhausted_count: int = 0
+        self._peak_busy_connections: int = 0
+        self._total_queries: int = 0
+        self._slow_queries_count: int = 0
+        self._total_query_time_ms: float = 0.0
+
     @property
     def mode(self) -> str:
         """Current database mode ('mysql', 'dual_write', or 'sqlite_fallback')."""
@@ -768,15 +780,38 @@ class DatabaseManager:
         if pool is None:
             raise RuntimeError("MySQL connection pool is not initialised")
 
+        acquire_timeout = getattr(config, "DB_ACQUIRE_TIMEOUT", 5.0)
+        slow_query_threshold = getattr(config, "DB_SLOW_QUERY_THRESHOLD_MS", 150.0)
         max_attempts = self._deadlock_retries + 1
         last_exc: Optional[BaseException] = None
 
         for attempt in range(max_attempts):
             conn: Optional[aiomysql.Connection] = None
+            acquire_start = time.monotonic()
             try:
-                conn = await pool.acquire()
+                try:
+                    conn = await asyncio.wait_for(pool.acquire(), timeout=acquire_timeout)
+                except asyncio.TimeoutError as te:
+                    self._pool_exhausted_count += 1
+                    logger.critical(
+                        "🚨 MySQL connection pool exhausted (timeout=%.1fs waiting for free connection | pool size=%s, free=%s)",
+                        acquire_timeout,
+                        getattr(pool, "size", -1),
+                        getattr(pool, "freesize", -1),
+                    )
+                    raise DatabasePoolExhaustedError(
+                        f"MySQL connection pool exhausted (timeout={acquire_timeout:.1f}s waiting for free connection)"
+                    ) from te
+
+                # Track peak busy connections
+                busy = getattr(pool, "size", 0) - getattr(pool, "freesize", 0)
+                if busy > self._peak_busy_connections:
+                    self._peak_busy_connections = busy
+
                 # Self-Healing Auto-Ping: ensures connection is alive before query
                 await conn.ping(reconnect=True)
+
+                query_start = time.monotonic()
                 async with conn.cursor(aiomysql.DictCursor) as cur:
                     result = await op(conn, cur)
                 if not readonly:
@@ -784,6 +819,19 @@ class DatabaseManager:
                 else:
                     # End consistent read snapshot cleanly when autocommit=False
                     await conn.commit()
+
+                query_duration_ms = (time.monotonic() - query_start) * 1000.0
+                self._total_queries += 1
+                self._total_query_time_ms += query_duration_ms
+
+                if query_duration_ms >= slow_query_threshold:
+                    self._slow_queries_count += 1
+                    caller_name = getattr(op, "__qualname__", getattr(op, "__name__", str(op)))
+                    logger.warning(
+                        "🐌 Slow MySQL query detected: %.2fms (threshold: %.1fms) | op=%s",
+                        query_duration_ms, slow_query_threshold, caller_name,
+                    )
+
                 return result
 
             except Exception as exc:
@@ -827,6 +875,13 @@ class DatabaseManager:
 
             finally:
                 if conn is not None:
+                    lease_duration = time.monotonic() - acquire_start
+                    if lease_duration >= 5.0:
+                        caller_name = getattr(op, "__qualname__", getattr(op, "__name__", str(op)))
+                        logger.warning(
+                            "⚠️ Long MySQL connection lease: held for %.2fs | op=%s",
+                            lease_duration, caller_name,
+                        )
                     try:
                         pool.release(conn)
                     except Exception:
@@ -869,13 +924,22 @@ class DatabaseManager:
         return (time.monotonic() - t0) * 1000.0
 
     def pool_stats(self) -> dict[str, Any]:
-        """Return pool & resilience diagnostics for /health and metrics."""
+        """Return live connection pool and query telemetry."""
         base = self.router.pool_metrics()
+        avg_query_ms = (
+            round(self._total_query_time_ms / self._total_queries, 2)
+            if self._total_queries > 0 else 0.0
+        )
         base.update({
-            "mode":                 self._migration_mode,
-            "reconnect_count":      self._reconnect_count,
-            "deadlock_retry_count": self._deadlock_retry_count,
-            "dual_write_diffs":     self._dual_write_diffs,
+            "mode":                  self._migration_mode,
+            "reconnect_count":       self._reconnect_count,
+            "deadlock_retry_count":  self._deadlock_retry_count,
+            "dual_write_diffs":      self._dual_write_diffs,
+            "pool_exhausted_count":  self._pool_exhausted_count,
+            "peak_busy":             self._peak_busy_connections,
+            "total_queries":         self._total_queries,
+            "slow_queries_count":    self._slow_queries_count,
+            "avg_query_ms":          avg_query_ms,
         })
         return base
 

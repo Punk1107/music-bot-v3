@@ -15,6 +15,7 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import gc
 import logging
 import math
@@ -22,6 +23,7 @@ import os
 import random
 import threading
 import time
+import tracemalloc
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Coroutine, Optional, TYPE_CHECKING
@@ -67,6 +69,9 @@ _EXPECTED_PATTERNS: list[str] = [
     "forbidden",
     "cannot connect",
     "missing permissions",
+    "duplicate entry",
+    "already exists",
+    "integrityerror",
 ]
 
 _RECOVERABLE_PATTERNS: list[str] = [
@@ -87,6 +92,13 @@ _RECOVERABLE_PATTERNS: list[str] = [
     "server disconnected",
     "read error",
     "ssl",
+    "deadlock",
+    "lock wait timeout",
+    "mysql server has gone away",
+    "lost connection",
+    "databasepoolexhausted",
+    "poolexhausted",
+    "connection pool is not initialised",
 ]
 
 _FATAL_TYPES: tuple[type, ...] = (
@@ -95,6 +107,13 @@ _FATAL_TYPES: tuple[type, ...] = (
     MemoryError,
     RecursionError,
 )
+
+_FATAL_PATTERNS: list[str] = [
+    "access denied",
+    "bad handshake",
+    "table doesn't exist",
+    "unknown database",
+]
 
 
 def classify_exception(exc: BaseException) -> ExceptionKind:
@@ -110,6 +129,10 @@ def classify_exception(exc: BaseException) -> ExceptionKind:
     exc_str = str(exc).lower()
     exc_type = type(exc).__name__.lower()
     combined = f"{exc_type} {exc_str}"
+
+    for kw in _FATAL_PATTERNS:
+        if kw in combined:
+            return ExceptionKind.FATAL
 
     for kw in _EXPECTED_PATTERNS:
         if kw in combined:
@@ -341,6 +364,8 @@ class _MemSnapshot:
     thread_count: int
     task_count:   int     # asyncio tasks
     gc_objects:   int     # len(gc.get_objects())
+    top_types:    dict[str, int] = field(default_factory=dict)
+    top_allocations: list[str]   = field(default_factory=list)
 
 
 _LEAK_RSS_GROWTH_MB   = 50.0   # warn if RSS grew by this many MiB in one window
@@ -371,13 +396,20 @@ class MemoryLeakDetector:
         except Exception:
             pass
 
+        try:
+            task_count = len(asyncio.all_tasks())
+        except RuntimeError:
+            task_count = 0
+
         return _MemSnapshot(
             ts           = time.monotonic(),
             rss_mb       = rss_mb,
             vms_mb       = vms_mb,
             thread_count = threading.active_count(),
-            task_count   = len(asyncio.all_tasks()),
+            task_count   = task_count,
             gc_objects   = len(gc.get_objects()),
+            top_types    = dict(Counter(type(o).__name__ for o in gc.get_objects()).most_common(8)),
+            top_allocations = [f"{s.traceback[0].filename}:{s.traceback[0].lineno} ({s.size/1024:.1f}KB)" for s in tracemalloc.take_snapshot().statistics("lineno")[:3] if s.traceback] if tracemalloc.is_tracing() else [],
         )
 
     async def tick(self, extra_stats: dict | None = None) -> _MemSnapshot:
@@ -423,7 +455,7 @@ class MemoryLeakDetector:
 
             if anomalies:
                 logger.warning(
-                    "🚨 MemLeak ANOMALY detected — %s",
+                    "🚨 MemLeak ANOMALY detected — %s | Top objects: " + str(snap.top_types),
                     " | ".join(anomalies),
                 )
             else:

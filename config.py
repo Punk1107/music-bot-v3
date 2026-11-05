@@ -54,6 +54,8 @@ DB_POOL_MAX_SIZE: int = int(os.getenv("DB_POOL_MAX_SIZE", "25"))
 DB_CHARSET: str = os.getenv("DB_CHARSET", "utf8mb4")
 DB_AUTOCOMMIT: bool = os.getenv("DB_AUTOCOMMIT", "false").lower() == "true"
 DB_CONNECT_TIMEOUT: float = float(os.getenv("DB_CONNECT_TIMEOUT", "10.0"))
+DB_ACQUIRE_TIMEOUT: float = float(os.getenv("DB_ACQUIRE_TIMEOUT", "5.0"))
+DB_SLOW_QUERY_THRESHOLD_MS: float = float(os.getenv("DB_SLOW_QUERY_THRESHOLD_MS", "150.0"))
 DB_DEADLOCK_RETRIES: int = int(os.getenv("DB_DEADLOCK_RETRIES", "3"))
 
 # Migration & Cutover Feature Flag:
@@ -96,6 +98,8 @@ DEV_LOG_CHANNEL_IDS: list[int] = [
 ]
 # Backward-compat alias: first channel in the list (or None)
 DEV_LOG_CHANNEL_ID: int | None = DEV_LOG_CHANNEL_IDS[0] if DEV_LOG_CHANNEL_IDS else None
+DEV_LOG_RATE_LIMIT_SECS: float = float(os.getenv("DEV_LOG_RATE_LIMIT_SECS", "60.0"))
+WS_LATENCY_WARN_MS: float = float(os.getenv("WS_LATENCY_WARN_MS", "250.0"))
 
 # ── Auto-resume on startup ────────────────────────────────────────────────────
 AUTO_RESUME: bool = os.getenv("AUTO_RESUME", "false").lower() == "true"

@@ -247,5 +247,12 @@
   "queue.dup_block": "중복 차단",
   "autoplay.mode_off": "꺼짐",
   "autoplay.mode_smart": "스마트 자동 재생",
-  "autoplay.mode_queue": "대기열 자동 재생"
+  "autoplay.mode_queue": "대기열 자동 재생",
+  "health.gateway": "Discord 게이트웨이",
+  "health.gateway_optimal": "🟢 최적",
+  "health.gateway_acceptable": "🟡 보통",
+  "health.gateway_degraded": "🟠 지연됨",
+  "health.gateway_critical": "🔴 위험",
+  "health.gateway_details": "지연 시간: `{current}ms` (평균: `{avg}ms` ± `{jitter}ms`)\n세션 복구: `{resumes}` | 재연결: `{reconnects}`",
+  "error.internal_incident": "예기치 않은 내부 오류가 발생했습니다. 지원팀에 인시던트 ID `{incident_id}` 를 제보해 주세요。"
 }

@@ -247,5 +247,12 @@
   "queue.dup_block": "บล็อกเพลงซ้ำ",
   "autoplay.mode_off": "ปิด",
   "autoplay.mode_smart": "เล่นอัตโนมัติแบบชาญฉลาด",
-  "autoplay.mode_queue": "เล่นคิวอัตโนมัติ"
+  "autoplay.mode_queue": "เล่นคิวอัตโนมัติ",
+  "health.gateway": "เกตเวย์ Discord",
+  "health.gateway_optimal": "🟢 ยอดเยี่ยม",
+  "health.gateway_acceptable": "🟡 พอใช้",
+  "health.gateway_degraded": "🟠 ช้ากว่าปกติ",
+  "health.gateway_critical": "🔴 วิกฤต",
+  "health.gateway_details": "ความหน่วง: `{current}ms` (เฉลี่ย: `{avg}ms` ± `{jitter}ms`)\nกู้คืนเซสชัน: `{resumes}` | เชื่อมต่อใหม่: `{reconnects}`",
+  "error.internal_incident": "เกิดข้อผิดพลาดภายในที่ไม่คาดคิด โปรดแจ้งรหัสเหตุการณ์ `{incident_id}` แก่ผู้ดูแลระบบ"
 }

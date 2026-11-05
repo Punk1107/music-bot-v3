@@ -119,7 +119,10 @@ class HealthCog(commands.Cog, name="Health"):
             if hasattr(self.bot.db, "pool_stats"):
                 ps = self.bot.db.pool_stats()
                 if ps.get("status") == "connected":
-                    pool_detail = f"\nPool: `{ps.get('used', 0)}/{ps.get('size', 0)}` active (max `{ps.get('maxsize', 25)}`)"
+                    pool_detail = (
+                        f"\nPool: `{ps.get('used', 0)}/{ps.get('size', 0)}` active (max `{ps.get('maxsize', 25)}`, peak `{ps.get('peak_busy', 0)}`)"
+                        f"\nQueries: `{ps.get('total_queries', 0)}` (avg `{ps.get('avg_query_ms', 0.0)}ms`, slow `{ps.get('slow_queries_count', 0)}`)"
+                    )
                 else:
                     pool_detail = f"\nMode: `{ps.get('mode', 'sqlite_fallback')}`"
             db_status  = f"{db_icon} {db_latency:.0f}ms ping{pool_detail}"
@@ -129,6 +132,27 @@ class HealthCog(commands.Cog, name="Health"):
             db_status = f"❌ Error: {str(exc)[:60]}"
 
         embed.add_field(name="🗄️  MySQL 8.0+",  value=db_status, inline=True)
+
+        # ── Discord Gateway (WebSocket Latency & Resilience) ───────────────────
+        gw_monitor = getattr(self.bot, "gateway_monitor", None)
+        if gw_monitor:
+            gw_stats = gw_monitor.stats()
+            quality = gw_stats["quality"].lower()
+            quality_badge = t(f"health.gateway_{quality}", locale)
+            gw_details = t(
+                "health.gateway_details",
+                locale,
+                current=gw_stats["current_ms"],
+                avg=gw_stats["avg_ms"],
+                jitter=gw_stats["jitter_ms"],
+                resumes=gw_stats["resumes"],
+                reconnects=gw_stats["connects"],
+            )
+            embed.add_field(
+                name   = f"📡  {t('health.gateway', locale)} ({quality_badge})",
+                value  = gw_details,
+                inline = False,
+            )
 
         # ── Memory (psutil) ───────────────────────────────────────────────────
         if psutil:

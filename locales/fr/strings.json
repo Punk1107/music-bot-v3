@@ -247,5 +247,12 @@
   "queue.dup_block": "Bloquer les doublons",
   "autoplay.mode_off": "Désactivé",
   "autoplay.mode_smart": "Lecture automatique intelligente",
-  "autoplay.mode_queue": "Lecture automatique de la file"
+  "autoplay.mode_queue": "Lecture automatique de la file",
+  "health.gateway": "Passerelle Discord",
+  "health.gateway_optimal": "🟢 Optimal",
+  "health.gateway_acceptable": "🟡 Acceptable",
+  "health.gateway_degraded": "🟠 Dégradé",
+  "health.gateway_critical": "🔴 Critique",
+  "health.gateway_details": "Latence: `{current}ms` (Moyenne: `{avg}ms` ± `{jitter}ms`)\nReprises: `{resumes}` | Reconnexions: `{reconnects}`",
+  "error.internal_incident": "Une erreur interne inattendue s'est produite. Veuillez signaler l'identifiant d'incident `{incident_id}` à l'assistance."
 }
