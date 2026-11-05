@@ -113,6 +113,10 @@ class MusicControlView(discord.ui.View):
             elif cid == "mb_favorite":
                 child.label = t("btn.favorite", locale)
 
+            elif cid == "mb_grab":
+                child.label = "📩 Grab"
+                child.disabled = not is_playing
+
             elif cid == "mb_loop":
                 mode = player.loop_mode.value
                 if mode == "off":
@@ -346,6 +350,50 @@ class MusicControlView(discord.ui.View):
             except Exception:
                 pass
         await self._refresh_message(interaction)
+
+    @discord.ui.button(label="📩 Grab", style=discord.ButtonStyle.secondary, custom_id="mb_grab", row=2)
+    async def grab(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        """Instant DM delivery of currently playing track info and links."""
+        player = self.bot.get_player(self.guild_id)
+        locale = get_locale_sync(self.guild_id)
+        if not player.now_playing:
+            await interaction.response.send_message(
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)),
+                ephemeral=True,
+            )
+            return
+
+        track = player.now_playing
+        dm_embed = discord.Embed(
+            title=f"🎵 {track.title}",
+            url=track.url,
+            color=0x1DB954,
+        )
+        if track.thumbnail:
+            dm_embed.set_image(url=track.thumbnail)
+
+        guild = self.bot.get_guild(self.guild_id)
+        guild_name = guild.name if guild else "Discord Server"
+        artist = getattr(track, "uploader", None) or getattr(track, "author", None) or "Unknown"
+        dm_embed.description = (
+            f"**Author / Artist:** `{artist}`\n"
+            f"**Duration:** `{format_duration(track.duration)}`\n"
+            f"**Caught From:** `{guild_name}`\n\n"
+            f"🔗 [Listen on Web / YouTube]({track.url})"
+        )
+        dm_embed.set_footer(text="Song Catcher • Music Bot Gen 5.0")
+
+        try:
+            await interaction.user.send(embed=dm_embed)
+            await interaction.response.send_message(
+                t("grab.success", locale, title=track.title),
+                ephemeral=True,
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                t("grab.dm_closed", locale),
+                ephemeral=True,
+            )
 
     @discord.ui.button(label="❤️ Favorite", style=discord.ButtonStyle.secondary, custom_id="mb_favorite", row=1)
     async def favorite(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

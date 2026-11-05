@@ -28,6 +28,7 @@ import config
 from core.circuit_breaker import CircuitBreakerOpen
 from core.validator import validate_url, validate_search_query
 from core.i18n import get_locale, get_locale_sync, t
+from utils.formatters import format_duration
 from models.track import Track
 from models.enums import QueuePermission, DuplicateMode
 from core.media_cache import (          # Tier-S+ F14 F15
@@ -739,6 +740,15 @@ class MusicCog(commands.Cog, name="Music"):
 
         player = self.bot.get_player(interaction.guild_id)
 
+        # Check per_user_limit
+        if player.per_user_limit > 0 and player.user_track_count(interaction.user.id) >= player.per_user_limit:
+            locale = await get_locale(interaction.guild_id, self.bot.db)
+            await interaction.followup.send(
+                embed=error_embed("Queue Limit Reached", t("queue.user_limit_exceeded", locale, limit=player.per_user_limit)),
+                ephemeral=True,
+            )
+            return
+
         track.requested_by_id   = interaction.user.id
         track.requested_by_name = interaction.user.display_name
 
@@ -747,6 +757,9 @@ class MusicCog(commands.Cog, name="Music"):
             pos = 1
         else:
             pos = await player.enqueue(track)
+
+        if player.queue_mode == "fair":
+            await player.reorder_fair_share()
 
         # Feature 9: ETA
         was_playing = vc.is_playing() or vc.is_paused()
@@ -1288,6 +1301,55 @@ class MusicCog(commands.Cog, name="Music"):
         embed = now_playing_embed(player, color, self.bot.user, locale=locale)
         view  = MusicControlView(self.bot, interaction.guild_id)
         await interaction.followup.send(embed=embed, view=view)
+
+
+    @app_commands.command(name="grab", description="Send current playing track details and links directly to your DMs")
+    async def grab(self, interaction: discord.Interaction) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild_id
+        if not guild_id:
+            return
+
+        player = self.bot.get_player(guild_id)
+        locale = await get_locale(guild_id, self.bot.db)
+
+        if not player.now_playing:
+            await interaction.followup.send(
+                embed=error_embed(t("title.nothing_playing", locale), t("error.not_playing", locale)),
+                ephemeral=True,
+            )
+            return
+
+        track = player.now_playing
+        dm_embed = discord.Embed(
+            title=f"🎵 {track.title}",
+            url=track.url,
+            color=0x1DB954,
+        )
+        if track.thumbnail:
+            dm_embed.set_image(url=track.thumbnail)
+
+        guild_name = interaction.guild.name if interaction.guild else "Discord Server"
+        artist = getattr(track, "uploader", None) or getattr(track, "author", None) or "Unknown"
+        dm_embed.description = (
+            f"**Author / Artist:** `{artist}`\n"
+            f"**Duration:** `{format_duration(track.duration)}`\n"
+            f"**Caught From:** `{guild_name}`\n\n"
+            f"🔗 [Listen on Web / YouTube]({track.url})"
+        )
+        dm_embed.set_footer(text="Song Catcher • Music Bot Gen 5.0")
+
+        try:
+            await interaction.user.send(embed=dm_embed)
+            await interaction.followup.send(
+                t("grab.success", locale, title=track.title),
+                ephemeral=True,
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                t("grab.dm_closed", locale),
+                ephemeral=True,
+            )
 
 
 async def setup(bot: "MusicBot") -> None:

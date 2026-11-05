@@ -278,6 +278,21 @@ MYSQL_SCHEMA_DDL: list[str] = [
         INDEX idx_search_history_user (user_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
+
+    # ── 11. Quiz Scores & Leaderboard (GEN 5.0 Community) ────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS quiz_scores (
+        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        guild_id BIGINT UNSIGNED NOT NULL,
+        user_id BIGINT UNSIGNED NOT NULL,
+        score INT UNSIGNED NOT NULL DEFAULT 0,
+        games_won INT UNSIGNED NOT NULL DEFAULT 0,
+        correct_answers INT UNSIGNED NOT NULL DEFAULT 0,
+        updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+        UNIQUE KEY uk_guild_user (guild_id, user_id),
+        INDEX idx_quiz_leaderboard (guild_id, score DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """,
 ]
 
 # ── Legacy SQLite Schema (for Dual-Write / Rollback / Unit Tests) ─────────────
@@ -326,6 +341,16 @@ CREATE TABLE IF NOT EXISTS search_history (
     user_id  INTEGER NOT NULL,
     query    TEXT    NOT NULL,
     used_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS quiz_scores (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id        INTEGER NOT NULL,
+    user_id         INTEGER NOT NULL,
+    score           INTEGER NOT NULL DEFAULT 0,
+    games_won       INTEGER NOT NULL DEFAULT 0,
+    correct_answers INTEGER NOT NULL DEFAULT 0,
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(guild_id, user_id)
 );
 CREATE TABLE IF NOT EXISTS analytics (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3078,3 +3103,379 @@ class DatabaseManager:
                 }
 
         return report
+
+
+    # ── Community & Gamification (GEN 5.0: Quiz & Advanced Playlists) ──────────
+
+    async def get_random_quiz_track(
+        self,
+        guild_id: int,
+        source: str = "history",
+    ) -> Optional[Track]:
+        """
+        High-performance random track sampler without full-table scan (ORDER BY RAND()).
+        Uses B-Tree primary key lookup: WHERE id >= FLOOR(RAND() * MAX(id)).
+        """
+        source = source.lower().strip()
+        if source == "favorites":
+            rows = await self.get_favorites(1, guild_id, limit=100)
+            if not rows:
+                return None
+            chosen = random.choice(rows)
+            return Track.from_json(chosen["track_data"])
+
+        if source == "playlist":
+            pls = await self.list_playlists(1, guild_id, include_public=True)
+            if not pls:
+                return None
+            pl = random.choice(pls)
+            tracks = await self.load_playlist(pl["user_id"], guild_id, pl["name"], increment_play_count=False)
+            if not tracks:
+                return None
+            return random.choice(tracks)
+
+        # Default source: history via instant B-Tree index lookup
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> Optional[dict]:
+                # Instant B-Tree random index lookup
+                await cur.execute(
+                    """
+                    SELECT track_data FROM history
+                    WHERE id >= (
+                        SELECT FLOOR(RAND() * (SELECT COALESCE(MAX(id), 1) FROM history))
+                    )
+                    ORDER BY id ASC
+                    LIMIT 1
+                    """
+                )
+                row = await cur.fetchone()
+                if not row:
+                    # Fallback on sparse IDs
+                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                    recent = await cur.fetchall()
+                    if recent:
+                        return random.choice(recent)
+                return row
+
+            res = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
+            if res and res.get("track_data"):
+                return Track.from_json(res["track_data"])
+            return None
+
+        # SQLite fallback with B-Tree modulo lookup
+        async with self._sqlite_connect() as conn:
+            cursor = await conn.execute(
+                """
+                SELECT track_data FROM history
+                WHERE id >= (
+                    SELECT (ABS(RANDOM()) % (SELECT COALESCE(MAX(id), 1) FROM history) + 1)
+                )
+                ORDER BY id ASC
+                LIMIT 1
+                """
+            )
+            row = await cursor.fetchone()
+            if not row:
+                cursor = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                recent = await cursor.fetchall()
+                if recent:
+                    row = random.choice(recent)
+            if row and row["track_data"]:
+                return Track.from_json(row["track_data"])
+            return None
+
+    async def get_quiz_distractors(
+        self,
+        guild_id: int,
+        exclude_title: str,
+        limit: int = 3,
+        source: str = "history",
+    ) -> list[str]:
+        """Fetch distinct track titles to serve as multiple-choice distractors."""
+        distractors: list[str] = []
+        clean_exclude = exclude_title.strip().lower()
+
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
+                await cur.execute(
+                    "SELECT track_data FROM history ORDER BY id DESC LIMIT 100"
+                )
+                return list(await cur.fetchall())
+            rows = await self._run_mysql(_op, guild_id=guild_id, readonly=True) or []
+        else:
+            async with self._sqlite_connect() as conn:
+                cur = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
+                rows = [dict(r) for r in await cur.fetchall()]
+
+        for r in rows:
+            try:
+                t = Track.from_json(r["track_data"])
+                title = t.title.strip()
+                if title.lower() != clean_exclude and title not in distractors:
+                    distractors.append(title)
+                if len(distractors) >= limit:
+                    break
+            except Exception:
+                continue
+
+        # If database has fewer tracks, supply standard diverse musical fallback titles
+        fallback_titles = [
+            "Bohemian Rhapsody", "Hotel California", "Shape of You",
+            "Blinding Lights", "Billie Jean", "Smells Like Teen Spirit",
+            "Stayin' Alive", "Take On Me", "Sweet Child O' Mine", "Rolling in the Deep",
+        ]
+        for fb in fallback_titles:
+            if len(distractors) >= limit:
+                break
+            if fb.lower() != clean_exclude and fb not in distractors:
+                distractors.append(fb)
+
+        return distractors[:limit]
+
+    async def record_quiz_score(
+        self,
+        guild_id: int,
+        user_id: int,
+        points: int,
+        won: bool = False,
+    ) -> None:
+        """Atomic upsert of user quiz points, win count, and correct answer tally."""
+        win_val = 1 if won else 0
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> None:
+                await cur.execute(
+                    """
+                    INSERT INTO quiz_scores (guild_id, user_id, score, games_won, correct_answers)
+                    VALUES (%s, %s, %s, %s, 1)
+                    ON DUPLICATE KEY UPDATE
+                        score = score + VALUES(score),
+                        games_won = games_won + VALUES(games_won),
+                        correct_answers = correct_answers + 1,
+                        updated_at = CURRENT_TIMESTAMP(3)
+                    """,
+                    (guild_id, user_id, points, win_val),
+                )
+            await self._run_mysql(_op, guild_id=guild_id)
+            if self._migration_mode != "dual_write":
+                return
+
+        async with self._sqlite_connect() as conn:
+            await conn.execute(
+                """
+                INSERT INTO quiz_scores (guild_id, user_id, score, games_won, correct_answers)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                    score = score + excluded.score,
+                    games_won = games_won + excluded.games_won,
+                    correct_answers = correct_answers + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (guild_id, user_id, points, win_val),
+            )
+            await conn.commit()
+
+    async def get_quiz_leaderboard(
+        self,
+        guild_id: int,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Fetch top quiz performers in the guild ordered by score and accuracy."""
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
+                await cur.execute(
+                    """
+                    SELECT user_id, score, games_won, correct_answers
+                    FROM quiz_scores
+                    WHERE guild_id = %s
+                    ORDER BY score DESC, correct_answers DESC
+                    LIMIT %s
+                    """,
+                    (guild_id, limit),
+                )
+                return list(await cur.fetchall())
+            return await self._run_mysql(_op, guild_id=guild_id, readonly=True) or []
+
+        async with self._sqlite_connect() as conn:
+            cur = await conn.execute(
+                """
+                SELECT user_id, score, games_won, correct_answers
+                FROM quiz_scores
+                WHERE guild_id = ?
+                ORDER BY score DESC, correct_answers DESC
+                LIMIT ?
+                """,
+                (guild_id, limit),
+            )
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def add_track_to_playlist(
+        self,
+        user_id: int,
+        guild_id: int,
+        name: str,
+        track: Track,
+    ) -> bool:
+        """Add a single track to an existing user playlist."""
+        clean_name = name.strip()[:100]
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> bool:
+                await cur.execute(
+                    "SELECT id FROM user_playlists WHERE user_id = %s AND name = %s",
+                    (user_id, clean_name),
+                )
+                pl = await cur.fetchone()
+                if not pl:
+                    return False
+                pl_id = pl["id"]
+                await cur.execute(
+                    "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM playlist_tracks WHERE playlist_id = %s",
+                    (pl_id,),
+                )
+                pos_row = await cur.fetchone()
+                next_pos = pos_row["next_pos"] if pos_row else 0
+                await cur.execute(
+                    "INSERT INTO playlist_tracks (playlist_id, position, track_data) VALUES (%s, %s, %s)",
+                    (pl_id, next_pos, track.to_json()),
+                )
+                return True
+            ok = await self._run_mysql(_op, guild_id=guild_id)
+            if ok and self._migration_mode == "dual_write":
+                await self._sqlite_add_track_to_playlist(user_id, clean_name, track)
+            return ok or False
+
+        return await self._sqlite_add_track_to_playlist(user_id, clean_name, track)
+
+    async def _sqlite_add_track_to_playlist(self, user_id: int, clean_name: str, track: Track) -> bool:
+        async with self._sqlite_connect() as conn:
+            cur = await conn.execute(
+                "SELECT id FROM user_playlists WHERE user_id = ? AND name = ?",
+                (user_id, clean_name),
+            )
+            pl = await cur.fetchone()
+            if not pl:
+                return False
+            pl_id = pl["id"]
+            cur = await conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM playlist_tracks WHERE playlist_id = ?",
+                (pl_id,),
+            )
+            pos_row = await cur.fetchone()
+            next_pos = pos_row["next_pos"] if pos_row else 0
+            await conn.execute(
+                "INSERT INTO playlist_tracks (playlist_id, position, track_data) VALUES (?, ?, ?)",
+                (pl_id, next_pos, track.to_json()),
+            )
+            await conn.commit()
+            return True
+
+    async def remove_track_from_playlist(
+        self,
+        user_id: int,
+        guild_id: int,
+        name: str,
+        position: int,
+    ) -> bool:
+        """Remove track by 1-based position from a user playlist."""
+        clean_name = name.strip()[:100]
+        pos_idx = max(0, int(position) - 1)
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> bool:
+                await cur.execute(
+                    "SELECT id FROM user_playlists WHERE user_id = %s AND name = %s",
+                    (user_id, clean_name),
+                )
+                pl = await cur.fetchone()
+                if not pl:
+                    return False
+                pl_id = pl["id"]
+                await cur.execute(
+                    "SELECT id FROM playlist_tracks WHERE playlist_id = %s ORDER BY position ASC LIMIT 1 OFFSET %s",
+                    (pl_id, pos_idx),
+                )
+                tr = await cur.fetchone()
+                if not tr:
+                    return False
+                await cur.execute("DELETE FROM playlist_tracks WHERE id = %s", (tr["id"],))
+                # Re-index positions
+                await cur.execute(
+                    "SELECT id FROM playlist_tracks WHERE playlist_id = %s ORDER BY position ASC",
+                    (pl_id,),
+                )
+                remaining = await cur.fetchall()
+                for idx, r in enumerate(remaining):
+                    await cur.execute(
+                        "UPDATE playlist_tracks SET position = %s WHERE id = %s",
+                        (idx, r["id"]),
+                    )
+                return True
+            ok = await self._run_mysql(_op, guild_id=guild_id)
+            if ok and self._migration_mode == "dual_write":
+                await self._sqlite_remove_track_from_playlist(user_id, clean_name, pos_idx)
+            return ok or False
+
+        return await self._sqlite_remove_track_from_playlist(user_id, clean_name, pos_idx)
+
+    async def _sqlite_remove_track_from_playlist(self, user_id: int, clean_name: str, pos_idx: int) -> bool:
+        async with self._sqlite_connect() as conn:
+            cur = await conn.execute(
+                "SELECT id FROM user_playlists WHERE user_id = ? AND name = ?",
+                (user_id, clean_name),
+            )
+            pl = await cur.fetchone()
+            if not pl:
+                return False
+            pl_id = pl["id"]
+            cur = await conn.execute(
+                "SELECT id FROM playlist_tracks WHERE playlist_id = ? ORDER BY position ASC LIMIT 1 OFFSET ?",
+                (pl_id, pos_idx),
+            )
+            tr = await cur.fetchone()
+            if not tr:
+                return False
+            await conn.execute("DELETE FROM playlist_tracks WHERE id = ?", (tr["id"],))
+            cur = await conn.execute(
+                "SELECT id FROM playlist_tracks WHERE playlist_id = ? ORDER BY position ASC",
+                (pl_id,),
+            )
+            remaining = await cur.fetchall()
+            for idx, r in enumerate(remaining):
+                await conn.execute(
+                    "UPDATE playlist_tracks SET position = ? WHERE id = ?",
+                    (idx, r["id"]),
+                )
+            await conn.commit()
+            return True
+
+    async def set_playlist_public(
+        self,
+        user_id: int,
+        guild_id: int,
+        name: str,
+        is_public: bool,
+    ) -> bool:
+        """Toggle or set public visibility of a playlist for the guild."""
+        clean_name = name.strip()[:100]
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> bool:
+                await cur.execute(
+                    "UPDATE user_playlists SET is_public = %s WHERE user_id = %s AND name = %s",
+                    (bool(is_public), user_id, clean_name),
+                )
+                return cur.rowcount > 0
+            ok = await self._run_mysql(_op, guild_id=guild_id)
+            if self._migration_mode == "dual_write":
+                async with self._sqlite_connect() as sconn:
+                    await sconn.execute(
+                        "UPDATE user_playlists SET is_public = ? WHERE user_id = ? AND name = ?",
+                        (int(bool(is_public)), user_id, clean_name),
+                    )
+                    await sconn.commit()
+            return ok or False
+
+        async with self._sqlite_connect() as conn:
+            cur = await conn.execute(
+                "UPDATE user_playlists SET is_public = ? WHERE user_id = ? AND name = ?",
+                (int(bool(is_public)), user_id, clean_name),
+            )
+            await conn.commit()
+            return cur.rowcount > 0

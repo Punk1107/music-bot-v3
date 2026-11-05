@@ -100,6 +100,8 @@ _COGS = [
     "vocal.cog",             # Gen 5.0: Mid-Side Vocal Remover & Acapella Isolator (/vocal)
     "spatial.cog",           # Gen 5.0: Spatial 3D & Binaural Virtualizer (/spatial)
     "remaster.cog",          # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster (/remaster /clarity)
+    "quiz.cog",              # Gen 5.0: Blind Music Quiz & Leaderboard (/quiz)
+    "playlist.cog",          # Gen 5.0: Multi-Playlist Personal Manager (/playlist)
 ]
 
 
