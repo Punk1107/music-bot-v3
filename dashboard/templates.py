@@ -35,13 +35,19 @@ def render_dashboard_html(port: int = 8080, api_secret: str = "") -> str:
     # Inline CSS & JS for complete self-contained offline compliance
     if css:
         html = html.replace(
+            '<link rel="stylesheet" href="../static/css/dashboard.css">',
+            f"<style>\n{css}\n</style>",
+        ).replace(
             '<link rel="stylesheet" href="/static/css/dashboard.css">',
             f"<style>\n{css}\n</style>",
         )
     if vis_js or eq_js or app_js:
         bundle_js = f"\n<script>\n{vis_js}\n{eq_js}\n{app_js}\n</script>\n"
+        html = html.replace('<script src="../static/js/visualizer.js"></script>', "")
         html = html.replace('<script src="/static/js/visualizer.js"></script>', "")
+        html = html.replace('<script src="../static/js/equalizer.js"></script>', "")
         html = html.replace('<script src="/static/js/equalizer.js"></script>', "")
+        html = html.replace('<script src="../static/js/app.js"></script>', bundle_js)
         html = html.replace('<script src="/static/js/app.js"></script>', bundle_js)
 
     return html
