@@ -292,5 +292,15 @@
   "clip.success": "✂️ Audio clip generated ({duration}s, 192kbps MP3):",
   "clip.failed": "❌ Failed to generate audio clip from current stream.",
   "grab.success": "📬 Song details have been delivered to your Direct Messages!",
-  "grab.dm_closed": "❌ Could not send DM. Please enable Direct Messages from server members in your Privacy Settings."
+  "grab.dm_closed": "❌ Could not send DM. Please enable Direct Messages from server members in your Privacy Settings.",
+  "playfile.success": "📁 Enqueued audio attachment: **{title}**",
+  "playfile.invalid_format": "❌ Invalid audio format. Supported formats: .mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 Tuning into **{name}** ({genre}). Enjoy 24/7 uninterrupted streaming!",
+  "radio.custom_started": "📻 Streaming custom radio URL: **{url}**",
+  "radio.invalid_url": "❌ Invalid radio stream URL. Please provide a direct HTTP or HTTPS audio stream.",
+  "radio.station_not_found": "❌ Radio station **{station}** was not found in directory.",
+  "podcast.loaded": "🎙️ Enqueued podcast episode: **{title}** from **{show}**",
+  "podcast.parse_error": "❌ Failed to parse podcast RSS feed. Please verify the URL.",
+  "podcast.no_episodes": "❌ No playable audio episodes found in this podcast feed.",
+  "podcast.select_placeholder": "Select a podcast episode to stream..."
 }

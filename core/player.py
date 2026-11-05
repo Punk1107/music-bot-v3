@@ -174,6 +174,7 @@ class GuildPlayer:
         self.queue_mode:         str                       = "fifo" # "fifo" or "fair"
         self.per_user_limit:     int                       = 0      # 0 = unlimited, otherwise max tracks per user
         self._last_requested_by: Optional[int]             = None   # Track last user in round-robin cycle
+        self.is_radio_mode:      bool                      = False  # 24/7 web radio continuous streaming mode
 
         # ── Tier B: Embed Theme (F27) ─────────────────────────────────
         self.embed_theme: str = "classic"  # matches EmbedTheme values
@@ -578,6 +579,7 @@ class GuildPlayer:
         self.queue_mode            = "fifo"
         self.per_user_limit        = 0
         self._last_requested_by    = None
+        self.is_radio_mode         = False
         # Bug 1+3: advance play_seq so stale after_play callbacks no-op,
         # and replace the playing lock (may be locked from a concurrent call).
         self._play_seq     += 1

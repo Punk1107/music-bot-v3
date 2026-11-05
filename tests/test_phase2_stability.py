@@ -352,7 +352,7 @@ class TestUniversalNineLanguageParity:
                 keys[loc] = set(json.load(f).keys())
 
         base_en = keys["en"]
-        assert len(base_en) == 294, f"Expected 294 keys, got {len(base_en)}"
+        assert len(base_en) == 304, f"Expected 304 keys, got {len(base_en)}"
 
         for loc in self.LOCALES:
             diff = base_en.symmetric_difference(keys[loc])

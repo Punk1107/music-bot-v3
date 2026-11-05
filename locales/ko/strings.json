@@ -292,5 +292,15 @@
   "clip.success": "✂️ 오디오 클립 생성 완료 ({duration}초, 192kbps MP3):",
   "clip.failed": "❌ 현재 스트림에서 오디오 클립을 생성하지 못했습니다.",
   "grab.success": "📬 곡 상세 정보가 다이렉트 메시지로 전송되었습니다!",
-  "grab.dm_closed": "❌ DM을 보낼 수 없습니다. 개인정보 보호 설정에서 서버 멤버의 다이렉트 메시지를 허용해주세요."
+  "grab.dm_closed": "❌ DM을 보낼 수 없습니다. 개인정보 보호 설정에서 서버 멤버의 다이렉트 메시지를 허용해주세요.",
+  "playfile.success": "📁 오디오 첨부파일을 대기열에 추가했습니다: **{title}**",
+  "playfile.invalid_format": "❌ 지원되지 않는 오디오 형식입니다. 지원 형식: .mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 **{name}** ({genre}) 방송을 청취합니다. 24시간 연속 스트리밍을 즐겨보세요!",
+  "radio.custom_started": "📻 맞춤 라디오 스트림 재생 중: **{url}**",
+  "radio.invalid_url": "❌ 유효하지 않은 라디오 스트림 URL입니다. 직접 연결 가능한 HTTP 또는 HTTPS 오디오 스트림을 입력해주세요.",
+  "radio.station_not_found": "❌ 디렉터리에서 **{station}** 라디오 방송국을 찾을 수 없습니다.",
+  "podcast.loaded": "🎙️ 팟캐스트 에피소드를 대기열에 추가했습니다: **{show}** - **{title}**",
+  "podcast.parse_error": "❌ 팟캐스트 RSS 피드를 파싱하지 못했습니다. URL을 확인해주세요.",
+  "podcast.no_episodes": "❌ 이 팟캐스트 피드에서 재생 가능한 오디오 에피소드를 찾을 수 없습니다.",
+  "podcast.select_placeholder": "재생할 팟캐스트 에피소드를 선택하세요..."
 }

@@ -292,5 +292,15 @@
   "clip.success": "✂️ Clip de audio generado ({duration}s, 192kbps MP3):",
   "clip.failed": "❌ No se pudo generar el clip de audio de la transmisión actual.",
   "grab.success": "📬 ¡Los detalles de la canción se han enviado a tus mensajes directos!",
-  "grab.dm_closed": "❌ No se pudo enviar el MD. Por favor, habilita los mensajes directos en tus ajustes de privacidad."
+  "grab.dm_closed": "❌ No se pudo enviar el MD. Por favor, habilita los mensajes directos en tus ajustes de privacidad.",
+  "playfile.success": "📁 Archivo de audio añadido a la cola: **{title}**",
+  "playfile.invalid_format": "❌ Formato de audio no válido. Formatos compatibles: .mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 Sintonizando **{name}** ({genre}). ¡Disfruta de streaming ininterrumpido 24/7!",
+  "radio.custom_started": "📻 Transmitiendo URL de radio personalizada: **{url}**",
+  "radio.invalid_url": "❌ URL de transmisión de radio no válida. Proporciona una transmisión de audio HTTP o HTTPS directa.",
+  "radio.station_not_found": "❌ No se encontró la estación de radio **{station}** en el directorio.",
+  "podcast.loaded": "🎙️ Episodio de podcast añadido a la cola: **{title}** de **{show}**",
+  "podcast.parse_error": "❌ Error al analizar el canal RSS del podcast. Comprueba la URL.",
+  "podcast.no_episodes": "❌ No se encontraron episodios de audio reproducibles en este canal de podcast.",
+  "podcast.select_placeholder": "Selecciona un episodio de podcast para reproducir..."
 }

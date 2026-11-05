@@ -102,6 +102,8 @@ _COGS = [
     "remaster.cog",          # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster (/remaster /clarity)
     "quiz.cog",              # Gen 5.0: Blind Music Quiz & Leaderboard (/quiz)
     "playlist.cog",          # Gen 5.0: Multi-Playlist Personal Manager (/playlist)
+    "radio.cog",             # Gen 5.0: 24/7 Curated Web Radio & Livestream Directory (/radio)
+    "podcast.cog",           # Gen 5.0: Native Podcast & Audio RSS XML Parser (/podcast)
 ]
 
 
@@ -781,6 +783,8 @@ class MusicBot(commands.Bot):
                 continue
 
             if player.now_playing or not player.idle_since:
+                continue
+            if getattr(player, "is_radio_mode", False):
                 continue
             if not vc or not vc.is_connected():
                 player.idle_since = None

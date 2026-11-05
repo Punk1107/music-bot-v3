@@ -292,5 +292,15 @@
   "clip.success": "✂️ 音频片段生成成功（{duration} 秒，192kbps MP3）：",
   "clip.failed": "❌ 无法从当前音频流生成音频片段。",
   "grab.success": "📬 歌曲详情已发送至您的私信！",
-  "grab.dm_closed": "❌ 无法发送私信。请在隐私设置中开启允许服务器成员发送私信。"
+  "grab.dm_closed": "❌ 无法发送私信。请在隐私设置中开启允许服务器成员发送私信。",
+  "playfile.success": "📁 已将音频附件加入队列：**{title}**",
+  "playfile.invalid_format": "❌ 音频格式无效。支持的格式：.mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 正在收听 **{name}** ({genre})。尽享 24/7 不间断播放！",
+  "radio.custom_started": "📻 正在播放自定义广播流：**{url}**",
+  "radio.invalid_url": "❌ 广播流 URL 无效。请提供直接的 HTTP 或 HTTPS 音频流链接。",
+  "radio.station_not_found": "❌ 在目录中未找到广播电台 **{station}**。",
+  "podcast.loaded": "🎙️ 已将播客单集加入队列：**{show}** - **{title}**",
+  "podcast.parse_error": "❌ 解析播客 RSS 订阅失败。请检查该 URL。",
+  "podcast.no_episodes": "❌ 在此播客订阅中未找到可播放的音频单集。",
+  "podcast.select_placeholder": "请选择要播放的播客单集..."
 }
