@@ -254,5 +254,8 @@
   "health.gateway_degraded": "🟠 延迟偏高",
   "health.gateway_critical": "🔴 严重延迟",
   "health.gateway_details": "延迟: `{current}ms` (平均: `{avg}ms` ± `{jitter}ms`)\n恢复会话: `{resumes}` | 重新连接: `{reconnects}`",
-  "error.internal_incident": "发生意外内部错误。请向支持人员提供事件编号 `{incident_id}`。"
+  "error.internal_incident": "发生意外内部错误。请向支持人员提供事件编号 `{incident_id}`。",
+  "health.backup_status": "数据库备份",
+  "health.backup_details": "总计: `{total}` 份 | 最新: `{latest}` (`{size}MB`)",
+  "health.backup_none": "尚未创建任何备份"
 }

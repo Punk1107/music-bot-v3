@@ -254,5 +254,8 @@
   "health.gateway_degraded": "🟠 Degradado",
   "health.gateway_critical": "🔴 Crítico",
   "health.gateway_details": "Latencia: `{current}ms` (Media: `{avg}ms` ± `{jitter}ms`)\nReanudaciones: `{resumes}` | Reconexiones: `{reconnects}`",
-  "error.internal_incident": "Ocurrió un error interno inesperado. Informe el ID de incidente `{incident_id}` al soporte técnico."
+  "error.internal_incident": "Ocurrió un error interno inesperado. Informe el ID de incidente `{incident_id}` al soporte técnico.",
+  "health.backup_status": "Copia de Seguridad de BD",
+  "health.backup_details": "Total: `{total}` | Último: `{latest}` (`{size}MB`)",
+  "health.backup_none": "No se han creado copias de seguridad todavía"
 }
