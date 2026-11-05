@@ -292,5 +292,15 @@
   "clip.success": "✂️ Audioclip generiert ({duration}s, 192kbps MP3):",
   "clip.failed": "❌ Audioclip konnte aus dem aktuellen Stream nicht generiert werden.",
   "grab.success": "📬 Song-Details wurden an deine Direktnachrichten gesendet!",
-  "grab.dm_closed": "❌ Direktnachricht konnte nicht gesendet werden. Bitte aktiviere Direktnachrichten in deinen Privatsphäre-Einstellungen."
+  "grab.dm_closed": "❌ Direktnachricht konnte nicht gesendet werden. Bitte aktiviere Direktnachrichten in deinen Privatsphäre-Einstellungen.",
+  "playfile.success": "📁 Audio-Anhang zur Warteschlange hinzugefügt: **{title}**",
+  "playfile.invalid_format": "❌ Ungültiges Audioformat. Unterstützte Formate: .mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 Schalte ein: **{name}** ({genre}). Genieße ununterbrochenes 24/7-Streaming!",
+  "radio.custom_started": "📻 Spiele benutzerdefinierte Radio-URL: **{url}**",
+  "radio.invalid_url": "❌ Ungültige Radiostream-URL. Bitte gib einen direkten HTTP- oder HTTPS-Audiostream an.",
+  "radio.station_not_found": "❌ Radiosender **{station}** wurde nicht im Verzeichnis gefunden.",
+  "podcast.loaded": "🎙️ Podcast-Episode zur Warteschlange hinzugefügt: **{title}** von **{show}**",
+  "podcast.parse_error": "❌ Podcast-RSS-Feed konnte nicht analysiert werden. Bitte überprüfe die URL.",
+  "podcast.no_episodes": "❌ Keine abspielbaren Audio-Episoden in diesem Podcast-Feed gefunden.",
+  "podcast.select_placeholder": "Wähle eine Podcast-Episode zum Abspielen aus..."
 }

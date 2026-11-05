@@ -480,15 +480,18 @@ class MusicCog(commands.Cog, name="Music"):
 
         # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
         try:
-            router = getattr(self.bot, "sources_router", None)
-            if router and router.is_supported(next_track.url):
-                stream_url = await router.get_stream_url(next_track)
+            if next_track.stream_url_cache:
+                stream_url = next_track.stream_url_cache
             else:
-                stream_url = await self.bot.yt_breaker.call(
-                    self.bot.youtube.get_stream_url,
-                    next_track.url,
-                    next_track,
-                )
+                router = getattr(self.bot, "sources_router", None)
+                if router and router.is_supported(next_track.url):
+                    stream_url = await router.get_stream_url(next_track)
+                else:
+                    stream_url = await self.bot.yt_breaker.call(
+                        self.bot.youtube.get_stream_url,
+                        next_track.url,
+                        next_track,
+                    )
         except CircuitBreakerOpen:
             if player.text_channel:
                 try:
@@ -944,14 +947,59 @@ class MusicCog(commands.Cog, name="Music"):
             return
         await self.play_track(interaction, tracks[0])
 
+    @app_commands.command(name="playfile", description="Play an uploaded audio file directly from Discord CDN")
+    @app_commands.describe(file="Direct audio file attachment (.mp3, .flac, .wav, .ogg, .m4a, .aac)")
+    async def playfile(self, interaction: discord.Interaction, file: discord.Attachment) -> None:
+        await interaction.response.defer()
+        locale = await get_locale(interaction.guild_id, self.bot.db)
+
+        filename = file.filename.lower()
+        valid_exts = (".mp3", ".flac", ".wav", ".ogg", ".m4a", ".aac", ".opus", ".webm")
+        is_audio_mime = file.content_type and file.content_type.startswith("audio/")
+
+        if not filename.endswith(valid_exts) and not is_audio_mime:
+            await interaction.followup.send(
+                embed=error_embed("Invalid Format", t("playfile.invalid_format", locale)),
+                ephemeral=True,
+            )
+            return
+
+        vc = await self._ensure_voice(interaction)
+        if not vc:
+            return
+
+        player = self.bot.get_player(interaction.guild_id)
+
+        # Check per-user queue limit
+        if player.per_user_limit > 0 and player.user_track_count(interaction.user.id) >= player.per_user_limit:
+            await interaction.followup.send(
+                embed=error_embed("Queue Limit", t("queue.user_limit_exceeded", locale, limit=player.per_user_limit)),
+                ephemeral=True,
+            )
+            return
+
+        from pathlib import Path
+        clean_title = Path(file.filename).stem or file.filename
+        track = Track(
+            title=clean_title,
+            url=file.url,
+            duration=getattr(file, "duration_seconds", 0) or 0,
+            uploader=interaction.user.display_name,
+            requested_by_id=interaction.user.id,
+            requested_by_name=interaction.user.display_name,
+            stream_url_cache=file.url,  # Direct Discord CDN stream bypass
+        )
+
+        await self.play_track(interaction, track)
+
     @play.autocomplete("query")
     async def play_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice]:
-        suggestions = await self.bot.db.get_search_history(
-            interaction.guild_id, prefix=current, limit=25
+        suggestions = await self.bot.db.get_fast_autocomplete(
+            interaction.guild_id, interaction.user.id, prefix=current, limit=25
         )
-        return [app_commands.Choice(name=s[:100], value=s) for s in suggestions]
+        return [app_commands.Choice(name=s["name"][:100], value=s["value"][:100]) for s in suggestions]
 
     @app_commands.command(name="playnext", description="Insert a track to play next immediately after the current song")
     @app_commands.describe(query="YouTube URL, Spotify URL, playlist, or search terms")
@@ -1094,10 +1142,10 @@ class MusicCog(commands.Cog, name="Music"):
     async def playnext_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice]:
-        suggestions = await self.bot.db.get_search_history(
-            interaction.guild_id, prefix=current, limit=25
+        suggestions = await self.bot.db.get_fast_autocomplete(
+            interaction.guild_id, interaction.user.id, prefix=current, limit=25
         )
-        return [app_commands.Choice(name=s[:100], value=s) for s in suggestions]
+        return [app_commands.Choice(name=s["name"][:100], value=s["value"][:100]) for s in suggestions]
 
     @app_commands.command(name="search", description="Search YouTube and choose from results")
     @app_commands.describe(query="Search terms")
@@ -1132,6 +1180,15 @@ class MusicCog(commands.Cog, name="Music"):
 
         view = SearchSelectView(self.bot, interaction.guild_id, tracks, on_select)
         await interaction.followup.send(embed=embed, view=view)
+
+    @search.autocomplete("query")
+    async def search_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice]:
+        suggestions = await self.bot.db.get_fast_autocomplete(
+            interaction.guild_id, interaction.user.id, prefix=current, limit=25
+        )
+        return [app_commands.Choice(name=s["name"][:100], value=s["value"][:100]) for s in suggestions]
 
     @app_commands.command(name="pause", description="Pause playback")
     async def pause(self, interaction: discord.Interaction) -> None:

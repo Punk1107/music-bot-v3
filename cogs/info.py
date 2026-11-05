@@ -161,6 +161,7 @@ HELP_CATEGORIES: dict[str, dict[str, Any]] = {
             ("`/leave`", "Disconnect bot from voice channel and clear queue"),
             ("`/clip [duration]`", "Cut 10-30s audio segment from playback as MP3"),
             ("`/grab`", "Send current track info and links directly to DM"),
+            ("`/playfile <file>`", "Play audio file directly from Discord attachment"),
         ],
     },
     "voting": {
@@ -220,11 +221,13 @@ HELP_CATEGORIES: dict[str, dict[str, Any]] = {
         ],
     },
     "search": {
-        "title": "🔊 Multi-Source Search",
+        "title": "🔊 Streams, Radio & Podcasts",
         "emoji": "🔊",
-        "description": "Direct multi-platform search without leaving Discord.",
+        "description": "SoundCloud search, 24/7 web radio, and native podcast streaming.",
         "commands": [
             ("`/scsearch <query>`", "Search SoundCloud and select tracks via interactive dropdown"),
+            ("`/radio <action>`", "24/7 web radio: Lofi, Thai, SomaFM, Jazz, etc."),
+            ("`/podcast <cmd> <url>`", "Stream podcast RSS feed via native XML parser"),
         ],
     },
     "dsp": {

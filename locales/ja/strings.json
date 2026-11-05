@@ -292,5 +292,15 @@
   "clip.success": "✂️ オーディオクリップを作成しました ({duration} 秒、192kbps MP3):",
   "clip.failed": "❌ 現在のストリームからオーディオクリップを生成できませんでした。",
   "grab.success": "📬 曲の情報をダイレクトメッセージに送信しました！",
-  "grab.dm_closed": "❌ ダイレクトメッセージを送信できませんでした。プライバシー設定でサーバーメンバーからのDMを許可してください。"
+  "grab.dm_closed": "❌ ダイレクトメッセージを送信できませんでした。プライバシー設定でサーバーメンバーからのDMを許可してください。",
+  "playfile.success": "📁 音声ファイルをキューに追加しました: **{title}**",
+  "playfile.invalid_format": "❌ 無効な音声形式です。対応形式: .mp3, .flac, .wav, .ogg, .m4a, .aac, .opus",
+  "radio.started": "📻 **{name}** ({genre}) を受信中。24時間年中無休でお楽しみください！",
+  "radio.custom_started": "📻 カスタムラジオストリームを再生中: **{url}**",
+  "radio.invalid_url": "❌ 無効なラジオストリームURLです。直接のHTTPまたはHTTPS音声ストリームを指定してください。",
+  "radio.station_not_found": "❌ ラジオ局 **{station}** がディレクトリに見つかりませんでした。",
+  "podcast.loaded": "🎙️ ポッドキャストエピソードを追加しました: **{show}** の **{title}**",
+  "podcast.parse_error": "❌ ポッドキャストのRSSフィードの解析に失敗しました。URLをご確認ください。",
+  "podcast.no_episodes": "❌ このポッドキャストフィードに再生可能なエピソードが見つかりませんでした。",
+  "podcast.select_placeholder": "再生するポッドキャストエピソードを選択..."
 }

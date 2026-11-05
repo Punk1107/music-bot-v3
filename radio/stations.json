@@ -1,0 +1,73 @@
+{
+  "lofi": [
+    {
+      "id": "lofi_girl",
+      "name": "Lofi Girl Radio",
+      "url": "https://stream.zeno.fm/0r0xa792kwzuv",
+      "desc": "Beats to relax/study to"
+    },
+    {
+      "id": "chillhop",
+      "name": "Chillhop Radio",
+      "url": "http://stream.chillhop.com/live.mp3",
+      "desc": "Chillhop & jazzy beats"
+    }
+  ],
+  "thai": [
+    {
+      "id": "cat_radio",
+      "name": "Cat Radio",
+      "url": "http://stream.catradio.in.th:8000/;",
+      "desc": "Indie Thai Music & Shows"
+    },
+    {
+      "id": "coolism",
+      "name": "COOL Fahrenheit",
+      "url": "https://coolism-live.cdn.byteark.com/live/playlist.m3u8",
+      "desc": "Thai Popular Music 24/7"
+    }
+  ],
+  "somafm": [
+    {
+      "id": "soma_groovesalad",
+      "name": "SomaFM: Groove Salad",
+      "url": "http://ice1.somafm.com/groovesalad-128-mp3",
+      "desc": "Downtempo ambient grooves"
+    },
+    {
+      "id": "soma_defcon",
+      "name": "SomaFM: DEF CON Radio",
+      "url": "http://ice1.somafm.com/defcon-128-mp3",
+      "desc": "Music for Hackers and Coders"
+    },
+    {
+      "id": "soma_dronezone",
+      "name": "SomaFM: Drone Zone",
+      "url": "http://ice1.somafm.com/dronezone-128-mp3",
+      "desc": "Atmospheric ambient space music"
+    }
+  ],
+  "jazz": [
+    {
+      "id": "swiss_jazz",
+      "name": "Radio Swiss Jazz",
+      "url": "http://stream.srg-ssr.ch/m/rsj/mp3_128",
+      "desc": "Jazz, Soul, and Blues 24/7"
+    },
+    {
+      "id": "jazz_cafe",
+      "name": "Jazz Café Radio",
+      "url": "https://streaming.radio.co/s83713ff4d/listen",
+      "desc": "Classic and Modern Jazz"
+    }
+  ],
+  "classical": [
+    {
+      "id": "swiss_classic",
+      "name": "Radio Swiss Classic",
+      "url": "http://stream.srg-ssr.ch/m/rsc_de/mp3_128",
+      "desc": "Timeless Classical Music"
+    }
+  ]
+}
+

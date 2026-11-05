@@ -35,7 +35,7 @@ from models.track import Track
 
 EXPECTED_TOP_LEVEL_COMMANDS = {
     # 1. Core Playback
-    "play", "playnext", "search", "pause", "resume", "skip", "stop", "nowplaying", "join", "leave", "clip", "grab",
+    "play", "playnext", "search", "pause", "resume", "skip", "stop", "nowplaying", "join", "leave", "clip", "grab", "playfile",
     # 2. Democratic Voice Voting
     "voteskip", "voteshuffle", "voteclear",
     # 3. Queue Operations & Control
@@ -45,8 +45,8 @@ EXPECTED_TOP_LEVEL_COMMANDS = {
     "seek", "forward", "rewind", "replay", "restart", "loopab", "loopab_off",
     # 5. Chapters, Lyrics & Recommendations
     "chapters", "chapter_jump", "cjump", "lyrics", "autoplay",
-    # 6. Multi-Source Search
-    "scsearch",
+    # 6. Multi-Source Search & Streaming
+    "scsearch", "radio", "podcast",
     # 7. Audio DSP, Equalizer & Soundstage
     "volume", "effects", "effects_list", "effects_clear", "quality", "equalizer", "eq",
     "loudnorm", "pan", "stereowide", "speed", "pitch", "crossfade", "silencetrim", "replaygain", "playbackinfo",
@@ -147,6 +147,18 @@ class TestSlashCommandParity:
         assert isinstance(pl_group, discord.app_commands.Group)
         pl_subs = {c.name for c in pl_group.commands}
         assert {"create", "add", "remove", "play", "share", "list", "delete"}.issubset(pl_subs)
+
+        # 9. Radio group: play, station, custom, list
+        radio_group = tree_cmds.get("radio")
+        assert isinstance(radio_group, discord.app_commands.Group)
+        radio_subs = {c.name for c in radio_group.commands}
+        assert {"play", "station", "custom", "list"}.issubset(radio_subs)
+
+        # 10. Podcast group: play, episodes
+        podcast_group = tree_cmds.get("podcast")
+        assert isinstance(podcast_group, discord.app_commands.Group)
+        podcast_subs = {c.name for c in podcast_group.commands}
+        assert {"play", "episodes"}.issubset(podcast_subs)
 
 
 # ── 2. /voteskip Command Logic Tests ─────────────────────────────────────────
