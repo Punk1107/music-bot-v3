@@ -190,6 +190,10 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                     return
                 _vc = _guild.voice_client
                 _player.cancel_prefetch()
+                if getattr(_player, "is_radio_mode", False):
+                    _player.is_radio_mode = False
+                    if getattr(self.bot, "radio_watchdog", None):
+                        self.bot.radio_watchdog.unregister(guild_id)
                 _player.reset()
                 _player.intentional_disconnect = True
                 if _vc and (_vc.is_playing() or _vc.is_paused()):
@@ -214,8 +218,9 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                 pass
             finally:
                 _p = self.bot.get_player(guild_id)
-                _p.sleep_timer_task = None
-                _p.sleep_timer_end  = None
+                if _p.sleep_timer_task is None or _p.sleep_timer_task is asyncio.current_task():
+                    _p.sleep_timer_task = None
+                    _p.sleep_timer_end  = None
 
         task = asyncio.create_task(_timer_task(), name=f"sleep_timer_{guild_id}")
         if hasattr(self.bot, "track_task"):

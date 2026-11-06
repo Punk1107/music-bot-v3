@@ -16,12 +16,12 @@ import asyncio
 import logging
 from typing import Optional, TYPE_CHECKING
 
+import aiohttp
 import yt_dlp
 
 from lyrics.parser import LyricLine, parse_vtt, parse_srt
 
 if TYPE_CHECKING:
-    import aiohttp
     from models.track import Track
 
 logger = logging.getLogger(__name__)
@@ -98,14 +98,23 @@ def _pick_subtitle_url(
     return None, False
 
 
-async def _fetch_subtitle_text(url: str, session: "aiohttp.ClientSession") -> Optional[str]:
+async def _fetch_subtitle_text(url: str, session: Optional["aiohttp.ClientSession"] = None) -> Optional[str]:
     """Download the subtitle file content as a string."""
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-            if resp.status != 200:
-                logger.warning("Subtitle fetch returned HTTP %d for %s", resp.status, url[:80])
-                return None
-            return await resp.text(encoding="utf-8", errors="replace")
+        timeout = aiohttp.ClientTimeout(total=15)
+        if session is not None:
+            async with session.get(url, timeout=timeout) as resp:
+                if resp.status != 200:
+                    logger.warning("Subtitle fetch returned HTTP %d for %s", resp.status, url[:80])
+                    return None
+                return await resp.text(encoding="utf-8", errors="replace")
+        else:
+            async with aiohttp.ClientSession(timeout=timeout) as tmp_session:
+                async with tmp_session.get(url) as resp:
+                    if resp.status != 200:
+                        logger.warning("Subtitle fetch returned HTTP %d for %s", resp.status, url[:80])
+                        return None
+                    return await resp.text(encoding="utf-8", errors="replace")
     except Exception as exc:
         logger.warning("Subtitle download failed: %s", exc)
         return None

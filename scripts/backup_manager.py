@@ -54,6 +54,7 @@ TABLES_IN_ORDER = [
     "session_state",
     "analytics",
     "search_history",
+    "quiz_scores",
 ]
 
 
@@ -173,8 +174,15 @@ def _create_json_backup(
                         for k, v in r.items():
                             if isinstance(v, (dt.datetime, dt.date, dt.time)):
                                 clean_row[k] = v.isoformat()
+                            elif isinstance(v, dt.timedelta):
+                                total_sec = int(v.total_seconds())
+                                h_td, rem = divmod(abs(total_sec), 3600)
+                                m_td, s_td = divmod(rem, 60)
+                                clean_row[k] = f"{h_td:02d}:{m_td:02d}:{s_td:02d}"
                             elif isinstance(v, (bytes, bytearray)):
                                 clean_row[k] = v.decode("utf-8", errors="replace")
+                            elif hasattr(v, "__float__") and not isinstance(v, (int, float, bool)):
+                                clean_row[k] = float(v)
                             else:
                                 clean_row[k] = v
                         clean_rows.append(clean_row)

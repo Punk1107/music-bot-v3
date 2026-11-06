@@ -156,12 +156,21 @@ class LoopABCog(commands.Cog, name="LoopAB"):
 
         ok, err = await self.service.start_loop(interaction.guild_id, start_sec, end_sec)
         if ok:
-            start_formatted = format_duration(start_sec)
-            end_formatted = format_duration(end_sec)
+            actual_start, actual_end = player.loop_ab_range or (start_sec, end_sec)
+            start_formatted = format_duration(actual_start)
+            end_formatted = format_duration(actual_end)
             await interaction.followup.send(
                 embed=success_embed(
                     "Loop A-B Enabled",
                     t("loopab.started", locale, start=start_formatted, end=end_formatted),
+                ),
+                ephemeral=True,
+            )
+        elif err == "invalid_times":
+            await interaction.followup.send(
+                embed=error_embed(
+                    "Invalid Range",
+                    t("loopab.invalid_times", locale, start=format_duration(start_sec), end=format_duration(end_sec)),
                 ),
                 ephemeral=True,
             )

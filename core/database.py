@@ -2232,19 +2232,34 @@ class DatabaseManager:
             rows = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
         else:
             async with self._sqlite_connect() as conn:
-                cursor = await conn.execute(
-                    """
-                    SELECT p.id, p.name, p.description, p.scope, p.is_public,
-                           p.play_count, p.created_at, p.user_id,
-                           COUNT(pt.id) AS track_count
-                    FROM user_playlists p
-                    LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
-                    WHERE p.user_id = ?
-                    GROUP BY p.id
-                    ORDER BY p.created_at DESC
-                    """,
-                    (user_id,),
-                )
+                if include_public:
+                    cursor = await conn.execute(
+                        """
+                        SELECT p.id, p.name, p.description, p.scope, p.is_public,
+                               p.play_count, p.created_at, p.user_id,
+                               COUNT(pt.id) AS track_count
+                        FROM user_playlists p
+                        LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+                        WHERE p.user_id = ? OR p.is_public = 1
+                        GROUP BY p.id
+                        ORDER BY p.created_at DESC
+                        """,
+                        (user_id,),
+                    )
+                else:
+                    cursor = await conn.execute(
+                        """
+                        SELECT p.id, p.name, p.description, p.scope, p.is_public,
+                               p.play_count, p.created_at, p.user_id,
+                               COUNT(pt.id) AS track_count
+                        FROM user_playlists p
+                        LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+                        WHERE p.user_id = ?
+                        GROUP BY p.id
+                        ORDER BY p.created_at DESC
+                        """,
+                        (user_id,),
+                    )
                 rows = [dict(r) for r in await cursor.fetchall()]
 
         result = []
@@ -3384,10 +3399,6 @@ class DatabaseManager:
                     recent = await cur.fetchall()
                     if recent:
                         return random.choice(recent)
-                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
-                    recent_all = await cur.fetchall()
-                    if recent_all:
-                        return random.choice(recent_all)
                 return row
 
             res = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
@@ -3417,11 +3428,6 @@ class DatabaseManager:
                 recent = await cursor.fetchall()
                 if recent:
                     row = random.choice(recent)
-                else:
-                    cursor = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
-                    recent_all = await cursor.fetchall()
-                    if recent_all:
-                        row = random.choice(recent_all)
             if row and row["track_data"]:
                 return Track.from_json(row["track_data"])
             return None
@@ -3446,11 +3452,7 @@ class DatabaseManager:
                     "SELECT track_data FROM history WHERE guild_id = %s ORDER BY id DESC LIMIT 100",
                     (guild_id,),
                 )
-                guild_rows = list(await cur.fetchall())
-                if len(guild_rows) < limit * 2:
-                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
-                    guild_rows.extend(list(await cur.fetchall()))
-                return guild_rows
+                return list(await cur.fetchall())
             rows = await self._run_mysql(_op, guild_id=guild_id, readonly=True) or []
         else:
             async with self._sqlite_connect() as conn:
@@ -3459,9 +3461,6 @@ class DatabaseManager:
                     (guild_id,),
                 )
                 rows = [dict(r) for r in await cur.fetchall()]
-                if len(rows) < limit * 2:
-                    cur = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
-                    rows.extend([dict(r) for r in await cur.fetchall()])
 
         for r in rows:
             try:

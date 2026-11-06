@@ -228,6 +228,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
                 return
             try:
                 vc = await interaction.user.voice.channel.connect(timeout=10.0)
+                player.intentional_disconnect = False
                 player.last_channel_id = vc.channel.id
                 player.text_channel = interaction.channel
             except Exception as exc:
@@ -235,11 +236,23 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
                     embed=error_embed("Connection Failed", str(exc)), ephemeral=True
                 )
                 return
+        elif vc and vc.channel:
+            user_voice = getattr(interaction.user, "voice", None)
+            if not user_voice or user_voice.channel != vc.channel:
+                await interaction.followup.send(
+                    embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)),
+                    ephemeral=True,
+                )
+                return
 
         was_active = bool(vc and (vc.is_playing() or vc.is_paused()))
         if mode == "replace":
             player.undo_push("clear")
             player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False):
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(interaction.guild_id)
             await player.clear()
 
         for t_track in tracks:

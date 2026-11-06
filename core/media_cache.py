@@ -94,7 +94,9 @@ async def get_thumbnail_bytes(
                 ) as resp:
                     if not resp.ok:
                         return None
-                    raw = await resp.read()
+                    raw = await resp.content.read(5 * 1024 * 1024 + 1)
+                    if len(raw) > 5 * 1024 * 1024:
+                        return None
             finally:
                 if close_session and session:
                     await session.close()
@@ -193,6 +195,8 @@ async def bg_refresh_metadata(
     """
     url = track.url
     if not url:
+        return
+    if hasattr(extractor, "is_youtube_url") and not extractor.is_youtube_url(url):
         return
 
     # Check if we already refreshed recently

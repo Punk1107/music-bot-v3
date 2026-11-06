@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 def _is_admin(member: discord.Member) -> bool:
-    return member.guild_permissions.administrator
+    perms = getattr(member, "guild_permissions", None)
+    return bool(perms and perms.administrator)
 
 
 class AdminCog(commands.Cog, name="Admin"):
@@ -170,6 +171,13 @@ class AdminCog(commands.Cog, name="Admin"):
         if enabled and interaction.guild:
             channel = interaction.guild.get_channel(cfg.request_channel_id)
             if channel and isinstance(channel, discord.TextChannel):
+                if cfg.board_message_id:
+                    try:
+                        old_msg = await channel.fetch_message(cfg.board_message_id)
+                        await old_msg.delete()
+                    except Exception as e:
+                        logger.debug("Failed deleting old board message on rc_clean_mode enable: %s", e)
+                    cfg.board_message_id = None
                 from utils.embeds import request_channel_board_embed
                 from utils.views import CleanBoardControlView
                 player = self.bot.get_player(interaction.guild_id)

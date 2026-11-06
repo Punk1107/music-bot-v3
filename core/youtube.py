@@ -478,7 +478,7 @@ class YouTubeExtractor:
             except Exception:
                 pass
             async with self._search_cache_lock:
-                self._search_cache[cache_key] = (tracks, time.monotonic())
+                self._search_cache[cache_key] = ([copy.copy(t) for t in tracks], time.monotonic())
                 if len(self._search_cache) > config.SEARCH_CACHE_MAX_SIZE:
                     oldest = min(self._search_cache, key=lambda k: self._search_cache[k][1])
                     del self._search_cache[oldest]
@@ -519,12 +519,14 @@ class YouTubeExtractor:
             if not entry:
                 continue
             title     = entry.get("title") or entry.get("ie_key", "Unknown")
+            if title in ("[Private video]", "[Deleted video]"):
+                continue
             video_id  = entry.get("id", "")
-            video_url = (
-                entry.get("url")
-                or entry.get("webpage_url")
-                or (f"https://www.youtube.com/watch?v={video_id}" if video_id else None)
-            )
+            raw_url   = entry.get("url") or entry.get("webpage_url")
+            if raw_url and not raw_url.startswith(("http://", "https://")):
+                video_url = f"https://www.youtube.com/watch?v={raw_url}"
+            else:
+                video_url = raw_url or (f"https://www.youtube.com/watch?v={video_id}" if video_id else None)
             if not video_url or not title:
                 continue
             duration = int(entry.get("duration") or 0)

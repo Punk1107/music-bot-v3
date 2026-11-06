@@ -1823,5 +1823,163 @@ class TestPhase5ServerAutomationAndGovernance:
         assert player.loudnorm_profile == "podcast"
         assert player.loudnorm is False
 
+    @pytest.mark.asyncio
+    async def test_phase7_views_single_arg_callbacks_and_method_names(self):
+        from utils.views import (
+            HistoryView,
+            QueueSearchResultView,
+            MusicControlView,
+            VoteSkipView,
+            VoteClearView,
+            VoteShuffleView,
+        )
+
+        bot = MagicMock()
+        t1 = Track(title="Hist Song 1", url="https://youtube.com/watch?v=h1", duration=120)
+        rows = [{"track_data": t1.to_json()}]
+        play_cb = AsyncMock()
+
+        # HistoryView buttons invoked with 1 arg (interaction) as discord.py BaseView does
+        h_view = HistoryView.__new__(HistoryView)
+        h_view.bot = bot
+        h_view.guild_id = 101
+        h_view.rows = rows
+        h_view._cb = play_cb
+        h_view.page = 1
+        h_view._children = []
+        h_view._rebuild()
+
+        inter = MagicMock()
+        inter.response.defer = AsyncMock()
+        inter.response.edit_message = AsyncMock()
+
+        replay_btn = next(c for c in h_view.children if getattr(c, "custom_id", "") == "hist_replay_0")
+        await cast(Any, replay_btn.callback)(inter)
+        play_cb.assert_awaited_once()
+
+        next_btn = next(c for c in h_view.children if getattr(c, "custom_id", "") == "hist_next")
+        with patch("utils.views.history_embed", return_value=MagicMock()):
+            await cast(Any, next_btn.callback)(inter)
+
+        # QueueSearchResultView buttons invoked with 1 arg (interaction)
+        jump_cb = AsyncMock()
+        rm_cb = AsyncMock()
+        qs_view = QueueSearchResultView.__new__(QueueSearchResultView)
+        qs_view.bot = bot
+        qs_view.guild_id = 101
+        qs_view.results = [(1, t1)]
+        qs_view._jump_cb = jump_cb
+        qs_view._rm_cb = rm_cb
+        qs_view._children = []
+        qs_view._build()
+
+        j_btn = next(c for c in qs_view.children if getattr(c, "custom_id", "") == "qs_jump_1")
+        r_btn = next(c for c in qs_view.children if getattr(c, "custom_id", "") == "qs_rm_1")
+        await cast(Any, j_btn.callback)(inter)
+        await cast(Any, r_btn.callback)(inter)
+        jump_cb.assert_awaited_once_with(inter, 1)
+        rm_cb.assert_awaited_once_with(inter, 1)
+
+        # MusicControlView has btn_stop and does not shadow View.stop
+        assert hasattr(MusicControlView, "btn_stop")
+        assert hasattr(VoteSkipView, "_refresh_vote_message")
+        assert hasattr(VoteClearView, "_refresh_vote_message")
+        assert hasattr(VoteShuffleView, "_refresh_vote_message")
+
+    @pytest.mark.asyncio
+    async def test_phase7_lyrics_runtime_aiohttp_vtt_crlf_and_thai_no_merge(self):
+        from lyrics.parser import parse_vtt, parse_srt
+        from lyrics.service import _fetch_subtitle_text
+
+        # VTT with CRLF, sequence numbers, and Thai lyrics (no spaces between words)
+        vtt_crlf = (
+            "WEBVTT\r\n\r\n"
+            "1\r\n"
+            "00:00:01.000 --> 00:00:04.000\r\n"
+            "เธอคือความรักที่สวยงามในใจฉัน\r\n\r\n"
+            "2\r\n"
+            "00:00:05.000 --> 00:00:08.000\r\n"
+            "เราจะเดินไปด้วยกันตลอดไป\r\n"
+        )
+        lines = parse_vtt(vtt_crlf)
+        # Must remain 2 distinct lines, not merged into 1!
+        assert len(lines) == 2
+        assert lines[0].text == "เธอคือความรักที่สวยงามในใจฉัน"
+        assert lines[1].text == "เราจะเดินไปด้วยกันตลอดไป"
+
+        # SRT with CRLF
+        srt_crlf = (
+            "1\r\n"
+            "00:00:01,000 --> 00:00:03,000\r\n"
+            "First line here\r\n\r\n"
+            "2\r\n"
+            "00:00:04,000 --> 00:00:06,000\r\n"
+            "Second line here\r\n"
+        )
+        srt_lines = parse_srt(srt_crlf)
+        assert len(srt_lines) == 2
+
+        # _fetch_subtitle_text works at runtime without NameError on aiohttp
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.text = AsyncMock(return_value=vtt_crlf)
+        mock_cm = MagicMock()
+        mock_cm.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_cm.__aexit__ = AsyncMock(return_value=None)
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_cm
+
+        fetched = await _fetch_subtitle_text("https://example.com/sub.vtt", mock_session)
+        assert fetched == vtt_crlf
+
+    @pytest.mark.asyncio
+    async def test_phase7_loop_ab_clamp_and_database_quiz_guild_isolation(self, tmp_path):
+        from loop_ab.service import LoopABService
+        from core.database import DatabaseManager
+        import datetime as dt
+        from scripts.backup_manager import TABLES_IN_ORDER
+
+        assert "quiz_scores" in TABLES_IN_ORDER
+
+        # LoopABService: start_sec >= track.duration must fail with invalid_times after clamping end_sec
+        bot = MagicMock()
+        player = GuildPlayer(321)
+        player.now_playing = Track(title="Short Song", url="https://youtube.com/watch?v=s1", duration=60)
+        bot.get_player.return_value = player
+        loop_svc = LoopABService(bot)
+        ok, err = await loop_svc.start_loop(321, start_sec=70, end_sec=90)
+        assert ok is False
+        assert err == "invalid_times"
+
+        # Database: get_random_quiz_track & get_quiz_distractors must not leak tracks from other guilds,
+        # and SQLite list_playlists(include_public=True) returns public playlists from other users
+        db_file = tmp_path / "phase7_test.db"
+        db = DatabaseManager(str(db_file))
+        await db.init_db()
+
+        other_guild_track = Track(title="Secret Other Server Song", url="https://youtube.com/watch?v=sec", duration=180)
+        await db.add_history(guild_id=999, track=other_guild_track, user_id=10)
+
+        # Guild 111 has 0 history rows -> must NOT receive Guild 999's track
+        quiz_track = await db.get_random_quiz_track(guild_id=111)
+        assert quiz_track is None
+
+        distractors = await db.get_quiz_distractors(guild_id=111, exclude_title="Anything", limit=3)
+        assert "Secret Other Server Song" not in distractors
+
+        # Public playlist visibility on SQLite
+        await db.save_playlist(
+            user_id=500,
+            guild_id=111,
+            name="Public Mix",
+            tracks=[other_guild_track],
+            is_public=True,
+        )
+        pl_private_only = await db.list_playlists(user_id=600, guild_id=111, include_public=False)
+        assert len(pl_private_only) == 0
+        pl_with_public = await db.list_playlists(user_id=600, guild_id=111, include_public=True)
+        assert any(p["name"] == "Public Mix" for p in pl_with_public)
+
+
 
 
