@@ -105,12 +105,22 @@ class LoudnormCog(commands.Cog, name="Loudnorm"):
 
         if profile is not None:
             norm_prof = profile.lower().strip()
-            if norm_prof in LOUDNORM_PROFILES:
-                player.loudnorm_profile = norm_prof
+            if norm_prof not in LOUDNORM_PROFILES:
+                await interaction.followup.send(
+                    embed=error_embed(
+                        "Invalid Profile",
+                        f"Choose one of: {', '.join(LOUDNORM_PROFILES.keys())}",
+                    ),
+                    ephemeral=True,
+                )
+                return
+            player.loudnorm_profile = norm_prof
+            if enabled is None:
                 player.loudnorm = True
-        elif enabled is not None:
+
+        if enabled is not None:
             player.loudnorm = enabled
-        else:
+        elif profile is None:
             player.loudnorm = not player.loudnorm
 
         state = player.loudnorm

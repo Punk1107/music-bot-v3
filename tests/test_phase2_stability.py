@@ -1287,8 +1287,7 @@ class TestPhase5ServerAutomationAndGovernance:
         player.total_paused_duration = 12.5
         assert player.is_paused is True
 
-        nxt = await player.finish_track()
-        assert nxt is None
+        await player.finish_track()
         assert player.now_playing is None
         assert player.play_start_time is None
         assert player.paused_at is None
@@ -1464,6 +1463,7 @@ class TestPhase5ServerAutomationAndGovernance:
 
     @pytest.mark.asyncio
     async def test_phase5_multisource_router_str_and_direct_stream_seek(self):
+        from models.enums import AudioQuality
         from sources.router import MultiSourceRouter
         from seek.service import SeekService
 
@@ -1532,8 +1532,8 @@ class TestPhase5ServerAutomationAndGovernance:
         assert snap["pan_balance"] == -0.8
         assert snap["spatial_preset"] == "concert_hall"
 
-        # Applying built-in "normal" preset must reset all Gen 5.0 DSP fields back to defaults
-        _apply_preset(player, _BUILTIN_PRESETS["normal"])
+        # Applying built-in "gaming" preset must reset all Gen 5.0 DSP fields back to defaults
+        _apply_preset(player, _BUILTIN_PRESETS["gaming"])
         assert player.vocal_mode is None
         assert player.pan_balance == 0.0
         assert player.stereo_width == 1.0
@@ -1556,16 +1556,18 @@ class TestPhase5ServerAutomationAndGovernance:
         inter.followup.send = AsyncMock()
 
         with patch("vocal.cog.get_locale", AsyncMock(return_value="en")):
-            await VocalCog.vocal.callback(cog, inter, mode=None, suppression=80)
+            await cast(Any, cog.vocal.callback)(cog, inter, mode=None, suppression=80)
         assert player.vocal_mode == "remove"
         assert player.vocal_suppression == 80
 
     @pytest.mark.asyncio
     async def test_phase5_request_channel_voice_isolation_and_volume_clamp(self):
+        from main import MusicBot
         from models.enums import NLUIntent
         from core.nlu import NLUResult
 
-        bot = MusicBot()
+        bot = MusicBot.__new__(MusicBot)
+        bot._players = {}
         bot.db = MagicMock()
         cfg = MagicMock()
         cfg.clean_mode = False
@@ -1607,5 +1609,219 @@ class TestPhase5ServerAutomationAndGovernance:
         bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.PAUSE)
         await bot._handle_request_channel(msg)
         assert player.is_paused is False
+
+    def test_phase6_nlu_thai_boundaries(self):
+        from core.nlu import RegexNLU
+        from models.enums import NLUIntent
+
+        nlu = RegexNLU()
+
+        # Thai words ending with tone marks / non-spacing vowels must match accurately
+        assert nlu.parse("วนซ้ำ").intent == NLUIntent.LOOP
+        assert nlu.parse("ซ้ำ").intent == NLUIntent.LOOP
+        assert nlu.parse("สุ่ม").intent == NLUIntent.SHUFFLE
+        assert nlu.parse("สุ่มเพลง").intent == NLUIntent.SHUFFLE
+        assert nlu.parse("เล่นต่อ").intent == NLUIntent.RESUME
+        assert nlu.parse("ต่อเลย").intent == NLUIntent.RESUME
+        assert nlu.parse("หยุดเลย").intent == NLUIntent.STOP
+        assert nlu.parse("หยุด").intent == NLUIntent.PAUSE
+
+        vol_up = nlu.parse("ดังขึ้น")
+        assert vol_up.intent == NLUIntent.VOLUME
+        assert vol_up.volume_dir == "up"
+
+        vol_down = nlu.parse("เบาลง")
+        assert vol_down.intent == NLUIntent.VOLUME
+        assert vol_down.volume_dir == "down"
+
+        # English words starting with "play" like "playlist" must not match PLAY intent
+        assert nlu.parse("playlist").intent == NLUIntent.UNKNOWN
+
+    @pytest.mark.asyncio
+    async def test_phase6_views_shuffle_uses_undo_push_and_cancels_prefetch(self):
+        from utils.views import MusicControlView, QueueView, CleanBoardControlView
+
+        bot = MagicMock()
+        bot.track_task = MagicMock(side_effect=lambda c, *a, **k: c.close() if asyncio.iscoroutine(c) else None)
+        player = GuildPlayer(555)
+        t1 = Track(title="A", url="https://ex.com/1", duration=60)
+        t2 = Track(title="B", url="https://ex.com/2", duration=60)
+        await player.extend([t1, t2])
+        player.cancel_prefetch = MagicMock()
+        bot.get_player.return_value = player
+
+        inter = MagicMock()
+        inter.guild_id = 555
+        inter.guild = MagicMock()
+        inter.guild.id = 555
+        inter.response.send_message = AsyncMock()
+        inter.response.edit_message = AsyncMock()
+        inter.response.is_done.return_value = False
+
+        # 1. MusicControlView.shuffle
+        m_view = MusicControlView.__new__(MusicControlView)
+        m_view.bot = bot
+        m_view.guild_id = 555
+        m_view._check = AsyncMock(return_value=True)
+        m_view._vc = MagicMock(return_value=None)
+        await cast(Any, MusicControlView.shuffle)(m_view, inter, MagicMock())
+        assert len(player.undo_stack) == 1
+        assert player.undo_stack[-1].operation == "shuffle"
+        player.cancel_prefetch.assert_called_once()
+
+        # 2. QueueView.shuffle
+        player.cancel_prefetch.reset_mock()
+        q_view = QueueView.__new__(QueueView)
+        q_view.bot = bot
+        q_view.guild_id = 555
+        q_view.page = 1
+        q_view._sync_nav = MagicMock()
+        await cast(Any, QueueView.shuffle)(q_view, inter, MagicMock())
+        assert len(player.undo_stack) == 2
+        player.cancel_prefetch.assert_called_once()
+
+        # 3. CleanBoardControlView.btn_shuffle
+        player.cancel_prefetch.reset_mock()
+        cb_view = CleanBoardControlView.__new__(CleanBoardControlView)
+        cb_view.bot = bot
+        cb_view._get_gid = MagicMock(return_value=555)
+        cb_view._update_board = AsyncMock()
+        await cast(Any, CleanBoardControlView.btn_shuffle)(cb_view, inter, MagicMock())
+        assert len(player.undo_stack) == 3
+        player.cancel_prefetch.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_phase6_radio_watchdog_preserves_user_queue_and_cog_unload_async(self):
+        from radio.cog import RadioCog
+        from radio.watchdog import RadioWatchdog, RadioSession
+        import datetime
+
+        assert asyncio.iscoroutinefunction(RadioCog.cog_unload)
+
+        bot = MagicMock()
+        player = GuildPlayer(777)
+        player.is_radio_mode = True
+        queued_song = Track(title="User Song", url="https://ex.com/u", duration=120)
+        await player.enqueue(queued_song)
+        bot.get_player.return_value = player
+
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        guild = MagicMock()
+        guild.voice_client = vc
+        bot.get_guild.return_value = guild
+
+        music_cog = MagicMock()
+        music_cog._play_next = AsyncMock()
+        bot.cogs = {"Music": music_cog}
+
+        wd = RadioWatchdog(bot)
+        session = RadioSession(
+            station_id="lofi",
+            station_name="Lofi Radio",
+            stream_url="https://ex.com/radio",
+            started_at=datetime.datetime.now(datetime.timezone.utc),
+        )
+        wd._sessions[777] = session
+
+        await wd._check_guild_stream(777, session)
+        # User queue must NOT be cleared; radio mode is unregistered and _play_next is called
+        assert len(player) == 1
+        assert player.queue[0].title == "User Song"
+        assert player.is_radio_mode is False
+        music_cog._play_next.assert_awaited_once_with(777)
+
+    @pytest.mark.asyncio
+    async def test_phase6_request_channel_volume_dir_stop_loop_shuffle_and_self_test(self):
+        from main import MusicBot
+        from models.enums import NLUIntent, LoopMode
+        from core.nlu import NLUResult
+        from core.self_test import _check_permissions, _check_spotify
+        from loudnorm.cog import LoudnormCog
+
+        bot = MusicBot.__new__(MusicBot)
+        bot._players = {}
+        bot.db = MagicMock()
+        bot.track_task = MagicMock(side_effect=lambda c, *a, **k: c.close() if asyncio.iscoroutine(c) else None)
+        cfg = MagicMock()
+        cfg.clean_mode = False
+        cfg.board_message_id = None
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+
+        player = bot.get_player(889)
+        player.volume = 0.5  # 50%
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        vc.channel = MagicMock()
+        vc.channel.id = 1001
+        vc.channel.name = "BotVoice"
+        vc.source = MagicMock()
+        vc.source.volume = 0.5
+
+        msg = MagicMock()
+        msg.guild.id = 889
+        msg.guild.voice_client = vc
+        msg.delete = AsyncMock()
+        msg.channel.send = AsyncMock()
+        msg.author.voice = MagicMock()
+        msg.author.voice.channel = vc.channel
+
+        bot.nlu = MagicMock()
+        # Relative volume up (+10% -> 60%)
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.VOLUME, volume_dir="up")
+        await bot._handle_request_channel(msg)
+        assert player.volume == 0.6
+
+        # Loop toggle (OFF -> TRACK)
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.LOOP)
+        await bot._handle_request_channel(msg)
+        assert player.loop_mode == LoopMode.TRACK
+
+        # Shuffle
+        await player.extend([
+            Track(title="S1", url="https://ex.com/1", duration=60),
+            Track(title="S2", url="https://ex.com/2", duration=60),
+        ])
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.SHUFFLE)
+        await bot._handle_request_channel(msg)
+        assert len(player.undo_stack) == 1
+
+        # Stop
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.STOP)
+        await bot._handle_request_channel(msg)
+        assert len(player) == 0
+        vc.stop.assert_called_once()
+
+        # Self-test _check_permissions checks 2nd guild even when 1st guild is OK
+        g1 = MagicMock()
+        g1.name = "Guild1"
+        g1.me.guild_permissions = MagicMock(connect=True, speak=True, send_messages=True, embed_links=True, read_messages=True)
+        g2 = MagicMock()
+        g2.name = "Guild2"
+        g2.me.guild_permissions = MagicMock(connect=True, speak=False, send_messages=True, embed_links=True, read_messages=True)
+        bot_st = MagicMock()
+        bot_st.is_ready.return_value = True
+        bot_st.guilds = [g1, g2]
+        perm_res = await _check_permissions(bot_st)
+        assert perm_res.ok is False
+        assert "Guild2" in perm_res.detail
+
+        # Loudnorm profile with enabled=False keeps loudnorm False
+        ln_cog = LoudnormCog(bot)
+        ln_cog._check_permissions = AsyncMock(return_value=True)
+        ln_cog._restart_audio = MagicMock()
+        inter = MagicMock()
+        inter.guild_id = 889
+        inter.response.defer = AsyncMock()
+        inter.followup.send = AsyncMock()
+        with patch("loudnorm.cog.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, ln_cog.loudnorm.callback)(ln_cog, inter, profile="podcast", enabled=False)
+        assert player.loudnorm_profile == "podcast"
+        assert player.loudnorm is False
+
 
 

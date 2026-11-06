@@ -95,12 +95,22 @@ class RadioWatchdog:
             return
 
         player = self.bot.get_player(guild_id)
-        if not player.is_radio_mode:
+        if not getattr(player, "is_radio_mode", False):
             self.unregister(guild_id)
+            return
+
+        if hasattr(player, "_playing_lock") and player._playing_lock.locked():
             return
 
         # If voice client is neither playing nor paused, stream has died unexpectedly!
         if not vc.is_playing() and not vc.is_paused():
+            music_cog = self.bot.cogs.get("Music")
+            if len(player) > 0:
+                self.unregister(guild_id)
+                if music_cog and hasattr(music_cog, "_play_next"):
+                    await music_cog._play_next(guild_id)
+                return
+
             session.reconnect_count += 1
             logger.warning(
                 "24/7 Radio stream stalled in guild %d ('%s'). Auto-reconnecting attempt #%d...",
@@ -116,10 +126,9 @@ class RadioWatchdog:
                 stream_url_cache=session.stream_url,
             )
 
-            music_cog = self.bot.cogs.get("Music")
-            if music_cog:
+            if music_cog and hasattr(music_cog, "_play_next"):
                 try:
-                    await player.clear()
+                    player.is_radio_mode = True
                     await player.enqueue(track)
                     await music_cog._play_next(guild_id)
                     logger.info("Successfully resumed 24/7 radio stream in guild %d.", guild_id)

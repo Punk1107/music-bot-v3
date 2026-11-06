@@ -175,9 +175,15 @@ class DashboardRouter:
         self._require_auth(request)
         gid = self._parse_guild_id(request)
         body = await self._parse_json_body(request)
+        raw_from = body.get("from_index")
+        if raw_from is None:
+            raw_from = body.get("from", -1)
+        raw_to = body.get("to_index")
+        if raw_to is None:
+            raw_to = body.get("to", -1)
         try:
-            from_idx = int(body.get("from_index", body.get("from", -1)))
-            to_idx = int(body.get("to_index", body.get("to", -1)))
+            from_idx = int(raw_from)
+            to_idx = int(raw_to)
         except (ValueError, TypeError):
             raise web.HTTPBadRequest(
                 text=json.dumps({"error": "invalid_indices"}),
@@ -237,8 +243,8 @@ class DashboardRouter:
         q = request.rel_url.query.get("q", "").strip()
         limit_raw = request.rel_url.query.get("limit", "5")
         try:
-            limit = int(limit_raw)
-        except ValueError:
+            limit = max(1, min(25, int(limit_raw)))
+        except (ValueError, TypeError):
             limit = 5
         results = await self.service.search_tracks(q, limit=limit)
         return web.json_response({"results": results, "count": len(results)})
@@ -247,7 +253,7 @@ class DashboardRouter:
         self._require_auth(request)
         gid = self._parse_guild_id(request)
         body = await self._parse_json_body(request)
-        query = body.get("query", "").strip()
+        query = str(body.get("query") or "").strip()
         play_next = bool(body.get("play_next", False))
         res = await self.service.add_to_queue(gid, query, play_next=play_next)
         status = 200 if res.get("success") else 400
@@ -280,7 +286,7 @@ class DashboardRouter:
         self._require_auth(request)
         gid = self._parse_guild_id(request)
         body = await self._parse_json_body(request)
-        name = body.get("name", "").strip()
+        name = str(body.get("name") or "").strip()
         settings = body.get("settings")
         res = await self.service.save_guild_preset(gid, name=name, settings=settings)
         status = 200 if res.get("success") else 400
@@ -290,7 +296,7 @@ class DashboardRouter:
         self._require_auth(request)
         gid = self._parse_guild_id(request)
         body = await self._parse_json_body(request)
-        name = body.get("name", "").strip()
+        name = str(body.get("name") or "").strip()
         res = await self.service.load_guild_preset(gid, name=name)
         status = 200 if res.get("success") else 400
         return web.json_response(res, status=status)

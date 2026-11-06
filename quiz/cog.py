@@ -132,8 +132,16 @@ class QuizCog(commands.Cog, name="Quiz"):
                 correct_idx = round_data["correct_index"]
 
                 # Resolve audio URL
+                stream_url = None
                 try:
-                    stream_url = await self.bot.youtube.get_stream_url(track.url, track)
+                    if getattr(track, "stream_url_cache", None) and getattr(track, "stream_url_expires", None) is None:
+                        stream_url = track.stream_url_cache
+                    else:
+                        router = getattr(self.bot, "sources_router", None)
+                        if router and hasattr(router, "is_supported") and router.is_supported(track.url):
+                            stream_url = await router.get_stream_url(track)
+                        else:
+                            stream_url = await self.bot.youtube.get_stream_url(track.url, track)
                 except Exception:
                     stream_url = None
 
@@ -145,6 +153,12 @@ class QuizCog(commands.Cog, name="Quiz"):
                     _p = self.bot.get_player(guild_id)
                     if _p is not None:
                         _p._play_seq = getattr(_p, "_play_seq", 0) + 1
+                        _p.now_playing = None
+                        if getattr(_p, "is_radio_mode", False):
+                            _p.is_radio_mode = False
+                            rw = getattr(self.bot, "radio_watchdog", None)
+                            if rw:
+                                rw.unregister(guild_id)
                         if hasattr(_p, "cancel_prefetch"):
                             _p.cancel_prefetch()
                 if vc.is_playing() or vc.is_paused():

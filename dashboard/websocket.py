@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from aiohttp import web
 
@@ -20,6 +20,20 @@ if TYPE_CHECKING:
     from dashboard.service import DashboardService
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_int(val: Any, default: int) -> int:
+    try:
+        return int(val) if val is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_float(val: Any, default: float) -> float:
+    try:
+        return float(val) if val is not None else default
+    except (ValueError, TypeError):
+        return default
 
 
 class DashboardWebSocketManager:
@@ -154,27 +168,39 @@ class DashboardWebSocketManager:
         elif action == "skip":
             result = await self.service.skip(guild_id)
         elif action == "volume":
-            vol = float(data.get("volume", data.get("value", 100)))
+            raw_vol = data.get("volume")
+            if raw_vol is None:
+                raw_vol = data.get("value", 100)
+            vol = _safe_float(raw_vol, 100.0)
             result = await self.service.set_volume(guild_id, vol)
         elif action == "seek":
-            pos = int(data.get("position", data.get("seconds", 0)))
+            raw_pos = data.get("position")
+            if raw_pos is None:
+                raw_pos = data.get("seconds", 0)
+            pos = _safe_int(raw_pos, 0)
             result = await self.service.seek(guild_id, pos)
         elif action == "move_queue":
-            from_idx = int(data.get("from_index", data.get("from", 0)))
-            to_idx = int(data.get("to_index", data.get("to", 0)))
+            raw_from = data.get("from_index")
+            if raw_from is None:
+                raw_from = data.get("from", 0)
+            raw_to = data.get("to_index")
+            if raw_to is None:
+                raw_to = data.get("to", 0)
+            from_idx = _safe_int(raw_from, -1)
+            to_idx = _safe_int(raw_to, -1)
             result = await self.service.move_queue(guild_id, from_idx, to_idx)
         elif action == "remove_queue":
-            idx = int(data.get("index", -1))
+            idx = _safe_int(data.get("index"), -1)
             result = await self.service.remove_from_queue(guild_id, idx)
         elif action == "clear_queue":
             result = await self.service.clear_queue(guild_id)
         elif action == "shuffle_queue":
             result = await self.service.shuffle_queue(guild_id)
         elif action == "loop":
-            mode = data.get("mode", "off")
+            mode = str(data.get("mode") or "off")
             result = await self.service.set_loop_mode(guild_id, mode)
         elif action in ("toggle_effect", "effect"):
-            effect = data.get("effect", "")
+            effect = str(data.get("effect") or "")
             result = await self.service.toggle_effect(guild_id, effect)
         elif action in ("set_equalizer", "equalizer"):
             bands = data.get("bands")
@@ -185,29 +211,29 @@ class DashboardWebSocketManager:
             await ws.send_json({"type": "presets_list", "guild_id": str(guild_id), "data": result})
             return
         elif action == "save_preset":
-            name = str(data.get("name", "")).strip()
+            name = str(data.get("name") or "").strip()
             settings = data.get("settings")
             result = await self.service.save_guild_preset(guild_id, name=name, settings=settings)
         elif action == "load_preset":
-            name = str(data.get("name", "")).strip()
+            name = str(data.get("name") or "").strip()
             result = await self.service.load_guild_preset(guild_id, name=name)
         elif action == "delete_preset":
-            name = str(data.get("name", "")).strip()
+            name = str(data.get("name") or "").strip()
             result = await self.service.delete_guild_preset(guild_id, name=name)
         elif action in ("get_lyrics", "lyrics"):
             result = await self.service.get_lyrics(guild_id)
             await ws.send_json({"type": "lyrics", "guild_id": str(guild_id), "data": result})
             return
         elif action == "add_to_queue":
-            query = data.get("query", "")
+            query = str(data.get("query") or "")
             play_next = bool(data.get("play_next", False))
             result = await self.service.add_to_queue(guild_id, query, play_next=play_next)
         elif action == "play_next":
-            query = data.get("query", "")
+            query = str(data.get("query") or "")
             result = await self.service.add_to_queue(guild_id, query, play_next=True)
         elif action == "search":
-            query = data.get("query", "")
-            limit = int(data.get("limit", 5))
+            query = str(data.get("query") or "")
+            limit = max(1, min(25, _safe_int(data.get("limit"), 5)))
             results = await self.service.search_tracks(query, limit=limit)
             await ws.send_json({"type": "search_results", "query": query, "results": results})
             return

@@ -263,7 +263,8 @@ class MusicControlView(discord.ui.View):
             return
         locale = get_locale_sync(self.guild_id)
         player = self.bot.get_player(self.guild_id)
-        player.push_undo()
+        player.undo_push("shuffle")
+        player.cancel_prefetch()
         await player.shuffle()
         vc = self._vc(interaction)
         if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
@@ -498,7 +499,7 @@ class QueueView(discord.ui.View):
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.primary, custom_id="q_shuffle")
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         player = self.bot.get_player(self.guild_id)
-        player.push_undo()
+        player.undo_push("shuffle")
         player.cancel_prefetch()
         await player.shuffle()
         if player.last_channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
@@ -1288,7 +1289,8 @@ class CleanBoardControlView(discord.ui.View):
         if not gid:
             return
         player = self.bot.get_player(gid)
-        player.push_undo()
+        player.undo_push("shuffle")
+        player.cancel_prefetch()
         await player.shuffle()
         if player.last_channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
             self.bot.track_task(self.bot.db.save_queue(gid, player.last_channel_id, player.queue))

@@ -1340,8 +1340,9 @@ class MusicCog(commands.Cog, name="Music"):
             player.cancel_prefetch()
             if getattr(player, "is_radio_mode", False) and len(player) == 0:
                 player.is_radio_mode = False
-                if getattr(self.bot, "radio_watchdog", None):
-                    self.bot.radio_watchdog.unregister(interaction.guild_id)
+                rw = getattr(self.bot, "radio_watchdog", None)
+                if rw:
+                    rw.unregister(interaction.guild_id)
             vc.stop()
             label = "DJ Skip ⏭" if is_dj else "Skipped (Your Track) ⏭"
             await interaction.followup.send(
@@ -1376,8 +1377,9 @@ class MusicCog(commands.Cog, name="Music"):
             player.skip_votes.clear()
             if getattr(player, "is_radio_mode", False) and len(player) == 0:
                 player.is_radio_mode = False
-                if getattr(self.bot, "radio_watchdog", None):
-                    self.bot.radio_watchdog.unregister(interaction.guild_id)
+                rw = getattr(self.bot, "radio_watchdog", None)
+                if rw:
+                    rw.unregister(interaction.guild_id)
             vc.stop()
             await interaction.followup.send(
                 embed=success_embed(
@@ -1422,8 +1424,9 @@ class MusicCog(commands.Cog, name="Music"):
         player.cancel_prefetch()
         if getattr(player, "is_radio_mode", False):
             player.is_radio_mode = False
-            if getattr(self.bot, "radio_watchdog", None):
-                self.bot.radio_watchdog.unregister(interaction.guild_id)
+            rw = getattr(self.bot, "radio_watchdog", None)
+            if rw:
+                rw.unregister(interaction.guild_id)
         player.reset()
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()

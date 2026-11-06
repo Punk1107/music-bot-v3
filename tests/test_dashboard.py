@@ -905,3 +905,28 @@ class TestDashboardNextGenV2:
         await svc.remove_from_queue(111, index=0)
         player.cancel_prefetch.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_phase6_ws_null_numeric_safety_and_multisource_search(self, mock_bot, dummy_track):
+        svc = DashboardService(mock_bot)
+        ws_mgr = DashboardWebSocketManager(svc)
+        ws = MagicMock()
+        ws.send_json = AsyncMock()
+
+        # Sending explicit None for numeric fields in WS messages must not raise TypeError/ValueError
+        await ws_mgr._handle_client_message(ws, {"action": "volume", "guild_id": "111", "volume": None})
+        await ws_mgr._handle_client_message(ws, {"action": "seek", "guild_id": "111", "position": "invalid"})
+        await ws_mgr._handle_client_message(ws, {"action": "move_queue", "guild_id": "111", "from_index": None, "to_index": None})
+        await ws_mgr._handle_client_message(ws, {"action": "remove_queue", "guild_id": "111", "index": None})
+        await ws_mgr._handle_client_message(ws, {"action": "search", "guild_id": "111", "query": "lofi", "limit": None})
+
+        # Multi-source search routing in DashboardService.search_tracks
+        router = MagicMock()
+        router.is_supported.return_value = True
+        router.resolve = AsyncMock(return_value=[dummy_track])
+        mock_bot.sources_router = router
+
+        results = await svc.search_tracks("scsearch:lofi beats", limit=5)
+        assert len(results) == 1
+        assert results[0]["title"] == dummy_track.title
+        router.resolve.assert_awaited_once_with("scsearch:lofi beats", max_tracks=5)
+
