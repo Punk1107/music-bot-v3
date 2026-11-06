@@ -476,6 +476,8 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not next_track:
             player.idle_since = discord.utils.utcnow()
+            if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(guild_id)
             if hasattr(self.bot, "update_clean_board"):
                 self.bot.track_task(self.bot.update_clean_board(guild_id))
             return None
@@ -628,6 +630,8 @@ class MusicCog(commands.Cog, name="Music"):
             base_time -= datetime.timedelta(seconds=resume_offset)
         player.play_start_time = base_time
         player.idle_since      = None
+        player.paused_at       = None
+        player.total_paused_duration = 0.0
 
         # ── Record analytics ───────────────────────────────────────────────────
         self.bot.track_task(
@@ -779,7 +783,6 @@ class MusicCog(commands.Cog, name="Music"):
             eta = player.eta_seconds(pos) if pos > 1 else 0
 
         # Save queue to DB immediately (write-ahead)
-        cfg = await self.bot.db.get_server_config(interaction.guild_id)
         self.bot.track_task(
             self.bot.db.save_queue(
                 interaction.guild_id,
@@ -825,6 +828,10 @@ class MusicCog(commands.Cog, name="Music"):
         player.reset()
         player.intentional_disconnect = True  # must come AFTER reset() so it sticks
         await self.bot.db.clear_queue(interaction.guild_id)
+        if hasattr(self.bot.db, "clear_session_state"):
+            await self.bot.db.clear_session_state(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         vc = interaction.guild.voice_client
         if vc:
             await vc.disconnect(force=True)
@@ -1205,6 +1212,7 @@ class MusicCog(commands.Cog, name="Music"):
         vc = interaction.guild.voice_client
         if vc and vc.is_playing():
             vc.pause()
+            player.pause()
             await interaction.followup.send(embed=success_embed("Paused", t("now_playing.paused", locale)), ephemeral=True)
             if player.now_playing_msg:
                 try:
@@ -1231,6 +1239,7 @@ class MusicCog(commands.Cog, name="Music"):
         vc = interaction.guild.voice_client
         if vc and vc.is_paused():
             vc.resume()
+            player.resume()
             await interaction.followup.send(embed=success_embed("Resumed", t("now_playing.playing", locale)), ephemeral=True)
             if player.now_playing_msg:
                 try:
@@ -1351,6 +1360,10 @@ class MusicCog(commands.Cog, name="Music"):
             vc.stop()
         player.reset()
         await self.bot.db.clear_queue(interaction.guild_id)
+        if hasattr(self.bot.db, "clear_session_state"):
+            await self.bot.db.clear_session_state(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         await interaction.followup.send(embed=success_embed(t("btn.stop", locale), t("leave.manual", locale)))
 
     @app_commands.command(name="nowplaying", description="Show the current track with progress bar")

@@ -219,8 +219,25 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         player = self.bot.get_player(interaction.guild_id)
         vc     = interaction.guild.voice_client
 
+        if not vc or not vc.is_connected():
+            if not getattr(interaction.user, "voice", None) or not interaction.user.voice.channel:
+                await interaction.followup.send(
+                    embed=error_embed(t("title.not_connected", locale), t("error.not_in_voice", locale)),
+                    ephemeral=True,
+                )
+                return
+            try:
+                vc = await interaction.user.voice.channel.connect(timeout=10.0)
+            except Exception as exc:
+                await interaction.followup.send(
+                    embed=error_embed("Connection Failed", str(exc)), ephemeral=True
+                )
+                return
+
         if mode == "replace":
             await player.clear()
+            if vc and (vc.is_playing() or vc.is_paused()):
+                vc.stop()
 
         for t_track in tracks:
             t_track.requested_by_id   = interaction.user.id
@@ -241,7 +258,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         if vc and not vc.is_playing() and not vc.is_paused():
             music_cog = self.bot.get_cog("Music")
             if music_cog:
-                await music_cog._play_next(interaction.guild_id)
+                self.bot.track_task(music_cog._play_next(interaction.guild_id))
 
     async def _list(self, interaction: discord.Interaction) -> None:
         bookmarks = await self.bot.db.list_bookmarks(interaction.user.id, interaction.guild_id)

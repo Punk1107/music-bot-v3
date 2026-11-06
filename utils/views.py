@@ -187,11 +187,14 @@ class MusicControlView(discord.ui.View):
                 embed=error_embed(t("title.not_connected", locale), t("error.not_connected", locale)), ephemeral=True
             )
             return
+        player = self.bot.get_player(self.guild_id)
         if vc.is_playing():
             vc.pause()
+            player.pause()
             now_paused = True
         elif vc.is_paused():
             vc.resume()
+            player.resume()
             now_paused = False
         else:
             await interaction.response.send_message(
@@ -199,7 +202,6 @@ class MusicControlView(discord.ui.View):
             )
             return
 
-        player = self.bot.get_player(self.guild_id)
         if player.now_playing and player.now_playing_msg:
             try:
                 color = getattr(player, "_cached_base_color", None) or 0x5865F2
@@ -825,7 +827,7 @@ class VoteClearView(discord.ui.View):
             self.stop()
             player.clear_votes.clear()
             player.undo_push("clear")
-            count = await player.clear()
+            await player.clear()
             await self.bot.db.clear_queue(self.guild_id)
             if self._message:
                 await self._message.edit(
@@ -1182,11 +1184,14 @@ class CleanBoardControlView(discord.ui.View):
             return
         guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
+        player = self.bot.get_player(gid)
         if vc and vc.is_playing():
             vc.pause()
+            player.pause()
             button.label = "▶ Resume"
         elif vc and vc.is_paused():
             vc.resume()
+            player.resume()
             button.label = "⏸ Pause"
         await self._update_board(interaction)
 
@@ -1207,11 +1212,14 @@ class CleanBoardControlView(discord.ui.View):
         if not gid:
             return
         player = self.bot.get_player(gid)
-        player.clear_queue()
+        await player.clear()
+        player.reset()
         guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
+        if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
+            self.bot.track_task(self.bot.db.clear_session_state(gid))
         await self._update_board(interaction)
 
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="board_shuffle", row=0)
@@ -1220,7 +1228,7 @@ class CleanBoardControlView(discord.ui.View):
         if not gid:
             return
         player = self.bot.get_player(gid)
-        player.shuffle()
+        await player.shuffle()
         await self._update_board(interaction)
 
     @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary, custom_id="board_loop", row=0)
@@ -1245,8 +1253,8 @@ class CleanBoardControlView(discord.ui.View):
         locale = "en"
         if hasattr(self.bot, "db") and self.bot.db:
             try:
-                from core.i18n import get_locale_sync
-                locale = get_locale_sync(gid)
+                from core.i18n import get_locale
+                locale = await get_locale(gid, self.bot.db)
             except Exception:
                 pass
         embed = request_channel_board_embed(player, locale=locale)

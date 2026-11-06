@@ -170,6 +170,16 @@ class AdminCog(commands.Cog, name="Admin"):
                     cfg.board_message_id = board_msg.id
                 except Exception as e:
                     logger.warning("Failed sending clean board message: %s", e)
+        elif not enabled:
+            if cfg.board_message_id and interaction.guild and cfg.request_channel_id:
+                try:
+                    ch = interaction.guild.get_channel(cfg.request_channel_id)
+                    if isinstance(ch, discord.TextChannel):
+                        old_msg = await ch.fetch_message(cfg.board_message_id)
+                        await old_msg.delete()
+                except Exception as e:
+                    logger.debug("Failed deleting old board message on disable: %s", e)
+            cfg.board_message_id = None
 
         await self.bot.db.save_server_config(cfg)
         status_text = "enabled" if enabled else "disabled"
@@ -190,7 +200,18 @@ class AdminCog(commands.Cog, name="Admin"):
             return
 
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        if cfg.board_message_id and interaction.guild and cfg.request_channel_id:
+            try:
+                ch = interaction.guild.get_channel(cfg.request_channel_id)
+                if isinstance(ch, discord.TextChannel):
+                    old_msg = await ch.fetch_message(cfg.board_message_id)
+                    await old_msg.delete()
+            except Exception as e:
+                logger.debug("Failed deleting old board message on clear: %s", e)
+
         cfg.request_channel_id = None
+        cfg.board_message_id = None
+        cfg.clean_mode = False
         await self.bot.db.save_server_config(cfg)
 
         await interaction.followup.send(embed=success_embed("Request Channel Cleared"), ephemeral=True)

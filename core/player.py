@@ -134,6 +134,8 @@ class GuildPlayer:
 
         # ── Tier A: Auto Pause (F18) ──────────────────────────────────
         self.auto_paused: bool = False  # True when bot paused due to empty channel
+        self.paused_at: Optional[datetime] = None  # Timestamp when playback was paused
+        self.total_paused_duration: float = 0.0    # Accumulated paused seconds
 
         # ── Tier A: Queue Undo Stack (F19) ────────────────────────────
         self.undo_stack: deque[UndoEntry] = deque(maxlen=5)
@@ -417,14 +419,30 @@ class GuildPlayer:
         delta = (self.sleep_timer_end - datetime.now(timezone.utc)).total_seconds()
         return max(0, int(delta))
 
-    # ── Progress ──────────────────────────────────────────────────────────────
+    # ── Progress & Playback State ─────────────────────────────────────────────
+
+    def pause(self) -> None:
+        """Mark playback as paused and freeze elapsed timer."""
+        if not self.paused_at:
+            self.paused_at = datetime.now(timezone.utc)
+
+    def resume(self) -> None:
+        """Resume playback and accumulate paused duration."""
+        if self.paused_at:
+            delta = (datetime.now(timezone.utc) - self.paused_at).total_seconds()
+            self.total_paused_duration += max(0.0, delta)
+            self.paused_at = None
 
     @property
     def elapsed_seconds(self) -> int:
         if not self.play_start_time or not self.now_playing:
             return 0
-        delta = datetime.now(timezone.utc) - self.play_start_time
-        elapsed = max(0, int(delta.total_seconds()))
+        curr = self.paused_at or datetime.now(timezone.utc)
+        delta_sec = max(0.0, (curr - self.play_start_time).total_seconds() - self.total_paused_duration)
+        speed = getattr(self, "playback_speed", 1.0)
+        if abs(speed - 1.0) > 0.001:
+            delta_sec *= speed
+        elapsed = max(0, int(delta_sec))
         if self.now_playing.duration and self.now_playing.duration > 0:
             return min(elapsed, self.now_playing.duration)
         return elapsed
@@ -548,6 +566,8 @@ class GuildPlayer:
         self.clear_votes.clear()
         self.shuffle_votes.clear()
         self.auto_paused           = False
+        self.paused_at             = None
+        self.total_paused_duration = 0.0
         self.undo_stack.clear()
         self._transaction          = None
         # A+: reset audio controls to defaults

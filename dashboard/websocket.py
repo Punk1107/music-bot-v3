@@ -241,8 +241,8 @@ class DashboardWebSocketManager:
 
     async def _sync_loop(self) -> None:
         """Periodic loop (every 3s) pushing elapsed progress to active sessions."""
-        try:
-            while True:
+        while True:
+            try:
                 await asyncio.sleep(3.0)
                 if not self._clients:
                     continue
@@ -258,7 +258,7 @@ class DashboardWebSocketManager:
                     # Only broadcast if track is playing
                     if state.get("is_playing"):
                         await self.broadcast_guild_state(gid, state)
-        except asyncio.CancelledError:
-            return
-        except Exception as exc:
-            logger.debug("Dashboard WS sync loop error: %s", exc)
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                logger.debug("Dashboard WS sync loop transient error: %s", exc)
