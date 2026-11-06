@@ -73,6 +73,12 @@ class PodcastCog(commands.Cog, name="Podcast"):
         )
 
         await player.enqueue(track)
+        if player.queue_mode == "fair":
+            await player.reorder_fair_share()
+        if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(
+                self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+            )
 
         embed = success_embed(
             "Podcast Enqueued",
@@ -86,6 +92,9 @@ class PodcastCog(commands.Cog, name="Podcast"):
 
         if not vc.is_playing() and not vc.is_paused():
             await music_cog._play_next(interaction.guild_id)
+        else:
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
     @podcast_group.command(name="play", description="Play an episode from a podcast RSS feed URL")
     @app_commands.describe(
@@ -157,6 +166,13 @@ class PodcastCog(commands.Cog, name="Podcast"):
         locale = await get_locale(interaction.guild_id, self.bot.db)
 
         clean_url = rss_url.strip()
+        if not clean_url.startswith(("http://", "https://")):
+            await interaction.followup.send(
+                embed=error_embed("Invalid URL", t("podcast.parse_error", locale)),
+                ephemeral=True,
+            )
+            return
+
         show = await fetch_and_parse_podcast(self.bot.http_session, clean_url)
         if not show:
             await interaction.followup.send(

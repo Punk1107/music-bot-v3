@@ -98,7 +98,27 @@ class SCSearchSelect(discord.ui.Select):
             return
 
         player = self.bot.get_player(self.guild_id)
-        pos    = await player.enqueue(track)
+        if player.per_user_limit > 0 and player.user_track_count(interaction.user.id) >= player.per_user_limit:
+            await interaction.followup.send(
+                embed=error_embed("Queue Limit", t("queue.user_limit_exceeded", locale, limit=player.per_user_limit)),
+                ephemeral=True,
+            )
+            return
+
+        guild = self.bot.get_guild(self.guild_id)
+        vc    = guild.voice_client if guild else None
+        if not vc:
+            vc = await music_cog._ensure_voice(interaction)
+            if not vc:
+                return
+
+        pos = await player.enqueue(track)
+        if player.queue_mode == "fair":
+            await player.reorder_fair_share()
+        if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(
+                self.bot.db.save_queue(self.guild_id, vc.channel.id, player.queue)
+            )
 
         embed = discord.Embed(
             title       = f"🔊  {t('embed.added_to_queue', locale)}",
@@ -118,29 +138,14 @@ class SCSearchSelect(discord.ui.Select):
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-        # Start playback if not already playing
-        guild = self.bot.get_guild(self.guild_id)
-        vc    = guild.voice_client if guild else None
-        if not vc:
-            # Join user's channel safely via MusicCog
-            if music_cog:
-                vc = await music_cog._ensure_voice(interaction)
-                if not vc:
-                    return
-            else:
-                try:
-                    vc = await member.voice.channel.connect()
-                    player.last_channel_id = vc.channel.id
-                    player.text_channel    = interaction.channel
-                except Exception as exc:
-                    logger.error("SourcesCog: voice connect failed: %s", exc)
-                    return
-
         if not vc.is_playing() and not vc.is_paused():
             if hasattr(self.bot, "track_task"):
                 self.bot.track_task(music_cog._play_next(self.guild_id), name=f"sc_play_next_{self.guild_id}")
             else:
                 asyncio.create_task(music_cog._play_next(self.guild_id))
+        else:
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(self.guild_id))
 
 
 class SCSearchView(discord.ui.View):
@@ -282,6 +287,13 @@ class SourcesCog(commands.Cog, name="Sources"):
 
         player = self.bot.get_player(interaction.guild_id)
 
+        if len(tracks) == 1 and player.per_user_limit > 0 and player.user_track_count(interaction.user.id) >= player.per_user_limit:
+            await interaction.followup.send(
+                embed=error_embed("Queue Limit", t("queue.user_limit_exceeded", locale, limit=player.per_user_limit)),
+                ephemeral=True,
+            )
+            return True
+
         # Attribute and enqueue
         for t_item in tracks:
             t_item.requested_by_id   = interaction.user.id
@@ -304,10 +316,20 @@ class SourcesCog(commands.Cog, name="Sources"):
             await player.extend(tracks)
             embed = playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale)
 
+        if player.queue_mode == "fair":
+            await player.reorder_fair_share()
+        if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(
+                self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+            )
+
         await interaction.followup.send(embed=embed)
 
         if not vc.is_playing() and not vc.is_paused():
             self.bot.track_task(music_cog._play_next(interaction.guild_id), name=f"sc_play_next_{interaction.guild_id}")
+        else:
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         return True
 

@@ -732,6 +732,8 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
         next_track = queue[0]
+        if next_track.stream_url_cache and next_track.stream_url_expires is None:
+            return
         dur = current_track.duration or 60
 
         if dur < 120:          # < 2 minutes
@@ -745,7 +747,12 @@ class MusicCog(commands.Cog, name="Music"):
 
         async def _prefetch_after_delay():
             await asyncio.sleep(delay)
-            await self.bot.youtube.prefetch_stream_url(next_track)
+            from sources.router import classify, SourceKind
+            sources = getattr(self.bot, "sources_router", None)
+            if sources and classify(next_track.url) != SourceKind.UNKNOWN:
+                await sources.get_stream_url(next_track)
+            else:
+                await self.bot.youtube.prefetch_stream_url(next_track)
 
         player._prefetch_task = self.bot.track_task(_prefetch_after_delay())
 

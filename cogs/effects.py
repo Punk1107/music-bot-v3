@@ -75,6 +75,8 @@ class EffectsCog(commands.Cog, name="Effects"):
             vc.source.volume = player.volume
         else:
             self._restart_audio(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         await interaction.followup.send(
             embed=success_embed("Volume Set", t("volume.set", locale, vol=level)), ephemeral=True
         )

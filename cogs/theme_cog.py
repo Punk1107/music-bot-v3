@@ -150,6 +150,28 @@ class ThemeCog(commands.Cog, name="Theme"):
         player = self.bot.get_player(interaction.guild_id)
         player.embed_theme = chosen.value
 
+        if player.now_playing and player.now_playing_msg:
+            try:
+                from utils.embeds import now_playing_embed
+                from utils.views import MusicControlView
+                from core.i18n import get_locale
+                loc = await get_locale(interaction.guild_id, self.bot.db)
+                vc = interaction.guild.voice_client if interaction.guild else None
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                np_embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=bool(vc and vc.is_paused()),
+                    theme=chosen.value,
+                    locale=loc,
+                )
+                view = MusicControlView(self.bot, interaction.guild_id)
+                await player.now_playing_msg.edit(embed=np_embed, view=view)
+            except Exception:
+                pass
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
+
         # Build response with live preview
         preview = _theme_preview_embed(chosen)
         confirm = discord.Embed(
