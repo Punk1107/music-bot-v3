@@ -112,10 +112,16 @@ def _entry_to_track(entry: dict) -> Optional[Track]:
     """Convert a flat yt-dlp playlist entry to a Track, applying duration guard."""
     video_id = entry.get("id") or entry.get("url", "")
     title    = entry.get("title")
-    url      = entry.get("url") or (
-        f"https://www.youtube.com/watch?v={video_id}" if video_id else None
-    )
-    if not title or not url:
+    if not title or title in ("[Private video]", "[Deleted video]"):
+        return None
+    raw_url  = entry.get("url") or entry.get("webpage_url")
+    if raw_url and not raw_url.startswith(("http://", "https://")):
+        url = f"https://www.youtube.com/watch?v={raw_url}"
+    else:
+        url = raw_url or (
+            f"https://www.youtube.com/watch?v={video_id}" if video_id else None
+        )
+    if not url:
         return None
     duration = int(entry.get("duration") or 0)
     if duration and duration > config.MAX_TRACK_LENGTH:

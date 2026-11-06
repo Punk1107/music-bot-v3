@@ -61,7 +61,7 @@ _VTT_HEADER      = re.compile(r"^WEBVTT.*$", re.MULTILINE)
 _VTT_NOTE        = re.compile(r"^NOTE.*?(?=\n\n|\Z)", re.DOTALL | re.MULTILINE)
 _VTT_STYLE       = re.compile(r"^STYLE.*?(?=\n\n|\Z)", re.DOTALL | re.MULTILINE)
 _VTT_REGION      = re.compile(r"^REGION.*?(?=\n\n|\Z)", re.DOTALL | re.MULTILINE)
-_SEQUENCE_NUMBER = re.compile(r"^\d+\s*$", re.MULTILINE)
+_SEQUENCE_NUMBER = re.compile(r"^\d+[ \t]*$", re.MULTILINE)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ def _merge_short_lines(lines: list[LyricLine], min_words: int = 2) -> list[Lyric
     for line in lines:
         if pending is None:
             word_count = len(line.text.split())
-            if word_count < min_words:
+            if word_count < min_words and len(line.text.strip()) <= 5:
                 pending = line
             else:
                 merged.append(line)
@@ -176,8 +176,9 @@ def parse_vtt(vtt_text: str) -> list[LyricLine]:
       4. Clean inline tags
       5. Deduplicate rolling ASR captions
     """
-    # 1. Strip header junk
-    text = _VTT_HEADER.sub("", vtt_text)
+    # 1. Normalise line endings and strip header junk
+    text = vtt_text.replace("\r\n", "\n").replace("\r", "\n")
+    text = _VTT_HEADER.sub("", text)
     text = _VTT_NOTE.sub("",   text)
     text = _VTT_STYLE.sub("",  text)
     text = _VTT_REGION.sub("", text)
@@ -243,7 +244,8 @@ def parse_srt(srt_text: str) -> list[LyricLine]:
     Fallback for cases where VTT is unavailable.
     """
     lines: list[LyricLine] = []
-    blocks = re.split(r"\n{2,}", srt_text.strip())
+    normalized = srt_text.replace("\r\n", "\n").replace("\r", "\n")
+    blocks = re.split(r"\n{2,}", normalized.strip())
 
     for block in blocks:
         block = block.strip()

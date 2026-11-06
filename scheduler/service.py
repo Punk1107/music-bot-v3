@@ -151,7 +151,20 @@ class MusicSchedulerService:
         # 2. Search / Fetch track
         track = None
         try:
-            if hasattr(self.bot, "youtube") and self.bot.youtube.is_youtube_url(task.query):
+            sources_router = getattr(self.bot, "sources_router", None)
+            spotify = getattr(self.bot, "spotify", None)
+            if spotify and getattr(spotify, "available", False) and spotify.is_spotify_url(task.query):
+                sp_tracks = await spotify.resolve(
+                    task.query,
+                    self.bot.http_session,
+                    self.bot.youtube,
+                    self.bot.yt_breaker,
+                )
+                track = sp_tracks[0] if sp_tracks else None
+            elif sources_router and sources_router.is_supported(task.query):
+                sr_tracks, _ = await sources_router.resolve(task.query)
+                track = sr_tracks[0] if sr_tracks else None
+            elif hasattr(self.bot, "youtube") and self.bot.youtube.is_youtube_url(task.query):
                 track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, task.query)
             elif hasattr(self.bot, "youtube"):
                 results = await self.bot.yt_breaker.call(self.bot.youtube.search, task.query, 1)
@@ -160,12 +173,13 @@ class MusicSchedulerService:
             logger.warning("Scheduler track search error: %s", exc)
 
         if not track:
-            import urllib.parse
+            if not task.query.startswith(("http://", "https://")):
+                logger.warning("Scheduled task #%d skipped: could not resolve query '%s'", task.id, task.query[:60])
+                return
             from models.track import Track
-            encoded_q = urllib.parse.quote_plus(task.query)
             track = Track(
                 title=task.query[:60],
-                url=task.query if task.query.startswith("http") else f"https://www.youtube.com/results?search_query={encoded_q}",
+                url=task.query,
                 duration=0,
                 uploader="Scheduled Alarm",
             )
@@ -175,6 +189,7 @@ class MusicSchedulerService:
 
         # 3. Enqueue & Play
         player = self.bot.get_player(task.guild_id)
+        player.intentional_disconnect = False
         player.last_channel_id = vc_channel.id
         if text_channel and isinstance(text_channel, discord.TextChannel):
             player.text_channel = text_channel

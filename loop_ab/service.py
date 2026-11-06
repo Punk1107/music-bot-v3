@@ -39,6 +39,9 @@ class LoopABService:
         if dur > 0 and end_sec > dur:
             end_sec = dur
 
+        if end_sec <= start_sec:
+            return False, "invalid_times"
+
         # Cancel any active A-B loop on this player
         player.cancel_loop_ab()
 
@@ -57,9 +60,8 @@ class LoopABService:
             return False, "seek_failed"
 
         # Spawn loop timer task
-        # Pass the freshly updated play_seq from the seek
         task = asyncio.create_task(
-            self._loop_worker(guild_id, start_sec, end_sec, player._play_seq),
+            self._loop_worker(guild_id, start_sec, end_sec, track),
             name=f"loop_ab_{guild_id}",
         )
         if hasattr(self.bot, "track_task"):
@@ -88,14 +90,14 @@ class LoopABService:
         guild_id: int,
         start_sec: int,
         end_sec: int,
-        captured_seq: int,
+        captured_track,
     ) -> None:
         """Background worker that continuously restarts playback at start_sec when end_sec is reached."""
         try:
             while True:
                 player = self.bot.get_player(guild_id)
-                # Verify loop is still configured for this range
-                if player.loop_ab_range != (start_sec, end_sec):
+                # Verify loop is still configured for this range and same track
+                if player.loop_ab_range != (start_sec, end_sec) or player.now_playing is not captured_track:
                     break
 
                 # Account for speed when calculating sleep duration
@@ -114,7 +116,7 @@ class LoopABService:
                         break
 
                     player = self.bot.get_player(guild_id)
-                    if player.loop_ab_range != (start_sec, end_sec) or player._play_seq != captured_seq:
+                    if player.loop_ab_range != (start_sec, end_sec) or player.now_playing is not captured_track:
                         aborted = True
                         break
 
@@ -139,8 +141,6 @@ class LoopABService:
                     if not success:
                         logger.warning("guild %d: Loop A-B re-seek to %ds failed", guild_id, start_sec)
                         break
-                    # seek_to increments _play_seq, update our captured_seq for the next iteration
-                    captured_seq = player._play_seq
                 else:
                     break
 
@@ -149,7 +149,9 @@ class LoopABService:
         except Exception as exc:
             logger.error("guild %d: Loop A-B worker error: %s", guild_id, exc)
         finally:
-            # Clean up if loop stopped unexpectedly
+            # Clean up only if this task is still the active loop worker
             p = self.bot.get_player(guild_id)
-            if p.loop_ab_range == (start_sec, end_sec):
-                p.loop_ab_range = None
+            if p.loop_ab_task is None or p.loop_ab_task is asyncio.current_task():
+                p.loop_ab_task = None
+                if p.loop_ab_range == (start_sec, end_sec):
+                    p.loop_ab_range = None

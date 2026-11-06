@@ -9,6 +9,7 @@ without triggering stale after_play() callbacks or skipping tracks in queue.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import logging
 import time
@@ -45,6 +46,18 @@ class SeekService:
             return False
 
         player = self.bot.get_player(guild_id)
+        lock = getattr(player, "_playing_lock", None)
+        lock_ctx = lock if isinstance(lock, asyncio.Lock) else contextlib.nullcontext()
+        async with lock_ctx:
+            return await self._seek_to_locked(guild_id, vc, player, target_seconds)
+
+    async def _seek_to_locked(
+        self,
+        guild_id: int,
+        vc: discord.VoiceClient,
+        player,
+        target_seconds: int,
+    ) -> bool:
         track = player.now_playing
         if not track:
             logger.warning("seek_to: no active track playing for guild %d", guild_id)
@@ -156,9 +169,11 @@ class SeekService:
                 )
 
         # Stop existing audio playback silently
-        was_paused = bool(vc.is_paused())
+        was_paused = bool(vc.is_paused() or getattr(player, "is_paused", False))
+        stopped_existing = False
         if vc.is_playing() or vc.is_paused():
             vc.stop()
+            stopped_existing = True
             for _ in range(15):
                 if not (vc.is_playing() or vc.is_paused()):
                     break
@@ -178,7 +193,8 @@ class SeekService:
                 player.pause()
         except Exception as exc:
             logger.error("guild %d: FFmpeg start failed on seek: %s", guild_id, exc)
-            player._play_seq = old_seq
+            if not stopped_existing:
+                player._play_seq = old_seq
             return False
 
         # Update player elapsed timing

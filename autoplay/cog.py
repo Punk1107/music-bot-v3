@@ -63,12 +63,35 @@ class AutoplayCog(commands.Cog, name="Autoplay"):
 
         is_on = mode == "on"
 
+        # Permission check: DJ role / administrator / same voice channel
+        if interaction.guild and isinstance(interaction.user, discord.Member):
+            vc = interaction.guild.voice_client
+            if vc and vc.channel and (not interaction.user.voice or interaction.user.voice.channel != vc.channel):
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.followup.send(
+                        embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)),
+                        ephemeral=True,
+                    )
+                    return
+            cfg = await self.bot.db.get_server_config(interaction.guild_id)
+            if cfg and cfg.dj_only and cfg.dj_role_id and not interaction.user.guild_permissions.administrator:
+                dj_role = interaction.guild.get_role(cfg.dj_role_id)
+                if dj_role and dj_role not in interaction.user.roles:
+                    await interaction.followup.send(
+                        embed=error_embed(t("title.permission_denied", locale), t("error.dj_only", locale, role=dj_role.name)),
+                        ephemeral=True,
+                    )
+                    return
+
         # Toggle on the live player (no DB persistence needed — per-session)
         player.smart_autoplay = is_on
 
         # Reset history when turning off so fresh picks on next enable
         if not is_on:
             await self.bot.autoplay.reset_history(interaction.guild_id)
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         desc = t("autoplay.desc_on", locale) if is_on else t("autoplay.desc_off", locale)
         await interaction.followup.send(

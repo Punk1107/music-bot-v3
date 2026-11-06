@@ -759,6 +759,12 @@ class DashboardService:
             return {"success": False, "error": "No track currently playing"}
 
         track = player.now_playing
+        if not any(d in track.url for d in ("youtube.com", "youtu.be")):
+            return {
+                "success": False,
+                "error": "Lyrics are only available for YouTube tracks",
+                "title": track.title,
+            }
         try:
             from lyrics.service import LyricsService
             lyrics_svc = LyricsService()

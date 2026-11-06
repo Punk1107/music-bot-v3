@@ -276,7 +276,7 @@ class MusicControlView(discord.ui.View):
         )
 
     @discord.ui.button(label="⏹ Stop", style=discord.ButtonStyle.danger, custom_id="mb_stop", row=0)
-    async def stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def btn_stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not await self._check(interaction):
             return
         locale = get_locale_sync(self.guild_id)
@@ -685,7 +685,7 @@ class VoteSkipView(discord.ui.View):
             names.append(member.display_name if member else f"User#{uid}")
         return names
 
-    async def _refresh(self, interaction: discord.Interaction) -> None:
+    async def _refresh_vote_message(self, interaction: discord.Interaction) -> None:
         player = self.bot.get_player(self.guild_id)
         guild  = self.bot.get_guild(self.guild_id)
         embed  = vote_skip_embed(
@@ -726,7 +726,7 @@ class VoteSkipView(discord.ui.View):
             return
 
         player.skip_votes.add(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
         if len(player.skip_votes) >= self.threshold:
             self.stop()
@@ -756,7 +756,7 @@ class VoteSkipView(discord.ui.View):
             return
 
         player.skip_votes.discard(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
     async def on_timeout(self) -> None:
         player = self.bot.get_player(self.guild_id) if self.bot else None
@@ -816,7 +816,7 @@ class VoteClearView(discord.ui.View):
             names.append(member.display_name if member else f"User#{uid}")
         return names
 
-    async def _refresh(self, interaction: discord.Interaction) -> None:
+    async def _refresh_vote_message(self, interaction: discord.Interaction) -> None:
         player = self.bot.get_player(self.guild_id)
         guild  = self.bot.get_guild(self.guild_id)
         embed  = vote_clear_embed(
@@ -857,7 +857,7 @@ class VoteClearView(discord.ui.View):
             return
 
         player.clear_votes.add(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
         if len(player.clear_votes) >= self.threshold:
             self.stop()
@@ -891,7 +891,7 @@ class VoteClearView(discord.ui.View):
             return
 
         player.clear_votes.discard(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
     async def on_timeout(self) -> None:
         player = self.bot.get_player(self.guild_id) if self.bot else None
@@ -951,7 +951,7 @@ class VoteShuffleView(discord.ui.View):
             names.append(member.display_name if member else f"User#{uid}")
         return names
 
-    async def _refresh(self, interaction: discord.Interaction) -> None:
+    async def _refresh_vote_message(self, interaction: discord.Interaction) -> None:
         player = self.bot.get_player(self.guild_id)
         guild  = self.bot.get_guild(self.guild_id)
         embed  = vote_shuffle_embed(
@@ -992,7 +992,7 @@ class VoteShuffleView(discord.ui.View):
             return
 
         player.shuffle_votes.add(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
         if len(player.shuffle_votes) >= self.threshold:
             self.stop()
@@ -1026,7 +1026,7 @@ class VoteShuffleView(discord.ui.View):
             return
 
         player.shuffle_votes.discard(user_id)
-        await self._refresh(interaction)
+        await self._refresh_vote_message(interaction)
 
     async def on_timeout(self) -> None:
         player = self.bot.get_player(self.guild_id) if self.bot else None
@@ -1095,7 +1095,7 @@ class HistoryView(discord.ui.View):
             )
             # Capture loop variable
             def make_callback(tr: T):
-                async def _cb(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                async def _cb(inter: discord.Interaction, _btn: Optional[discord.ui.Button] = None) -> None:
                     await inter.response.defer()
                     await self._cb(inter, tr)
                 return _cb
@@ -1123,13 +1123,13 @@ class HistoryView(discord.ui.View):
         next_btn.callback = self._next
         self.add_item(next_btn)
 
-    async def _prev(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def _prev(self, interaction: discord.Interaction, button: Optional[discord.ui.Button] = None) -> None:
         self.page = max(1, self.page - 1)
         self._rebuild()
         embed = history_embed(self.rows, self.guild_id, self.page, self.ITEMS_PER_PAGE)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    async def _next(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def _next(self, interaction: discord.Interaction, button: Optional[discord.ui.Button] = None) -> None:
         self.page = min(self._total_pages(), self.page + 1)
         self._rebuild()
         embed = history_embed(self.rows, self.guild_id, self.page, self.ITEMS_PER_PAGE)
@@ -1183,13 +1183,13 @@ class QueueSearchResultView(discord.ui.View):
             )
 
             def make_jump(p: int):
-                async def _j(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                async def _j(inter: discord.Interaction, _btn: Optional[discord.ui.Button] = None) -> None:
                     await inter.response.defer()
                     await self._jump_cb(inter, p)
                 return _j
 
             def make_rm(p: int):
-                async def _r(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
+                async def _r(inter: discord.Interaction, _btn: Optional[discord.ui.Button] = None) -> None:
                     await inter.response.defer()
                     await self._rm_cb(inter, p)
                 return _r

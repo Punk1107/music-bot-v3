@@ -844,8 +844,7 @@ class MusicBot(commands.Bot):
                 rw = getattr(self, "radio_watchdog", None)
                 if rw:
                     rw.unregister(message.guild.id)
-            await player.clear()
-            player.now_playing = None
+            player.reset()
             vc = message.guild.voice_client
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
@@ -858,7 +857,7 @@ class MusicBot(commands.Bot):
                 await _update_clean_board_if_needed()
             else:
                 try:
-                    await message.channel.send(t("stop.done", locale), delete_after=5)
+                    await message.channel.send(t("leave.manual", locale), delete_after=5)
                 except Exception:
                     pass
             return
@@ -873,7 +872,7 @@ class MusicBot(commands.Bot):
             else:
                 try:
                     await message.channel.send(
-                        t("loop.changed", locale, mode=player.loop_mode.display(locale)),
+                        t(f"btn.loop_{player.loop_mode.value}", locale),
                         delete_after=5,
                     )
                 except Exception:

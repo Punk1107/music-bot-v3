@@ -930,3 +930,17 @@ class TestDashboardNextGenV2:
         assert results[0]["title"] == dummy_track.title
         router.resolve.assert_awaited_once_with("scsearch:lofi beats", max_tracks=5)
 
+    @pytest.mark.asyncio
+    async def test_phase7_dashboard_get_lyrics_non_youtube_guard(self, mock_bot):
+        svc = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+        player.now_playing = Track(
+            title="Live Radio Stream",
+            url="https://stream.example.com/live.mp3",
+            duration=0,
+        )
+        res = await svc.get_lyrics(111)
+        assert res["success"] is False
+        assert "YouTube" in res["error"]
+
+

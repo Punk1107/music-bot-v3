@@ -209,6 +209,10 @@ class QueueCog(commands.Cog, name="Queue"):
         if len(player.skip_votes) >= threshold:
             player.cancel_prefetch()
             player.skip_votes.clear()
+            if getattr(player, "is_radio_mode", False) and len(player) == 0:
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(interaction.guild_id)
             vc.stop()
             await interaction.followup.send(
                 embed=success_embed(
@@ -264,6 +268,13 @@ class QueueCog(commands.Cog, name="Queue"):
             return
 
         member = interaction.user
+        if not getattr(member, "voice", None) or not member.voice or member.voice.channel != vc.channel:
+            await interaction.followup.send(
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
+                ephemeral=True,
+            )
+            return
+
         voice_members = [m for m in (vc.channel.members if vc and vc.channel else []) if not m.bot]
         threshold = player.vote_threshold(len(voice_members))
 
@@ -371,6 +382,13 @@ class QueueCog(commands.Cog, name="Queue"):
             return
 
         member = interaction.user
+        if not getattr(member, "voice", None) or not member.voice or member.voice.channel != vc.channel:
+            await interaction.followup.send(
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
+                ephemeral=True,
+            )
+            return
+
         voice_members = [m for m in (vc.channel.members if vc and vc.channel else []) if not m.bot]
         threshold = player.vote_threshold(len(voice_members))
 
@@ -630,6 +648,8 @@ class QueueCog(commands.Cog, name="Queue"):
 
         # Jump callback
         async def do_jump(inter: discord.Interaction, pos: int) -> None:
+            if not await self._check_dj(inter):
+                return
             loc = await get_locale(inter.guild_id, self.bot.db)
             player.undo_push("jump", extra=pos)
             target = await player.jump_to(pos - 1)
@@ -659,6 +679,8 @@ class QueueCog(commands.Cog, name="Queue"):
 
         # Remove callback
         async def do_remove(inter: discord.Interaction, pos: int) -> None:
+            if not await self._check_dj(inter):
+                return
             player.undo_push("remove", extra=pos)
             removed = await player.remove(pos - 1)
             if removed:
@@ -866,6 +888,7 @@ class QueueCog(commands.Cog, name="Queue"):
             if getattr(interaction.user, "voice", None) and interaction.user.voice.channel:
                 try:
                     vc = await interaction.user.voice.channel.connect(timeout=10.0)
+                    player.intentional_disconnect = False
                     player.last_channel_id = vc.channel.id
                     player.text_channel = interaction.channel
                 except Exception as exc:
@@ -873,6 +896,15 @@ class QueueCog(commands.Cog, name="Queue"):
                         embed=error_embed("Connection Failed", str(exc)), ephemeral=True
                     )
                     return
+        elif vc and vc.channel:
+            user_voice = getattr(interaction.user, "voice", None)
+            if not user_voice or user_voice.channel != vc.channel:
+                locale = await get_locale(interaction.guild_id, self.bot.db)
+                await interaction.followup.send(
+                    embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)),
+                    ephemeral=True,
+                )
+                return
 
         for tr in tracks:
             if not tr.requested_by_id:
@@ -884,6 +916,10 @@ class QueueCog(commands.Cog, name="Queue"):
         if mode == "replace":
             player.undo_push("clear")
             player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False):
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(interaction.guild_id)
             await player.clear()
 
         await player.extend(tracks)
@@ -932,11 +968,12 @@ class QueueCog(commands.Cog, name="Queue"):
             )
             return
 
+        player.cancel_prefetch()
         await player.apply_undo(entry)
 
         # Restore DB queue
         vc = interaction.guild.voice_client
-        if vc:
+        if vc and vc.channel:
             self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
@@ -1021,6 +1058,7 @@ class QueueCog(commands.Cog, name="Queue"):
         if not await self._check_dj(interaction):
             return
         player = self.bot.get_player(interaction.guild_id)
+        player.cancel_prefetch()
         ok = await player.rollback_transaction()
         if not ok:
             await interaction.followup.send(
@@ -1030,10 +1068,12 @@ class QueueCog(commands.Cog, name="Queue"):
             return
         # Restore DB
         vc = interaction.guild.voice_client
-        if vc:
+        if vc and vc.channel:
             self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         embed = discord.Embed(
             title       = "♻️  Transaction Rolled Back",
             description = (
