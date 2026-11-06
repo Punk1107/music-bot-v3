@@ -507,6 +507,10 @@ class MusicCog(commands.Cog, name="Music"):
                 except Exception:
                     pass
             player.reset()
+            if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(guild_id)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(guild_id))
             return None
         except Exception as exc:
             logger.warning("Stream URL resolve failed for '%s': %s", next_track.title[:50], exc)
@@ -515,6 +519,10 @@ class MusicCog(commands.Cog, name="Music"):
                 # Signal retry — caller will call _play_next after lock release
                 return skip_depth + 1
             player.reset()
+            if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(guild_id)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(guild_id))
             return None
 
         if not stream_url:
@@ -522,6 +530,10 @@ class MusicCog(commands.Cog, name="Music"):
             if skip_depth < config.SKIP_ERROR_LIMIT:
                 return skip_depth + 1  # signal retry
             player.reset()
+            if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(guild_id)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(guild_id))
             return None
 
         # ── Build FFmpeg options ───────────────────────────────────────────────
@@ -627,7 +639,10 @@ class MusicCog(commands.Cog, name="Music"):
         player.now_playing     = next_track
         base_time = datetime.datetime.now(datetime.timezone.utc)
         if resume_offset:
-            base_time -= datetime.timedelta(seconds=resume_offset)
+            raw_speed = getattr(player, "playback_speed", 1.0)
+            speed = float(raw_speed) if isinstance(raw_speed, (int, float)) else 1.0
+            wall_offset = resume_offset / speed if abs(speed - 1.0) > 0.001 and speed > 0.001 else float(resume_offset)
+            base_time -= datetime.timedelta(seconds=wall_offset)
         player.play_start_time = base_time
         player.idle_since      = None
         player.paused_at       = None

@@ -858,3 +858,23 @@ class TestDashboardNextGenV2:
 
         # Should have survived the first exception and reached iteration 2
         assert iteration_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_dashboard_volume_and_loop_trigger_clean_board(self, mock_bot):
+        svc = DashboardService(mock_bot)
+        mock_bot.update_clean_board = AsyncMock()
+        def _safe_track(task_or_coro, *a, **k):
+            import asyncio
+            if asyncio.iscoroutine(task_or_coro):
+                task_or_coro.close()
+            return MagicMock()
+        mock_bot.track_task = MagicMock(side_effect=_safe_track)
+
+        # Set volume triggers board update
+        await svc.set_volume(111, 1.5)
+        mock_bot.update_clean_board.assert_called_with(111)
+
+        # Set loop mode triggers board update
+        mock_bot.update_clean_board.reset_mock()
+        await svc.set_loop_mode(111, "track")
+        mock_bot.update_clean_board.assert_called_with(111)

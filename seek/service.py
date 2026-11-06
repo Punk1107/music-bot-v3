@@ -174,7 +174,10 @@ class SeekService:
         # Update player elapsed timing
         now = datetime.datetime.now(datetime.timezone.utc)
         player.total_paused_duration = 0.0
-        player.play_start_time = now - datetime.timedelta(seconds=target_sec)
+        raw_speed = getattr(player, "playback_speed", 1.0)
+        speed = float(raw_speed) if isinstance(raw_speed, (int, float)) else 1.0
+        wall_offset = target_sec / speed if abs(speed - 1.0) > 0.001 and speed > 0.001 else float(target_sec)
+        player.play_start_time = now - datetime.timedelta(seconds=wall_offset)
         if was_paused:
             player.paused_at = now
         else:

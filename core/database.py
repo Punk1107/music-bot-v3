@@ -843,6 +843,7 @@ class DatabaseManager:
                     self._peak_busy_connections = busy
 
                 # Self-Healing Auto-Ping: ensures connection is alive before query
+                assert conn is not None
                 await conn.ping(reconnect=True)
 
                 query_start = time.monotonic()
@@ -1900,31 +1901,51 @@ class DatabaseManager:
             return cursor.rowcount > 0
 
     async def get_favorites(
-        self, user_id: int, guild_id: int
+        self, user_id: int, guild_id: int, limit: Optional[int] = None
     ) -> list[dict]:
         if self.is_mysql_active:
             async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
-                await cur.execute(
-                    """
-                    SELECT name, track_data, created_at
-                    FROM favorites WHERE user_id = %s AND guild_id = %s
-                    ORDER BY created_at DESC
-                    """,
-                    (user_id, guild_id),
-                )
+                if limit is not None:
+                    await cur.execute(
+                        """
+                        SELECT name, track_data, created_at
+                        FROM favorites WHERE user_id = %s AND guild_id = %s
+                        ORDER BY created_at DESC LIMIT %s
+                        """,
+                        (user_id, guild_id, int(limit)),
+                    )
+                else:
+                    await cur.execute(
+                        """
+                        SELECT name, track_data, created_at
+                        FROM favorites WHERE user_id = %s AND guild_id = %s
+                        ORDER BY created_at DESC
+                        """,
+                        (user_id, guild_id),
+                    )
                 return list(await cur.fetchall())
 
             rows = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
         else:
             async with self._sqlite_connect() as conn:
-                cursor = await conn.execute(
-                    """
-                    SELECT name, track_data, created_at
-                    FROM favorites WHERE user_id = ? AND guild_id = ?
-                    ORDER BY created_at DESC
-                    """,
-                    (user_id, guild_id),
-                )
+                if limit is not None:
+                    cursor = await conn.execute(
+                        """
+                        SELECT name, track_data, created_at
+                        FROM favorites WHERE user_id = ? AND guild_id = ?
+                        ORDER BY created_at DESC LIMIT ?
+                        """,
+                        (user_id, guild_id, int(limit)),
+                    )
+                else:
+                    cursor = await conn.execute(
+                        """
+                        SELECT name, track_data, created_at
+                        FROM favorites WHERE user_id = ? AND guild_id = ?
+                        ORDER BY created_at DESC
+                        """,
+                        (user_id, guild_id),
+                    )
                 rows = [dict(r) for r in await cursor.fetchall()]
 
         result = []
@@ -2445,13 +2466,18 @@ class DatabaseManager:
         if self.is_mysql_active:
             async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
                 # Claim tasks in this minute window that aren't already run or locked
+                time_cond = (
+                    "(scheduled_time >= %s OR scheduled_time < %s)"
+                    if current_time_str > next_min_str
+                    else "(scheduled_time >= %s AND scheduled_time < %s)"
+                )
                 await cur.execute(
-                    """
+                    f"""
                     UPDATE scheduled_tasks
                     SET locked_by = %s,
                         last_run_at = CURRENT_TIMESTAMP(3)
                     WHERE is_active = TRUE
-                      AND scheduled_time >= %s AND scheduled_time < %s
+                      AND {time_cond}
                       AND (last_run_at IS NULL OR last_run_at < (UTC_TIMESTAMP(3) - INTERVAL 65 SECOND))
                       AND (locked_by IS NULL OR locked_by = %s)
                     """,
@@ -2475,11 +2501,26 @@ class DatabaseManager:
                 cursor = await conn.execute(
                     """
                     SELECT * FROM scheduled_tasks
-                    WHERE is_active = 1 AND substr(scheduled_time, 1, 5) = ?
+                    WHERE is_active = 1
+                      AND substr(scheduled_time, 1, 5) = ?
+                      AND (last_run_at IS NULL OR last_run_at < datetime('now', '-65 seconds'))
+                      AND (locked_by IS NULL OR locked_by = ?)
                     """,
-                    (current_time_str[:5],),
+                    (current_time_str[:5], worker_id),
                 )
                 claimed = [dict(r) for r in await cursor.fetchall()]
+                if claimed:
+                    task_ids = [c["id"] for c in claimed if "id" in c]
+                    placeholders = ",".join("?" for _ in task_ids)
+                    await conn.execute(
+                        f"""
+                        UPDATE scheduled_tasks
+                        SET locked_by = ?, last_run_at = datetime('now')
+                        WHERE id IN ({placeholders})
+                        """,
+                        [worker_id, *task_ids],
+                    )
+                    await conn.commit()
 
         # Filter by day of week ('daily', 'weekdays', 'weekends', 'once', or comma-separated 'mon,wed,fri')
         due: list[dict] = []
@@ -3094,13 +3135,13 @@ class DatabaseManager:
                 }
                 for name, plays in artist_plays.items()
             ],
-            key=lambda x: x["plays"],
+            key=lambda x: x["plays"],  # type: ignore
             reverse=True,
         )[:limit]
 
         channels = sorted(
             [{"name": name, "plays": plays} for name, plays in channel_plays.items()],
-            key=lambda x: x["plays"],
+            key=lambda x: x["plays"],  # type: ignore
             reverse=True,
         )[:limit]
 
@@ -3290,6 +3331,8 @@ class DatabaseManager:
             if not rows:
                 return None
             chosen = random.choice(rows)
+            if isinstance(chosen.get("track"), Track):
+                return chosen["track"]
             return Track.from_json(chosen["track_data"])
 
         if source == "playlist":

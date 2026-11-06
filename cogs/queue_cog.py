@@ -155,6 +155,8 @@ class QueueCog(commands.Cog, name="Queue"):
         if is_dj:
             player.undo_push("shuffle")    # F19: snapshot before mutation
             await player.shuffle()
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(embed=success_embed(t("btn.shuffle", locale), t("queue.shuffled", locale, count=len(player))))
             return
 
@@ -322,6 +324,10 @@ class QueueCog(commands.Cog, name="Queue"):
             player.undo_push("clear")       # F19: snapshot before mutation
             count  = await player.clear()
             await self.bot.db.clear_queue(interaction.guild_id)
+            if not player.now_playing and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(interaction.guild_id)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(embed=success_embed(t("btn.clear", locale), t("queue.cleared", locale, count=count)))
             return
 
@@ -407,6 +413,8 @@ class QueueCog(commands.Cog, name="Queue"):
         locale = await get_locale(interaction.guild_id, self.bot.db)
         player        = self.bot.get_player(interaction.guild_id)
         player.loop_mode = player.loop_mode.next()
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         mode_btn_key = f"btn.loop_{player.loop_mode.value.lower()}"
         mode_label = t(mode_btn_key, locale)
         await interaction.followup.send(
@@ -433,6 +441,8 @@ class QueueCog(commands.Cog, name="Queue"):
                 self.bot.track_task(
                     self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
                 )
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         else:
             # Pop the undo entry since nothing was removed
             player.undo_pop()
@@ -454,6 +464,8 @@ class QueueCog(commands.Cog, name="Queue"):
         player.undo_push("move", extra=(from_pos, to_pos))  # F19: snapshot before mutation
         ok = await player.move(from_pos - 1, to_pos - 1)
         if ok:
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(
                 embed=success_embed("Moved", t("queue.moved", locale, from_pos=from_pos, to_pos=to_pos)),
                 ephemeral=True,
@@ -645,6 +657,9 @@ class QueueCog(commands.Cog, name="Queue"):
                 music_cog = self.bot.get_cog("Music")
                 if music_cog:
                     self.bot.track_task(music_cog._play_next(interaction.guild_id))
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         await interaction.followup.send(
             embed=success_embed("Jumped ↪", t("queue.jumped", locale, title=target.short_title, pos=position)),
@@ -838,6 +853,9 @@ class QueueCog(commands.Cog, name="Queue"):
             self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         # Build friendly description
         op_labels = {

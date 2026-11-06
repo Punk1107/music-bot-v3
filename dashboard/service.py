@@ -256,6 +256,9 @@ class DashboardService:
             if hasattr(src, "volume"):
                 src.volume = volume
 
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
+
         await self.broadcast_state(guild_id)
         return {
             "success": True,
@@ -330,6 +333,8 @@ class DashboardService:
             return {"success": False, "error": "Failed to reorder queue"}
 
         await self._persist_queue(guild_id, player)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         await self.broadcast_state(guild_id)
         return {
@@ -351,6 +356,8 @@ class DashboardService:
         if removed:
             player.undo_push("remove", extra=(index, removed))
             await self._persist_queue(guild_id, player)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(guild_id))
             await self.broadcast_state(guild_id)
             return {"success": True, "removed": removed.to_dict()}
         return {"success": False, "error": "Failed to remove track"}
@@ -362,6 +369,15 @@ class DashboardService:
             player.undo_push("clear")
         count = await player.clear()
         await self._clear_db_queue(guild_id)
+        if not player.now_playing and hasattr(self.bot, "db") and self.bot.db and hasattr(self.bot.db, "clear_session_state"):
+            try:
+                res = self.bot.db.clear_session_state(guild_id)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as exc:
+                logger.warning("DashboardService: clear_session_state error for guild %d: %s", guild_id, exc)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
         await self.broadcast_state(guild_id)
         return {"success": True, "cleared_count": count}
 
@@ -374,6 +390,8 @@ class DashboardService:
         player.undo_push("shuffle")
         await player.shuffle()
         await self._persist_queue(guild_id, player)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
         await self.broadcast_state(guild_id)
         return {"success": True, "queue_size": len(player)}
 
@@ -386,6 +404,8 @@ class DashboardService:
             return {"success": False, "error": f"Invalid loop mode: {mode}"}
         player = self.bot.get_player(guild_id)
         player.loop_mode = LoopMode(mode_str)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
         await self.broadcast_state(guild_id)
         return {"success": True, "loop_mode": player.loop_mode.value}
 
