@@ -204,6 +204,30 @@ class MusicBot(commands.Bot):
             self._players[guild_id] = GuildPlayer(guild_id)
         return self._players[guild_id]
 
+    async def update_clean_board(self, guild_id: int) -> None:
+        """Update pinned clean board message if configured for this guild."""
+        try:
+            cfg = await self.db.get_server_config(guild_id)
+            if not cfg.clean_mode or not cfg.board_message_id or not cfg.request_channel_id:
+                return
+            channel = self.get_channel(cfg.request_channel_id)
+            if not channel:
+                return
+            try:
+                board_msg = await channel.fetch_message(cfg.board_message_id)
+            except (discord.NotFound, discord.Forbidden):
+                return
+            from utils.embeds import request_channel_board_embed
+            from utils.views import CleanBoardControlView
+            from core.i18n import get_locale_sync
+            player = self.get_player(guild_id)
+            locale = get_locale_sync(guild_id)
+            embed = request_channel_board_embed(player, locale=locale)
+            view = CleanBoardControlView(self, guild_id)
+            await board_msg.edit(embed=embed, view=view)
+        except Exception as exc:
+            logger.debug("update_clean_board error for guild %d: %s", guild_id, exc)
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def setup_hook(self) -> None:
@@ -244,6 +268,14 @@ class MusicBot(commands.Bot):
             except Exception as exc:
                 logger.error("❌ Failed to load cog %s: %s", cog, exc)
                 traceback.print_exc()
+
+        # Register persistent views (Clean Player Channel Board)
+        try:
+            from utils.views import CleanBoardControlView
+            self.add_view(CleanBoardControlView(self))
+            logger.info("✅ Registered persistent CleanBoardControlView")
+        except Exception as exc:
+            logger.warning("Could not register persistent CleanBoardControlView: %s", exc)
 
         # Sync commands if requested
         if config.SYNC_COMMANDS:
@@ -532,6 +564,12 @@ class MusicBot(commands.Bot):
                         "guild %d: Bot voice disconnected unexpectedly — scheduling reconnect",
                         guild.id,
                     )
+                    # Voice Persistence: preserve currently playing track & elapsed offset at head of queue
+                    if player.now_playing is not None:
+                        curr = player.now_playing
+                        curr._resume_offset = max(0, player.elapsed_seconds)
+                        player._queue.appendleft(curr)
+                        player.now_playing = None
                     music_cog = self.cogs.get("Music")
                     if music_cog:
                         async def _delayed_resume(gid: int) -> None:
@@ -1117,6 +1155,9 @@ class MusicBot(commands.Bot):
                 logger.warning("Scheduled playback execution error (task %d, guild %d): %s", task_id, guild_id, exc)
             finally:
                 try:
+                    dow = str(task_row.get("days_of_week") or "").lower()
+                    if dow == "once" and hasattr(self.db, "deactivate_scheduled_task"):
+                        await self.db.deactivate_scheduled_task(task_id)
                     await self.db.release_scheduled_task_lock(task_id)
                 except Exception:
                     pass

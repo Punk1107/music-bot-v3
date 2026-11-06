@@ -99,6 +99,13 @@ def mock_bot(dummy_track):
     bot.db.save_queue = AsyncMock()
     bot.db.clear_queue = AsyncMock()
 
+    import asyncio
+    def _track_task(task_or_coro, *args, **kwargs):
+        if asyncio.iscoroutine(task_or_coro):
+            task_or_coro.close()
+        return MagicMock()
+    bot.track_task = MagicMock(side_effect=_track_task)
+
     return bot
 
 
@@ -566,6 +573,18 @@ class TestDashboardNextGenV2:
         # 3. Invalid preset
         res_inv = await service.set_equalizer(111, preset="nonexistent_preset")
         assert res_inv["success"] is False
+
+        # 4. Custom preset loaded from MySQL
+        cfg_mock = await mock_bot.db.get_server_config(111)
+        cfg_mock.guild_presets = {
+            "my_club": {
+                "bands": {"sub_bass": 6.0, "bass": 4.0, "mid": 0.0, "treble": 2.0},
+                "effects": ["bassboost"],
+                "volume": 1.2,
+            }
+        }
+        res_custom = await service.set_equalizer(111, preset="my_club")
+        assert res_custom["success"] is True
 
     @pytest.mark.asyncio
     async def test_mysql_presets_crud_lifecycle(self, mock_bot):

@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 import os
 import json
@@ -250,7 +251,8 @@ class TestFairShareQueue:
 
         with patch("cogs.queue_cog.get_locale", return_value="en"):
             # Set mode fair and limit 3
-            await cast(Any, cog.queue_cmd.callback)(cog, interaction, page=1, mode="fair", per_user_limit=3)  # type: ignore
+            queue_cb: Any = cog.queue_cmd.callback
+            await queue_cb(cog, interaction, page=1, mode="fair", per_user_limit=3)
 
         assert player.queue_mode == "fair"
         assert player.per_user_limit == 3
@@ -359,7 +361,8 @@ class TestAudioClipCutter:
              patch("cogs.playback_cog.get_locale", return_value="en"):
 
             # Request 45s (should clamp to 30s)
-            await cast(Any, cog.clip.callback)(cog, interaction, duration=45)  # type: ignore
+            clip_cb: Any = cog.clip.callback
+            await clip_cb(cog, interaction, duration=45)
 
         interaction.followup.send.assert_awaited_once()
         kwargs = interaction.followup.send.call_args[1]
@@ -490,6 +493,11 @@ class TestStreamingAndSourcesExpansion:
     @pytest.mark.asyncio
     async def test_play_next_locked_bypasses_ytdlp_with_stream_url_cache(self):
         bot = MagicMock()
+        def safe_track_task(task_or_coro, *a, **kw):
+            if asyncio.iscoroutine(task_or_coro):
+                task_or_coro.close()
+            return MagicMock()
+        bot.track_task = safe_track_task
         bot.db = MagicMock()
         bot.db.get_history = AsyncMock(return_value=[])
         bot.db.record_history = AsyncMock()

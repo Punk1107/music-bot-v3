@@ -56,7 +56,7 @@
       this.volumeText = document.getElementById('volume-text');
 
       // Search DOM
-      this.navSearchInput = document.getElementById('nav-search-input');
+      this.navSearchInput = document.getElementById('search-input') || document.getElementById('nav-search-input');
       this.btnNavSearchGo = document.getElementById('btn-nav-search-go');
       this.navSearchResults = document.getElementById('nav-search-results');
 
@@ -86,6 +86,24 @@
     }
 
     _bindEvents() {
+      // Theme Palette Switcher
+      const btnThemeToggle = document.getElementById('btn-theme-toggle');
+      if (btnThemeToggle) {
+        const savedTheme = localStorage.getItem('dashboard_theme') || 'violet';
+        document.body.setAttribute('data-theme', savedTheme);
+        btnThemeToggle.setAttribute('data-theme', savedTheme);
+
+        const themes = ['violet', 'midnight', 'emerald', 'cyberpunk'];
+        btnThemeToggle.addEventListener('click', () => {
+          const current = document.body.getAttribute('data-theme') || 'violet';
+          const next = themes[(themes.indexOf(current) + 1) % themes.length];
+          document.body.setAttribute('data-theme', next);
+          btnThemeToggle.setAttribute('data-theme', next);
+          localStorage.setItem('dashboard_theme', next);
+          this.showToast(`🎨 Palette: ${next.toUpperCase()}`, 'info');
+        });
+      }
+
       // Guild selection
       if (this.guildSelect) {
         this.guildSelect.addEventListener('change', (e) => {

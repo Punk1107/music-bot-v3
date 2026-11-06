@@ -696,9 +696,11 @@ class TestPhase5ServerAutomationAndGovernance:
         interaction.channel_id = 333
         interaction.user = MagicMock(spec=discord.Member)
         interaction.user.id = 444
+        interaction.user.guild_permissions.administrator = True
         interaction.user.voice.channel = MagicMock(id=222)
         interaction.response.defer = AsyncMock()
         interaction.followup.send = AsyncMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(language="en"))
 
         # /schedule add
         await cast(Any, cog.schedule_add.callback)(
@@ -833,5 +835,110 @@ class TestPhase5ServerAutomationAndGovernance:
         await MusicBot._restore_queues(bot)
         voice_channel.connect.assert_not_awaited()
 
-        await MusicBot._restore_queues(bot)
-        voice_channel.connect.assert_not_awaited()
+    @pytest.mark.asyncio
+    async def test_scheduler_once_mode_and_worker_lock_release(self):
+        from main import MusicBot
+        bot = MagicMock(spec=MusicBot)
+        bot.db = AsyncMock()
+        bot.get_guild = MagicMock(return_value=None)  # skip playback
+        task_row = {
+            "id": 55,
+            "guild_id": 111,
+            "voice_channel_id": 222,
+            "text_channel_id": 333,
+            "query": "Song",
+            "user_id": 444,
+            "days_of_week": "once",
+        }
+        bot.db.claim_due_scheduled_tasks = AsyncMock(return_value=[task_row])
+        bot.db.deactivate_scheduled_task = AsyncMock(return_value=True)
+        bot.db.release_scheduled_task_lock = AsyncMock()
+        bot.cogs = {"Music": MagicMock()}
+
+        await MusicBot._scheduled_playback(bot)
+
+        bot.db.deactivate_scheduled_task.assert_awaited_once_with(55)
+        bot.db.release_scheduled_task_lock.assert_awaited_once_with(55)
+
+    @pytest.mark.asyncio
+    async def test_scheduler_non_admin_forbidden(self):
+        from scheduler.cog import SchedulerCog
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(language="en"))
+        cog = SchedulerCog(bot)
+        cog.service = AsyncMock()
+
+        interaction = MagicMock()
+        interaction.guild.id = 111
+        interaction.user = MagicMock(spec=discord.Member)
+        interaction.user.guild_permissions.administrator = False
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        # Non-admin add
+        await cast(Any, cog.schedule_add.callback)(cog, interaction, time="08:00", query="Jazz")
+        cog.service.add_task.assert_not_called()
+        assert "❌" in interaction.followup.send.call_args[0][0]
+
+        # Non-admin remove
+        interaction.followup.send.reset_mock()
+        await cast(Any, cog.schedule_remove.callback)(cog, interaction, task_id=99)
+        cog.service.delete_task.assert_not_called()
+        assert "❌" in interaction.followup.send.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_clean_board_control_view_dynamic_guild_id(self):
+        from utils.views import CleanBoardControlView
+        bot = MagicMock()
+        player = GuildPlayer(123)
+        bot.get_player.return_value = player
+        bot.get_guild.return_value = MagicMock()
+
+        view = CleanBoardControlView(bot)  # None guild_id
+        interaction = MagicMock()
+        interaction.guild_id = 123
+        interaction.response.is_done.return_value = False
+        interaction.response.edit_message = AsyncMock()
+
+        # Test button click resolves guild_id dynamically
+        await cast(Any, view.btn_playpause.callback)(interaction)
+        interaction.response.edit_message.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_voice_disconnect_preserves_current_track_with_offset(self):
+        from main import MusicBot
+        bot = MagicMock(spec=MusicBot)
+        bot.user.id = 9999
+        member = MagicMock(id=9999)
+        before = MagicMock()
+        before.channel = MagicMock(id=101)
+        after = MagicMock()
+        after.channel = None  # Disconnected
+
+        player = GuildPlayer(555)
+        curr_track = Track(title="Running Track", url="https://yt.com/watch?v=123", duration=300)
+        player.now_playing = curr_track
+        import datetime
+        player.play_start_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=75)
+        bot.get_player.return_value = player
+        bot.cogs = {"Music": MagicMock()}
+
+        import asyncio
+        def _safe_track(task_or_coro, *a, **k):
+            if asyncio.iscoroutine(task_or_coro):
+                task_or_coro.close()
+            return MagicMock()
+        bot.track_task = MagicMock(side_effect=_safe_track)
+
+        guild = MagicMock()
+        guild.id = 555
+        before.channel.guild = guild
+
+        await MusicBot.on_voice_state_update(bot, member, before, after)
+
+        assert len(player._queue) == 1
+        queued = player._queue[0]
+        assert queued.title == "Running Track"
+        assert queued._resume_offset >= 74
+        assert player.now_playing is None
