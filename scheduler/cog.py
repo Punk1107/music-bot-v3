@@ -45,11 +45,12 @@ class SchedulerCog(commands.Cog, name="Scheduler"):
         time="Alarm time in 24hr format HH:MM (e.g., 08:00 or 18:30)",
         query="Song title, artist, or direct URL to play",
         voice_channel="Voice channel for the bot to join (defaults to your current voice channel)",
-        repeat="Repeat interval (daily, weekdays, or once)",
+        repeat="Repeat interval (daily, weekdays, weekends, or once)",
     )
     @app_commands.choices(repeat=[
         app_commands.Choice(name="Daily (Every day)", value="daily"),
         app_commands.Choice(name="Weekdays (Monday to Friday)", value="weekdays"),
+        app_commands.Choice(name="Weekends (Saturday and Sunday)", value="weekends"),
         app_commands.Choice(name="Once (Play once and finish)", value="once"),
     ])
     async def schedule_add(

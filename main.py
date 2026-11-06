@@ -219,9 +219,9 @@ class MusicBot(commands.Bot):
                 return
             from utils.embeds import request_channel_board_embed
             from utils.views import CleanBoardControlView
-            from core.i18n import get_locale_sync
+            from core.i18n import get_locale
             player = self.get_player(guild_id)
-            locale = get_locale_sync(guild_id)
+            locale = await get_locale(guild_id, self.db)
             embed = request_channel_board_embed(player, locale=locale)
             view = CleanBoardControlView(self, guild_id)
             await board_msg.edit(embed=embed, view=view)
@@ -596,10 +596,12 @@ class MusicBot(commands.Bot):
         if cfg and cfg.auto_pause_empty:
             if human_count == 0 and vc.is_playing():
                 vc.pause()
+                player.pause()
                 player.auto_paused = True
                 logger.debug("guild %d: Auto-paused (channel empty)", guild.id)
             elif human_count > 0 and player.auto_paused and vc.is_paused():
                 vc.resume()
+                player.resume()
                 player.auto_paused = False
                 logger.debug("guild %d: Auto-resumed (member rejoined)", guild.id)
 
@@ -1175,6 +1177,12 @@ class MusicBot(commands.Bot):
         This means a crash loses at most 60s of position data.
         """
         for guild_id, player in list(self._players.items()):
+            if not player.now_playing and len(player) == 0:
+                try:
+                    await self.db.clear_session_state(guild_id)
+                except Exception:
+                    pass
+                continue
             if not player.now_playing:
                 continue
             guild = self.get_guild(guild_id)

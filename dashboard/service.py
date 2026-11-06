@@ -180,20 +180,26 @@ class DashboardService:
         if not vc or not vc.is_connected():
             return {"success": False, "error": "Bot is not connected to a voice channel"}
 
+        player = self.bot.get_player(guild_id)
+
         if action == "pause":
             if vc.is_playing():
                 vc.pause()
+            player.pause()
             paused = True
         elif action == "resume":
             if vc.is_paused():
                 vc.resume()
+            player.resume()
             paused = False
         else:  # toggle
             if vc.is_paused():
                 vc.resume()
+                player.resume()
                 paused = False
             elif vc.is_playing():
                 vc.pause()
+                player.pause()
                 paused = True
             else:
                 return {"success": False, "error": "No active audio playing"}
@@ -507,6 +513,9 @@ class DashboardService:
             music_cog = self.bot.get_cog("Music")
             if music_cog and hasattr(music_cog, "_play_next"):
                 asyncio.create_task(music_cog._play_next(guild_id))
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         await self.broadcast_state(guild_id)
         return {

@@ -146,6 +146,7 @@ class SeekService:
                 )
 
         # Stop existing audio playback silently
+        was_paused = bool(vc.is_paused())
         if vc.is_playing() or vc.is_paused():
             vc.stop()
             for _ in range(15):
@@ -162,6 +163,9 @@ class SeekService:
             )
             source = discord.PCMVolumeTransformer(source, volume=player.volume)
             vc.play(source, after=after_seek)
+            if was_paused:
+                vc.pause()
+                player.pause()
         except Exception as exc:
             logger.error("guild %d: FFmpeg start failed on seek: %s", guild_id, exc)
             player._play_seq = old_seq
@@ -169,7 +173,12 @@ class SeekService:
 
         # Update player elapsed timing
         now = datetime.datetime.now(datetime.timezone.utc)
+        player.total_paused_duration = 0.0
         player.play_start_time = now - datetime.timedelta(seconds=target_sec)
+        if was_paused:
+            player.paused_at = now
+        else:
+            player.paused_at = None
         player._np_last_bar_step = -1
 
         logger.info(

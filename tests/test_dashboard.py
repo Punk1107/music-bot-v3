@@ -12,6 +12,7 @@ Tests:
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -816,3 +817,44 @@ class TestDashboardNextGenV2:
         assert "fonts.googleapis.com" not in html
         assert "cdnjs.cloudflare.com" not in html
         assert "cdn.jsdelivr.net" not in html
+
+    @pytest.mark.asyncio
+    async def test_dashboard_enqueue_triggers_clean_board(self, mock_bot, dummy_track):
+        svc = DashboardService(mock_bot)
+        mock_bot.update_clean_board = AsyncMock()
+        def _safe_track(task_or_coro, *a, **k):
+            import asyncio
+            if asyncio.iscoroutine(task_or_coro):
+                task_or_coro.close()
+            return MagicMock()
+        mock_bot.track_task = MagicMock(side_effect=_safe_track)
+
+        res = await svc.add_to_queue(111, "https://youtube.com/watch?v=12345", requested_by="WebAdmin")
+        assert res["success"] is True
+        mock_bot.track_task.assert_called()
+        mock_bot.update_clean_board.assert_called_with(111)
+
+    @pytest.mark.asyncio
+    async def test_dashboard_ws_sync_loop_resilience(self, mock_bot):
+        mgr = DashboardWebSocketManager(DashboardService(mock_bot))
+        mock_ws = MagicMock()
+        mgr._clients.add(mock_ws)
+        mgr._client_guilds[mock_ws] = 111
+
+        iteration_count = 0
+
+        def faulty_get_state(gid):
+            nonlocal iteration_count
+            iteration_count += 1
+            if iteration_count == 1:
+                raise RuntimeError("Simulated transient socket glitch")
+            return {"is_playing": False}
+
+        mgr.service.get_guild_state = MagicMock(side_effect=faulty_get_state)
+
+        with patch("asyncio.sleep", AsyncMock(side_effect=[None, None, asyncio.CancelledError()])):
+            # Run the loop until CancelledError
+            await mgr._sync_loop()
+
+        # Should have survived the first exception and reached iteration 2
+        assert iteration_count >= 2

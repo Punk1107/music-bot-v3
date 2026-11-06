@@ -514,6 +514,8 @@ class TestPhase5ServerAutomationAndGovernance:
         player.volume = 1.0
         player.queue = [MagicMock(), MagicMock()]
         player.loop_mode = LoopMode.OFF
+        player.clear = AsyncMock(return_value=0)
+        player.shuffle = AsyncMock()
         bot.get_player.return_value = player
 
         view = CleanBoardControlView(bot, guild_id=123)
@@ -543,11 +545,11 @@ class TestPhase5ServerAutomationAndGovernance:
 
         # Stop button
         await cast(Any, view.btn_stop.callback)(interaction)
-        player.clear_queue.assert_called_once()
+        player.clear.assert_awaited_once()
 
         # Shuffle button
         await cast(Any, view.btn_shuffle.callback)(interaction)
-        player.shuffle.assert_called_once()
+        player.shuffle.assert_awaited_once()
 
         # Loop button
         player.loop_mode = LoopMode.OFF
@@ -942,3 +944,171 @@ class TestPhase5ServerAutomationAndGovernance:
         assert queued.title == "Running Track"
         assert queued._resume_offset >= 74
         assert player.now_playing is None
+
+    def test_pause_resume_freezes_elapsed_seconds_and_speed_scaling(self):
+        import datetime
+        player = GuildPlayer(123)
+        dummy_track = Track(title="Timing Test", url="https://yt.com/watch?v=timing", duration=200)
+        player.now_playing = dummy_track
+
+        base_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=20)
+        player.play_start_time = base_time
+        assert player.elapsed_seconds >= 20
+
+        # Pause freezes elapsed calculation
+        player.pause()
+        assert player.paused_at is not None
+        freeze_elapsed = player.elapsed_seconds
+
+        # Time passes while paused
+        player.paused_at -= datetime.timedelta(seconds=10)
+        # elapsed should reflect paused_at time, not current time
+        assert player.elapsed_seconds == freeze_elapsed - 10 or player.elapsed_seconds == 10
+
+        # Resume
+        player.paused_at = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=5)
+        player.resume()
+        assert player.paused_at is None
+        assert player.total_paused_duration >= 4.9
+
+        # Speed scaling: at 2.0x speed, 20 seconds playtime yields 40 elapsed seconds
+        player.total_paused_duration = 0.0
+        player.play_start_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=20)
+        player.playback_speed = 2.0
+        assert player.elapsed_seconds >= 39
+
+    @pytest.mark.asyncio
+    async def test_seek_to_preserves_paused_state(self):
+        from seek.service import SeekService
+        bot = MagicMock()
+        player = GuildPlayer(123)
+        dummy_track = Track(title="Seek Paused", url="https://yt.com/watch?v=seek", duration=180)
+        dummy_track.stream_url_cache = "https://stream.url"
+        dummy_track.stream_url_expires = time.monotonic() + 3600
+        player.now_playing = dummy_track
+        bot.get_player.return_value = player
+
+        guild = MagicMock()
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = True  # Player was paused
+        guild.voice_client = vc
+        bot.get_guild.return_value = guild
+        bot.audio_processor = MagicMock()
+        bot.audio_processor.build_ffmpeg_options.return_value = {"options": "-vn"}
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(audio_quality=MagicMock(value="high")))
+
+        svc = SeekService(bot)
+        with patch("discord.FFmpegPCMAudio"), patch("discord.PCMVolumeTransformer"):
+            ok = await svc.seek_to(123, 40)
+            assert ok is True
+            # vc.play called, then vc.pause called to preserve paused state
+            vc.play.assert_called_once()
+            vc.pause.assert_called_once()
+            assert player.paused_at is not None
+            assert player.elapsed_seconds == 40
+
+    @pytest.mark.asyncio
+    async def test_session_cleanup_on_empty_queue_in_heartbeat(self):
+        from main import MusicBot
+        bot = MagicMock(spec=MusicBot)
+        bot.db = MagicMock()
+        bot.db.clear_session_state = AsyncMock()
+        bot.get_guild.return_value = MagicMock()
+
+        player = GuildPlayer(777)
+        player.now_playing = None
+        bot._players = {777: player}
+
+        await MusicBot._session_heartbeat.coro(bot)
+        bot.db.clear_session_state.assert_awaited_once_with(777)
+
+    @pytest.mark.asyncio
+    async def test_request_channel_clear_cleans_message_and_resets_config(self):
+        from cogs.admin import AdminCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        cfg = MagicMock()
+        cfg.request_channel_id = 456
+        cfg.board_message_id = 789
+        cfg.clean_mode = True
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.db.save_server_config = AsyncMock()
+
+        cog = AdminCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 999
+        interaction.user.guild_permissions.administrator = True
+        ch_mock = MagicMock(spec=discord.TextChannel)
+        msg_mock = MagicMock()
+        msg_mock.delete = AsyncMock()
+        ch_mock.fetch_message = AsyncMock(return_value=msg_mock)
+        interaction.guild.get_channel.return_value = ch_mock
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("cogs.admin.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, cog.rc_clear.callback)(cog, interaction)
+
+        msg_mock.delete.assert_awaited_once()
+        assert cfg.request_channel_id is None
+        assert cfg.board_message_id is None
+        assert cfg.clean_mode is False
+        bot.db.save_server_config.assert_awaited_once_with(cfg)
+
+    @pytest.mark.asyncio
+    async def test_bookmark_load_voice_connect_and_replace_stop(self):
+        from cogs.bookmark_cog import BookmarkCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        t1 = Track(title="Bm Track 1", url="https://yt.com/1", duration=120)
+        bot.db.load_bookmark = AsyncMock(return_value=[t1])
+        player = GuildPlayer(888)
+        bot.get_player.return_value = player
+        cog = BookmarkCog(bot)
+
+        interaction = MagicMock()
+        interaction.guild_id = 888
+        interaction.guild.voice_client = None  # Bot not connected
+        mock_vc = MagicMock()
+        mock_vc.is_connected.return_value = True
+        mock_vc.is_playing.return_value = False
+        mock_vc.is_paused.return_value = False
+        voice_channel = MagicMock()
+        voice_channel.connect = AsyncMock(return_value=mock_vc)
+        interaction.user.voice.channel = voice_channel
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        def _safe_track(task_or_coro, *a, **k):
+            import asyncio
+            if asyncio.iscoroutine(task_or_coro):
+                task_or_coro.close()
+            return MagicMock()
+        bot.track_task = MagicMock(side_effect=_safe_track)
+
+        with patch("cogs.bookmark_cog.get_locale", AsyncMock(return_value="en")):
+            await cog._load(interaction, "my_bm", mode="replace")
+
+        voice_channel.connect.assert_awaited_once()
+        assert len(player) == 1
+        assert player._queue[0].title == "Bm Track 1"
+
+    def test_scheduler_add_weekends_choice(self):
+        from scheduler.cog import SchedulerCog
+        bot = MagicMock()
+        cog = SchedulerCog(bot)
+        # Inspect choices parameter on schedule_add
+        cmd = cog.schedule_add
+        repeat_param = None
+        for p in cmd.parameters:
+            if p.name == "repeat":
+                repeat_param = p
+                break
+        assert repeat_param is not None
+        choice_values = [c.value for c in repeat_param.choices]
+        assert "weekends" in choice_values
+        assert "daily" in choice_values
+        assert "weekdays" in choice_values
+        assert "once" in choice_values
