@@ -1980,6 +1980,196 @@ class TestPhase5ServerAutomationAndGovernance:
         pl_with_public = await db.list_playlists(user_id=600, guild_id=111, include_public=True)
         assert any(p["name"] == "Public Mix" for p in pl_with_public)
 
+    @pytest.mark.asyncio
+    async def test_phase8_stability_fixes(self, tmp_path):
+        from podcast.parser import parse_podcast_xml
+        from playlist.cog import PlaylistCog
+        from sources.cog import SCSearchSelect, SCSearchView
+        from cogs.effects import EffectsCog
+        from cogs.health_cog import HealthCog
+        from cogs.theme_cog import ThemeCog
+        from cogs.language_cog import LanguageCog
+        from cogs.playback_cog import PlaybackCog
+        from autoplay.cog import AutoplayCog
+        from scheduler.service import MusicSchedulerService
+        from scheduler.models import ScheduledTask
+        from models.enums import AudioEffect, AudioQuality
+
+        # 1. podcast parser handles XML bytes and str with encoding declaration
+        rss_bytes = b'<?xml version="1.0" encoding="utf-8"?><rss version="2.0"><channel><title>Byte Cast</title><description>D</description><item><title>Ep 1</title><enclosure url="https://audio.mp3" type="audio/mpeg" length="1234"/></item></channel></rss>'
+        show_from_bytes = parse_podcast_xml(rss_bytes)
+        assert show_from_bytes is not None
+        assert show_from_bytes.title == "Byte Cast"
+        assert len(show_from_bytes.episodes) == 1
+        assert show_from_bytes.episodes[0].title == "Ep 1"
+
+        show_from_str = parse_podcast_xml(rss_bytes.decode("utf-8"))
+        assert show_from_str is not None
+        assert show_from_str.title == "Byte Cast"
+
+        # 2. scheduler/service.py calls spotify.resolve with max_tracks=50 (not yt_breaker)
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        bot.get_guild = MagicMock()
+        guild = MagicMock()
+        vc_chan = MagicMock()
+        bot.get_channel.return_value = vc_chan
+        bot.get_guild.return_value = guild
+        vc = AsyncMock()
+        vc.is_connected.return_value = True
+        guild.voice_client = vc
+
+        bot.spotify = MagicMock()
+        bot.spotify.available = True
+        bot.spotify.is_spotify_url.return_value = True
+        bot.spotify.resolve = AsyncMock(return_value=[Track(title="Sp", url="https://sp", duration=120)])
+        bot.sp_breaker = None
+        bot.yt_breaker = MagicMock()
+        bot.http_session = MagicMock()
+        bot.youtube = MagicMock()
+
+        sched_svc = MusicSchedulerService(bot)
+        task = ScheduledTask(
+            id=1,
+            guild_id=123,
+            voice_channel_id=456,
+            text_channel_id=789,
+            scheduled_time="12:00:00",
+            query="https://open.spotify.com/track/123",
+            user_id=1,
+        )
+        await sched_svc._execute_task(task)
+        bot.spotify.resolve.assert_awaited_once_with(
+            "https://open.spotify.com/track/123",
+            bot.http_session,
+            bot.youtube,
+            50,
+        )
+
+        # 3. PlaylistCog.play resets is_radio_mode and unregisters radio_watchdog
+        bot_pl = MagicMock()
+        bot_pl.db = AsyncMock()
+        player_pl = GuildPlayer()
+        player_pl.is_radio_mode = True
+        bot_pl.get_player.return_value = player_pl
+        bot_pl.radio_watchdog = MagicMock()
+        bot_pl.cogs = {}
+
+        pl_cog = PlaylistCog(bot_pl)
+        pl_cog.service.load_playlist = AsyncMock(return_value=[Track(title="Pl Track", url="https://yt", duration=100)])
+
+        inter_pl = MagicMock()
+        inter_pl.guild_id = 999
+        inter_pl.user = MagicMock()
+        inter_pl.user.id = 55
+        inter_pl.user.voice.channel = MagicMock()
+        inter_pl.guild.voice_client = AsyncMock()
+        inter_pl.guild.voice_client.is_connected.return_value = True
+        inter_pl.guild.voice_client.channel = inter_pl.user.voice.channel
+        inter_pl.guild.voice_client.is_playing.return_value = False
+        inter_pl.guild.voice_client.is_paused.return_value = False
+        inter_pl.followup.send = AsyncMock()
+
+        with patch("playlist.cog.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, pl_cog.play.callback)(pl_cog, inter_pl, name="My Mix", shuffle=False)
+
+        assert player_pl.is_radio_mode is False
+        bot_pl.radio_watchdog.unregister.assert_called_once_with(999)
+
+        # 4. sources SCSearchSelect.callback handles interaction.message is None without error
+        bot_sc = MagicMock()
+        track_sc = Track(title="SC Song", url="https://soundcloud.com/song", duration=150)
+        view_sc = SCSearchView(bot_sc, guild_id=999, tracks=[track_sc])
+        select_sc = view_sc.children[0]
+        select_sc.values = ["0"]
+
+        inter_sc = MagicMock()
+        inter_sc.guild_id = 999
+        inter_sc.message = None  # None message in ephemeral interaction
+        inter_sc.response.defer = AsyncMock()
+        inter_sc.followup.send = AsyncMock()
+        inter_sc.guild.voice_client = AsyncMock()
+        inter_sc.guild.voice_client.is_playing.return_value = False
+        inter_sc.guild.voice_client.is_paused.return_value = False
+        bot_sc.get_player.return_value = GuildPlayer()
+        bot_sc.cogs = {}
+
+        with patch("sources.cog.get_locale", AsyncMock(return_value="en")):
+            await select_sc.callback(inter_sc)
+        assert inter_sc.followup.send.called
+
+        # 5. effects, effects_clear, quality call update_clean_board
+        bot_eff = MagicMock()
+        bot_eff.db = AsyncMock()
+        cfg_eff = MagicMock()
+        cfg_eff.dj_role_id = None
+        bot_eff.db.get_server_config.return_value = cfg_eff
+        bot_eff.update_clean_board = AsyncMock()
+        def _track(coro, name=None):
+            asyncio.create_task(coro)
+            return MagicMock()
+        bot_eff.track_task = MagicMock(side_effect=_track)
+        player_eff = GuildPlayer()
+        bot_eff.get_player.return_value = player_eff
+
+        eff_cog = EffectsCog(bot_eff)
+        eff_cog._restart_audio = MagicMock()
+
+        inter_eff = MagicMock()
+        inter_eff.guild_id = 777
+        inter_eff.response.defer = AsyncMock()
+        inter_eff.followup.send = AsyncMock()
+
+        with patch("cogs.effects.get_locale", AsyncMock(return_value="en")):
+            # effects
+            await cast(Any, eff_cog.effects.callback)(eff_cog, inter_eff, effect="bassboost")
+            bot_eff.update_clean_board.assert_called_with(777)
+
+            # effects_clear
+            bot_eff.update_clean_board.reset_mock()
+            await cast(Any, eff_cog.effects_clear.callback)(eff_cog, inter_eff)
+            bot_eff.update_clean_board.assert_called_with(777)
+
+            # quality
+            bot_eff.update_clean_board.reset_mock()
+            await cast(Any, eff_cog.quality.callback)(eff_cog, inter_eff, preset="high")
+            bot_eff.update_clean_board.assert_called_with(777)
+
+        # 6. Safe permission checks with discord.User (no guild_permissions or roles)
+        bot_perm = MagicMock()
+        bot_perm.db = AsyncMock()
+        cfg_perm = MagicMock()
+        cfg_perm.dj_role_id = 9999
+        cfg_perm.dj_only = True
+        bot_perm.db.get_server_config.return_value = cfg_perm
+
+        user_mock = MagicMock(spec=["id", "name", "discriminator"])  # explicitly lacks guild_permissions and roles
+        inter_perm = MagicMock()
+        inter_perm.guild_id = 888
+        inter_perm.user = user_mock
+        inter_perm.response.is_done.return_value = True
+        inter_perm.response.defer = AsyncMock()
+        inter_perm.followup.send = AsyncMock()
+
+        h_cog = HealthCog(bot_perm)
+        assert await h_cog._check_dj(inter_perm) is False
+
+        t_cog = ThemeCog(bot_perm)
+        assert await t_cog._check_dj(inter_perm) is False
+
+        l_cog = LanguageCog(bot_perm)
+        assert await l_cog._check_admin(inter_perm) is False
+
+        p_cog = PlaybackCog(bot_perm)
+        assert await p_cog._check_dj(inter_perm) is False
+
+        a_cog = AutoplayCog(bot_perm)
+        inter_perm.guild.voice_client = None
+        # Does not crash with AttributeError
+        with patch("autoplay.cog.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, a_cog.autoplay.callback)(a_cog, inter_perm, mode="off")
+
+
 
 
 

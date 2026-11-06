@@ -259,6 +259,9 @@ class PlaylistCog(commands.Cog, name="Playlist"):
 
         player = self.bot.get_player(guild_id)
         player.intentional_disconnect = False
+        player.is_radio_mode = False
+        if getattr(self.bot, "radio_watchdog", None):
+            self.bot.radio_watchdog.unregister(guild_id)
         user_limit = getattr(player, "per_user_limit", 0)
         if user_limit > 0:
             user_queued = player.user_track_count(interaction.user.id)

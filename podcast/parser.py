@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Optional
+from typing import Optional, Union
 import xml.etree.ElementTree as ET
 
 import aiohttp
@@ -53,10 +53,14 @@ def _parse_itunes_duration(duration_str: str) -> int:
         return 0
 
 
-def parse_podcast_xml(xml_content: str) -> Optional[PodcastShow]:
-    """Parse podcast RSS XML text using stdlib xml.etree.ElementTree."""
+def parse_podcast_xml(xml_content: Union[str, bytes]) -> Optional[PodcastShow]:
+    """Parse podcast RSS XML text or raw bytes using stdlib xml.etree.ElementTree."""
     try:
-        root = ET.fromstring(xml_content)
+        if isinstance(xml_content, str):
+            raw_bytes = xml_content.encode("utf-8")
+            root = ET.fromstring(raw_bytes)
+        else:
+            root = ET.fromstring(xml_content)
     except Exception as exc:
         logger.warning("Failed to parse podcast XML: %s", exc)
         return None
@@ -139,8 +143,8 @@ async def fetch_and_parse_podcast(
             if resp.status != 200:
                 logger.warning("Podcast fetch returned HTTP %d for %s", resp.status, url)
                 return None
-            xml_text = await resp.text()
-            return parse_podcast_xml(xml_text)
+            xml_bytes = await resp.read()
+            return parse_podcast_xml(xml_bytes)
     except Exception as exc:
         logger.error("Podcast fetch exception for %s: %s", url, exc)
         return None

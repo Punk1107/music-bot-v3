@@ -943,4 +943,25 @@ class TestDashboardNextGenV2:
         assert res["success"] is False
         assert "YouTube" in res["error"]
 
+    @pytest.mark.asyncio
+    async def test_phase8_dashboard_effects_eq_clean_board_sync(self, mock_bot):
+        svc = DashboardService(mock_bot)
+        mock_bot.update_clean_board = AsyncMock()
+        def _safe_track(coro, name=None):
+            asyncio.create_task(coro)
+            return MagicMock()
+        mock_bot.track_task = MagicMock(side_effect=_safe_track)
+
+        # toggle_effect triggers update_clean_board
+        res = await svc.toggle_effect(111, "nightcore")
+        assert res["success"] is True
+        mock_bot.update_clean_board.assert_called_with(111)
+
+        # set_equalizer triggers update_clean_board
+        mock_bot.update_clean_board.reset_mock()
+        res_eq = await svc.set_equalizer(111, preset="bass_boost")
+        assert res_eq["success"] is True
+        mock_bot.update_clean_board.assert_called_with(111)
+
+
 

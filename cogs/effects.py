@@ -32,9 +32,11 @@ class EffectsCog(commands.Cog, name="Effects"):
         if not cfg.dj_role_id:
             return True
         member = interaction.user
-        if member.guild_permissions.administrator:
+        perms = getattr(member, "guild_permissions", None)
+        if perms and getattr(perms, "administrator", False):
             return True
-        if any(r.id == cfg.dj_role_id for r in member.roles):
+        roles = getattr(member, "roles", [])
+        if any(r.id == cfg.dj_role_id for r in roles):
             return True
         await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)
         return False
@@ -108,6 +110,8 @@ class EffectsCog(commands.Cog, name="Effects"):
             desc = t("effects.applied", locale, effect=eff.display_name())
 
         self._restart_audio(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         await interaction.followup.send(
             embed=success_embed(f"Effect {action.capitalize()}", desc),
             ephemeral=True,
@@ -132,6 +136,8 @@ class EffectsCog(commands.Cog, name="Effects"):
         player = self.bot.get_player(interaction.guild_id)
         player.effects.clear()
         self._restart_audio(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         await interaction.followup.send(embed=success_embed("Effects Cleared", t("effects.cleared", locale)), ephemeral=True)
 
     @app_commands.command(name="effects_list", description="Show all 18 effects with current status")
@@ -167,6 +173,8 @@ class EffectsCog(commands.Cog, name="Effects"):
         cfg.audio_quality = q
         await self.bot.db.save_server_config(cfg)
         self._restart_audio(interaction.guild_id)
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         await interaction.followup.send(
             embed=success_embed("Quality Set", f"Audio quality: **{q.value.upper()}**"), ephemeral=True
         )
