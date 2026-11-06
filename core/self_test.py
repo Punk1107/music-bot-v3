@@ -155,10 +155,12 @@ async def _check_permissions(bot: "MusicBot") -> CheckResult:
                 return CheckResult("Permissions", False, f"Missing intents: {missing}", latency)
             return CheckResult("Permissions", True, "Intents OK (pre-ready check)", latency)
 
+        checked_guilds = 0
         for guild in bot.guilds:
             me = guild.me
             if me is None:
                 continue
+            checked_guilds += 1
             perms = me.guild_permissions
             required = ["connect", "speak", "send_messages", "embed_links", "read_messages"]
             missing  = [p for p in required if not getattr(perms, p, False)]
@@ -168,9 +170,10 @@ async def _check_permissions(bot: "MusicBot") -> CheckResult:
                     "Permissions", False,
                     f"Missing in guild {guild.name}: {missing}", latency,
                 )
-            return CheckResult("Permissions", True, f"Guild: {guild.name} — all perms OK", latency)
 
         latency = time.monotonic() - t0
+        if checked_guilds > 0:
+            return CheckResult("Permissions", True, f"All required perms OK across {checked_guilds} guild(s)", latency)
         return CheckResult("Permissions", True, "No guilds joined (intents OK)", latency)
 
     except Exception as exc:
@@ -214,7 +217,16 @@ async def _check_spotify(bot: "MusicBot") -> CheckResult:
 
         sp = bot.spotify
         if hasattr(sp, "_get_token"):
-            await sp._get_token()
+            session = getattr(bot, "http_session", None)
+            if session is not None:
+                token = await sp._get_token(session)
+            else:
+                import aiohttp
+                async with aiohttp.ClientSession() as tmp_session:
+                    token = await sp._get_token(tmp_session)
+            if not token:
+                latency = time.monotonic() - t0
+                return CheckResult("Spotify", False, "Spotify authentication failed (no token)", latency)
         latency = time.monotonic() - t0
         return CheckResult("Spotify", True, "Credentials configured & token OK", latency)
     except Exception as exc:
@@ -295,8 +307,8 @@ async def _check_config(bot: "MusicBot") -> CheckResult:
             issues.append(f"IDLE_TIMEOUT={config.IDLE_TIMEOUT}s (very low)")
         if config.MAX_QUEUE_SIZE > 5000:
             issues.append(f"MAX_QUEUE_SIZE={config.MAX_QUEUE_SIZE} (very high)")
-        if not getattr(config, "DEV_LOG_CHANNEL_ID", None):
-            issues.append("DEV_LOG_CHANNEL_ID not set (no error forwarding)")
+        if not getattr(config, "DEV_LOG_CHANNEL_IDS", None) and not getattr(config, "DEV_LOG_CHANNEL_ID", None):
+            issues.append("DEV_LOG_CHANNEL_IDS not set (no error forwarding)")
         latency = time.monotonic() - t0
         if issues:
             return CheckResult("Config", True, "Warnings: " + "; ".join(issues), latency)

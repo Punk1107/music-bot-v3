@@ -741,7 +741,15 @@ class MusicBot(commands.Bot):
         query: Optional[str] = None
 
         vc_current = message.guild.voice_client
-        if result.intent in (NLUIntent.SKIP, NLUIntent.PAUSE, NLUIntent.RESUME, NLUIntent.VOLUME):
+        if result.intent in (
+            NLUIntent.SKIP,
+            NLUIntent.PAUSE,
+            NLUIntent.RESUME,
+            NLUIntent.VOLUME,
+            NLUIntent.STOP,
+            NLUIntent.LOOP,
+            NLUIntent.SHUFFLE,
+        ):
             if not getattr(message.author, "voice", None) or not message.author.voice.channel:
                 try:
                     await message.channel.send(f"❌ {t('error.not_in_voice', locale)}", delete_after=5)
@@ -807,9 +815,14 @@ class MusicBot(commands.Bot):
                 except Exception:
                     pass
             return
-        elif result.intent == NLUIntent.VOLUME and result.volume is not None:
+        elif result.intent == NLUIntent.VOLUME and (result.volume is not None or result.volume_dir is not None):
             player = self.get_player(message.guild.id)
-            clamped_vol = max(0, min(200, int(result.volume)))
+            if result.volume is not None:
+                clamped_vol = max(0, min(200, int(result.volume)))
+            elif result.volume_dir == "up":
+                clamped_vol = max(0, min(200, int(round(player.volume * 100)) + 10))
+            else:
+                clamped_vol = max(0, min(200, int(round(player.volume * 100)) - 10))
             player.volume = clamped_vol / 100.0
             guild = message.guild
             vc = guild.voice_client if guild else None
@@ -820,6 +833,68 @@ class MusicBot(commands.Bot):
             else:
                 try:
                     await message.channel.send(t("volume.set", locale, vol=clamped_vol), delete_after=5)
+                except Exception:
+                    pass
+            return
+        elif result.intent == NLUIntent.STOP:
+            player = self.get_player(message.guild.id)
+            player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False):
+                player.is_radio_mode = False
+                rw = getattr(self, "radio_watchdog", None)
+                if rw:
+                    rw.unregister(message.guild.id)
+            await player.clear()
+            player.now_playing = None
+            vc = message.guild.voice_client
+            if vc and (vc.is_playing() or vc.is_paused()):
+                vc.stop()
+            if hasattr(self, "db") and self.db:
+                if hasattr(self.db, "clear_queue"):
+                    self.track_task(self.db.clear_queue(message.guild.id))
+                if hasattr(self.db, "clear_session_state"):
+                    self.track_task(self.db.clear_session_state(message.guild.id))
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(t("stop.done", locale), delete_after=5)
+                except Exception:
+                    pass
+            return
+        elif result.intent == NLUIntent.LOOP:
+            from models.enums import LoopMode
+            player = self.get_player(message.guild.id)
+            modes = [LoopMode.OFF, LoopMode.TRACK, LoopMode.QUEUE]
+            idx = (modes.index(player.loop_mode) + 1) % len(modes)
+            player.loop_mode = modes[idx]
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(
+                        t("loop.changed", locale, mode=player.loop_mode.display(locale)),
+                        delete_after=5,
+                    )
+                except Exception:
+                    pass
+            return
+        elif result.intent == NLUIntent.SHUFFLE:
+            player = self.get_player(message.guild.id)
+            player.undo_push("shuffle")
+            player.cancel_prefetch()
+            await player.shuffle()
+            vc = message.guild.voice_client
+            if vc and vc.channel and hasattr(self, "db") and hasattr(self.db, "save_queue"):
+                self.track_task(self.db.save_queue(message.guild.id, vc.channel.id, player.queue))
+            if cfg and cfg.clean_mode:
+                await _update_clean_board_if_needed()
+            else:
+                try:
+                    await message.channel.send(
+                        t("queue.shuffled", locale, count=len(player)),
+                        delete_after=5,
+                    )
                 except Exception:
                     pass
             return

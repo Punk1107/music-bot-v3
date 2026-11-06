@@ -39,7 +39,7 @@ class RadioCog(commands.Cog, name="Radio"):
         self.watchdog = RadioWatchdog(bot)
         self.watchdog.start()
 
-    def cog_unload(self) -> None:
+    async def cog_unload(self) -> None:
         self.watchdog.stop()
 
     radio_group = app_commands.Group(
@@ -55,6 +55,8 @@ class RadioCog(commands.Cog, name="Radio"):
         custom_name: Optional[str] = None,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            return
         locale = await get_locale(interaction.guild_id, self.bot.db)
 
         # 1. Resolve station info
@@ -107,6 +109,7 @@ class RadioCog(commands.Cog, name="Radio"):
             return
 
         player = self.bot.get_player(interaction.guild_id)
+        player.is_radio_mode = True
 
         # Register 24/7 session
         self.watchdog.register(interaction.guild_id, station_id, name, url)
@@ -142,7 +145,7 @@ class RadioCog(commands.Cog, name="Radio"):
         if vc.is_playing() or vc.is_paused():
             player.cancel_prefetch()
             vc.stop()
-        else:
+        elif hasattr(music_cog, "_play_next"):
             await music_cog._play_next(interaction.guild_id)
 
     @radio_group.command(name="play", description="Tune into a curated 24/7 web radio station")
@@ -165,10 +168,7 @@ class RadioCog(commands.Cog, name="Radio"):
     ) -> None:
         await self._play_radio_station(interaction, station_id=station)
 
-    @radio_play.autocomplete("station")
-    async def station_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> list[app_commands.Choice[str]]:
+    def _filter_station_choices(self, current: str) -> list[app_commands.Choice[str]]:
         choices: list[app_commands.Choice[str]] = []
         cur = current.lower().strip()
         for g_name, st_list in self.stations.items():
@@ -179,6 +179,12 @@ class RadioCog(commands.Cog, name="Radio"):
                     if len(choices) >= 25:
                         return choices
         return choices
+
+    @radio_play.autocomplete("station")
+    async def station_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        return self._filter_station_choices(current)
 
     @radio_group.command(name="station", description="Alias for /radio play")
     @app_commands.describe(station="Select or search for a curated radio station")
@@ -193,7 +199,7 @@ class RadioCog(commands.Cog, name="Radio"):
     async def station_alias_autocomplete(
         self, interaction: discord.Interaction, current: str
     ) -> list[app_commands.Choice[str]]:
-        return await self.station_autocomplete(interaction, current)
+        return self._filter_station_choices(current)
 
     @radio_group.command(name="custom", description="Stream a custom 24/7 radio or livestream URL")
     @app_commands.describe(
@@ -234,6 +240,6 @@ class RadioCog(commands.Cog, name="Radio"):
 
 async def setup(bot: "MusicBot") -> None:
     cog = RadioCog(bot)
-    bot.radio_watchdog = cog.watchdog
+    setattr(bot, "radio_watchdog", cog.watchdog)
     await bot.add_cog(cog)
 

@@ -460,11 +460,17 @@ class DashboardService:
         }
 
     async def search_tracks(self, query: str, limit: int = 5) -> list[dict]:
-        """Search tracks via YouTube or resolve URL."""
-        query = query.strip()
+        """Search tracks via YouTube, SoundCloud, Bandcamp, or resolve URL."""
+        query = (query or "").strip()
         if not query:
             return []
+        limit = max(1, min(25, int(limit)))
         try:
+            router = getattr(self.bot, "sources_router", None)
+            if router and hasattr(router, "is_supported") and router.is_supported(query):
+                resolved = await router.resolve(query, max_tracks=limit)
+                return [t.to_dict() for t in resolved[:limit]]
+
             yt = getattr(self.bot, "youtube", None)
             if yt:
                 if yt.is_youtube_url(query):

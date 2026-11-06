@@ -35,66 +35,71 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────── Intent patterns ─────────────────────────────────────
 
+# Word boundaries that work for both Latin (\w) and Thai (\u0E00-\u0E7F,
+# where combining vowels/tone marks are Unicode category Mn and treated as \W by re's \b).
+_WB_L = r"(?<![\w\u0E00-\u0E7F])"
+_WB_R = r"(?![\w\u0E00-\u0E7F])"
+
 _INTENT_PATTERNS: list[tuple[NLUIntent, re.Pattern]] = [
     # ── PLAY (must come before RESUME / SKIP)
     (NLUIntent.PLAY,    re.compile(
-        r"\b(play|เล่น|เปิด(?:เพลง)?|ขอฟัง|เปิด)\s*(?P<query>.+)",
+        rf"{_WB_L}(?:play\s+|(?:เล่น(?!ต่อ)|เปิดเพลง|ขอฟัง|เปิด)\s*)(?P<query>.+)",
         re.I | re.UNICODE,
     )),
 
     # ── PAUSE
     (NLUIntent.PAUSE,   re.compile(
-        r"\b(pause|หยุด(?:ชั่วคราว)?|พัก|stop playing)\b",
+        rf"{_WB_L}(pause|หยุดชั่วคราว|หยุด|พัก|stop\s+playing){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── RESUME
     (NLUIntent.RESUME,  re.compile(
-        r"\b(resume|เล่นต่อ|ต่อ|ต่อเลย|unpause)\b",
+        rf"{_WB_L}(resume|เล่นต่อ|ต่อเลย|ต่อ|unpause){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── SKIP
     (NLUIntent.SKIP,    re.compile(
-        r"\b(skip|next|ข้าม|ต่อไป|เพลงต่อไป|ข้ามไป)\b",
+        rf"{_WB_L}(skip|next|ข้ามไป|ข้ามเพลง|ข้าม|เพลงต่อไป|ต่อไป){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── STOP
     (NLUIntent.STOP,    re.compile(
-        r"\b(stop|หยุดเลย|ออก|disconnect|หยุดหมด|ปิด(?:บอท)?)\b",
+        rf"{_WB_L}(stop|หยุดเลย|หยุดหมด|ออก|disconnect|ปิดบอท|ปิด){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── VOLUME (with optional number extraction)
     (NLUIntent.VOLUME,  re.compile(
-        r"\b(volume|เสียง|ดังขึ้น|louder|เบาลง|quieter|ลดเสียง|เพิ่มเสียง|vol)\b",
+        rf"{_WB_L}(volume|vol|เสียง|ดังขึ้น|louder|เบาลง|quieter|ลดเสียง|เพิ่มเสียง){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── QUEUE
     (NLUIntent.QUEUE,   re.compile(
-        r"\b(queue|คิว|รายการ(?:เพลง)?|list|ดูคิว)\b",
+        rf"{_WB_L}(queue|คิว|รายการเพลง|รายการ|list|ดูคิว){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── LOOP
     (NLUIntent.LOOP,    re.compile(
-        r"\b(loop|repeat|วนซ้ำ|วน|ซ้ำ)\b",
+        rf"{_WB_L}(loop|repeat|วนซ้ำ|วนเพลง|วน|ซ้ำ){_WB_R}",
         re.I | re.UNICODE,
     )),
 
     # ── SHUFFLE
     (NLUIntent.SHUFFLE, re.compile(
-        r"\b(shuffle|random|สุ่ม|สุ่มเพลง)\b",
+        rf"{_WB_L}(shuffle|random|สุ่มเพลง|สุ่มคิว|สุ่ม){_WB_R}",
         re.I | re.UNICODE,
     )),
 ]
 
 # Volume adjustment patterns
-_VOLUME_NUMBER_RE = re.compile(r"\b(\d{1,3})\b")
-_VOLUME_UP_RE     = re.compile(r"\b(ดังขึ้น|louder|เพิ่มเสียง|volume up|vol up)\b", re.I | re.UNICODE)
-_VOLUME_DOWN_RE   = re.compile(r"\b(เบาลง|quieter|ลดเสียง|volume down|vol down)\b", re.I | re.UNICODE)
+_VOLUME_NUMBER_RE = re.compile(r"(?<!\d)(\d{1,3})(?!\d)")
+_VOLUME_UP_RE     = re.compile(rf"{_WB_L}(ดังขึ้น|louder|เพิ่มเสียง|volume\s+up|vol\s+up){_WB_R}", re.I | re.UNICODE)
+_VOLUME_DOWN_RE   = re.compile(rf"{_WB_L}(เบาลง|quieter|ลดเสียง|volume\s+down|vol\s+down){_WB_R}", re.I | re.UNICODE)
 
 
 @dataclass

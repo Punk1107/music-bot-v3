@@ -239,6 +239,7 @@ async def get_dominant_color(
                 session = aiohttp.ClientSession()
 
             try:
+                assert session is not None
                 async with session.get(
                     url,
                     timeout=aiohttp.ClientTimeout(total=8),
@@ -247,7 +248,7 @@ async def get_dominant_color(
                     if not resp.ok:
                         return fallback
                     content_type = resp.headers.get("Content-Type", "image/jpeg")
-                    raw = await resp.read()
+                    raw = await resp.content.read(5 * 1024 * 1024)
             finally:
                 if close_session and session:
                     await session.close()
@@ -260,7 +261,7 @@ async def get_dominant_color(
 
             # Store in cache safely under lock
             async with cache_lock:
-                _COLOR_CACHE[url] = (color, now)
+                _COLOR_CACHE[url] = (color, time.monotonic())
                 if len(_COLOR_CACHE) > _CACHE_MAX:
                     oldest = min(_COLOR_CACHE, key=lambda k: _COLOR_CACHE[k][1])
                     _COLOR_CACHE.pop(oldest, None)

@@ -108,20 +108,33 @@ class PlaylistCog(commands.Cog, name="Playlist"):
                 )
                 return
         else:
-            if hasattr(self.bot, "youtube"):
-                if hasattr(self.bot.youtube, "is_youtube_url") and self.bot.youtube.is_youtube_url(query):
+            q_str = query.strip()
+            router = getattr(self.bot, "sources_router", None)
+            if router and hasattr(router, "is_supported") and router.is_supported(q_str):
+                resolved = await router.resolve(q_str, max_tracks=1)
+                track = resolved[0] if resolved else None
+            elif hasattr(self.bot, "spotify") and self.bot.spotify and self.bot.spotify.is_spotify_url(q_str) and self.bot.http_session:
+                if hasattr(self.bot, "sp_breaker") and self.bot.sp_breaker:
+                    sp_tracks = await self.bot.sp_breaker.call(
+                        self.bot.spotify.resolve, q_str, self.bot.http_session, self.bot.youtube
+                    )
+                else:
+                    sp_tracks = await self.bot.spotify.resolve(q_str, self.bot.http_session, self.bot.youtube)
+                track = sp_tracks[0] if sp_tracks else None
+            elif hasattr(self.bot, "youtube"):
+                if hasattr(self.bot.youtube, "is_youtube_url") and self.bot.youtube.is_youtube_url(q_str):
                     if hasattr(self.bot, "yt_breaker") and self.bot.yt_breaker:
-                        track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, query)
+                        track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, q_str)
                     else:
-                        track = await self.bot.youtube.get_track(query)
+                        track = await self.bot.youtube.get_track(q_str)
                 elif hasattr(self.bot.youtube, "search"):
                     if hasattr(self.bot, "yt_breaker") and self.bot.yt_breaker:
-                        results = await self.bot.yt_breaker.call(self.bot.youtube.search, query, 1)
+                        results = await self.bot.yt_breaker.call(self.bot.youtube.search, q_str, 1)
                     else:
-                        results = await self.bot.youtube.search(query, 1)
+                        results = await self.bot.youtube.search(q_str, 1)
                     track = results[0] if results else None
                 elif hasattr(self.bot.youtube, "extract_tracks"):
-                    tracks, _ = await self.bot.youtube.extract_tracks(query, interaction.user)
+                    tracks, _ = await self.bot.youtube.extract_tracks(q_str, interaction.user)
                     track = tracks[0] if tracks else None
             if not track:
                 await interaction.followup.send(
@@ -245,6 +258,22 @@ class PlaylistCog(commands.Cog, name="Playlist"):
             t_obj.requested_by_name = interaction.user.display_name
 
         player = self.bot.get_player(guild_id)
+        player.intentional_disconnect = False
+        user_limit = getattr(player, "per_user_limit", 0)
+        if user_limit > 0:
+            user_queued = player.user_track_count(interaction.user.id)
+            remaining_slots = max(0, user_limit - user_queued)
+            if remaining_slots == 0:
+                await interaction.followup.send(
+                    embed=error_embed(
+                        "Queue Limit",
+                        t("queue.user_limit_exceeded", locale, limit=user_limit),
+                    ),
+                    ephemeral=True,
+                )
+                return
+            tracks = tracks[:remaining_slots]
+
         player.last_channel_id = channel.id
         if isinstance(interaction.channel, discord.TextChannel):
             player.text_channel = interaction.channel
