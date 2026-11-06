@@ -94,6 +94,9 @@ class FFmpegWarmPool:
                 if proc and proc.poll() is None:
                     try:
                         proc.kill()
+                        if getattr(proc, "stdout", None):
+                            proc.stdout.close()
+                        proc.wait(timeout=1.0)
                     except Exception:
                         pass
             except asyncio.QueueEmpty:
@@ -127,6 +130,9 @@ class FFmpegWarmPool:
             if proc and proc.poll() is None:
                 try:
                     proc.kill()
+                    if getattr(proc, "stdout", None):
+                        proc.stdout.close()
+                    proc.wait(timeout=1.0)
                 except Exception:
                     pass
         except asyncio.QueueEmpty:

@@ -963,5 +963,29 @@ class TestDashboardNextGenV2:
         assert res_eq["success"] is True
         mock_bot.update_clean_board.assert_called_with(111)
 
+    @pytest.mark.asyncio
+    async def test_phase8_dashboard_ws_dead_socket_cleanup(self, mock_bot):
+        from dashboard.websocket import DashboardWebSocketManager
+        svc = DashboardService(mock_bot)
+        mgr = DashboardWebSocketManager(svc)
+
+        ws_alive = AsyncMock()
+        ws_alive.send_json = AsyncMock()
+        ws_dead = AsyncMock()
+        ws_dead.send_json = AsyncMock(side_effect=ConnectionResetError("client closed tab"))
+        ws_dead.close = AsyncMock()
+
+        mgr._clients.add(ws_alive)
+        mgr._clients.add(ws_dead)
+        mgr._client_guilds[ws_alive] = 111
+        mgr._client_guilds[ws_dead] = 111
+
+        await mgr.broadcast_guild_state(111, {"is_playing": True})
+
+        assert ws_alive in mgr._clients
+        assert ws_dead not in mgr._clients
+        ws_dead.close.assert_awaited_once()
+
+
 
 

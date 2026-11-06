@@ -276,3 +276,12 @@ def prune_caches() -> tuple[int, int]:
         meta_pruned += 1
 
     return thumb_pruned, meta_pruned
+
+
+def clear_all() -> int:
+    """Clear all in-memory media caches (thumbnails & metadata) and return total entries freed."""
+    freed = len(_THUMB_CACHE) + len(_META_CACHE)
+    _THUMB_CACHE.clear()
+    _META_CACHE.clear()
+    return freed
+

@@ -239,11 +239,15 @@ class GuildPlayer:
             for t in self._queue:
                 uid = t.requested_by_id or 0
                 user_buckets[uid].append(t)
+            active_users: deque[int] = deque(user_buckets.keys())
             ordered: list[Track] = []
-            while any(user_buckets.values()):
-                for uid in list(user_buckets.keys()):
-                    if user_buckets[uid]:
-                        ordered.append(user_buckets[uid].popleft())
+            while active_users:
+                uid = active_users.popleft()
+                bucket = user_buckets[uid]
+                if bucket:
+                    ordered.append(bucket.popleft())
+                    if bucket:
+                        active_users.append(uid)
             self._queue = deque(ordered)
             self._queue_dirty = True
 

@@ -427,6 +427,13 @@ CREATE TABLE IF NOT EXISTS session_state (
     saved_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     last_heartbeat  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_sqlite_queue_guild ON queue(guild_id);
+CREATE INDEX IF NOT EXISTS idx_sqlite_history_guild_played ON history(guild_id, played_at);
+CREATE INDEX IF NOT EXISTS idx_sqlite_history_user ON history(user_id);
+CREATE INDEX IF NOT EXISTS idx_sqlite_playlist_tracks ON playlist_tracks(playlist_id, position);
+CREATE INDEX IF NOT EXISTS idx_sqlite_quiz_scores ON quiz_scores(guild_id, score DESC);
+CREATE INDEX IF NOT EXISTS idx_sqlite_analytics ON analytics(guild_id, ts);
+CREATE INDEX IF NOT EXISTS idx_sqlite_search_history ON search_history(guild_id, user_id);
 """
 
 

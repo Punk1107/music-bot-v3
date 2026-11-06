@@ -67,17 +67,17 @@ class SpotifyExtractor:
                 import base64
                 creds = f"{config.SPOTIFY_CLIENT_ID}:{config.SPOTIFY_CLIENT_SECRET}"
                 b64_creds = base64.b64encode(creds.encode("utf-8")).decode("ascii")
-                resp = await session.post(
+                async with session.post(
                     _TOKEN_URL,
                     data={"grant_type": "client_credentials"},
                     headers={"Authorization": f"Basic {b64_creds}"},
                     timeout=aiohttp.ClientTimeout(total=10),
-                )
-                data = await resp.json()
-                self._token = data.get("access_token")
-                expires_in = data.get("expires_in", 3600)
-                self._token_expires_at = time.monotonic() + max(0, expires_in - 60)
-                return self._token
+                ) as resp:
+                    data = await resp.json()
+                    self._token = data.get("access_token")
+                    expires_in = data.get("expires_in", 3600)
+                    self._token_expires_at = time.monotonic() + max(0, expires_in - 60)
+                    return self._token
             except Exception as exc:
                 logger.error("Spotify auth failed: %s", exc)
                 return None
@@ -96,18 +96,18 @@ class SpotifyExtractor:
         if not token:
             return None
         try:
-            resp = await session.get(
+            async with session.get(
                 f"{_SPOTIFY_API}/{endpoint}",
                 headers={"Authorization": f"Bearer {token}"},
                 timeout=aiohttp.ClientTimeout(total=15),
-            )
-            if resp.status == 401:
-                await self._invalidate_token()
-                return None
-            if not resp.ok:
-                logger.warning("Spotify API %s returned %d", endpoint, resp.status)
-                return None
-            return await resp.json()
+            ) as resp:
+                if resp.status == 401:
+                    await self._invalidate_token()
+                    return None
+                if not resp.ok:
+                    logger.warning("Spotify API %s returned %d", endpoint, resp.status)
+                    return None
+                return await resp.json()
         except Exception as exc:
             logger.error("Spotify API get '%s' failed: %s", endpoint, exc)
             return None
