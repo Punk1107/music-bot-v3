@@ -1462,3 +1462,150 @@ class TestPhase5ServerAutomationAndGovernance:
         progress_field = next(f for f in emb_classic.fields if "Progress" in f.name or "ความคืบหน้า" in f.name)
         assert "](https://youtube.com/watch?v=abc)" in progress_field.value
 
+    @pytest.mark.asyncio
+    async def test_phase5_multisource_router_str_and_direct_stream_seek(self):
+        from sources.router import MultiSourceRouter
+        from seek.service import SeekService
+
+        router = MultiSourceRouter()
+        router._sc.get_stream_url = AsyncMock(return_value="https://cdn.sc.com/stream.mp3")
+
+        # Passing URL string directly must not raise AttributeError
+        stream = await router.get_stream_url("https://soundcloud.com/artist/track")
+        assert stream == "https://cdn.sc.com/stream.mp3"
+
+        # Passing Track with non-expiring direct CDN stream_url_cache (stream_url_expires=None)
+        direct_track = Track(
+            title="Podcast Ep 1",
+            url="https://example.com/podcast.mp3",
+            duration=600,
+            stream_url_cache="https://cdn.example.com/podcast.mp3",
+            stream_url_expires=None,
+        )
+        assert await router.get_stream_url(direct_track) == "https://cdn.example.com/podcast.mp3"
+
+        # SeekService.seek_to must use non-expiring stream_url_cache without calling youtube.get_stream_url
+        bot = MagicMock()
+        guild = MagicMock()
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        guild.voice_client = vc
+        bot.get_guild.return_value = guild
+        player = GuildPlayer(555)
+        player.now_playing = direct_track
+        bot.get_player.return_value = player
+        bot.youtube.get_stream_url = AsyncMock()
+        cfg = MagicMock()
+        cfg.audio_quality = AudioQuality.HIGH
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.audio_processor.build_ffmpeg_options.return_value = {
+            "before_options": "-ss 30",
+            "options": "-vn",
+        }
+
+        seek_svc = SeekService(bot)
+        with patch("discord.FFmpegPCMAudio"), patch("discord.PCMVolumeTransformer"):
+            ok = await seek_svc.seek_to(555, 30)
+        assert ok is True
+        bot.youtube.get_stream_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_phase5_presets_reset_dsp_and_vocal_suppression_default_mode(self):
+        from cogs.presets_cog import _apply_preset, _player_to_preset, _BUILTIN_PRESETS
+        from vocal.cog import VocalCog
+
+        player = GuildPlayer(777)
+        player.vocal_mode = "isolate"
+        player.vocal_suppression = 75
+        player.pan_balance = -0.8
+        player.stereo_width = 2.2
+        player.spatial_preset = "concert_hall"
+        player.remaster = True
+        player.loudnorm = True
+        player.gapless = True
+        player.equalizer_bands = {"sub_bass": 6.0, "bass": 4.0, "mid": 0.0, "treble": -2.0}
+
+        snap = _player_to_preset(player, "high")
+        assert snap["vocal_mode"] == "isolate"
+        assert snap["pan_balance"] == -0.8
+        assert snap["spatial_preset"] == "concert_hall"
+
+        # Applying built-in "normal" preset must reset all Gen 5.0 DSP fields back to defaults
+        _apply_preset(player, _BUILTIN_PRESETS["normal"])
+        assert player.vocal_mode is None
+        assert player.pan_balance == 0.0
+        assert player.stereo_width == 1.0
+        assert player.spatial_preset is None
+        assert player.remaster is False
+        assert player.loudnorm is False
+        assert player.gapless is False
+        assert player.equalizer_bands == {}
+
+        # VocalCog: calling /vocal with suppression only when vocal_mode is None defaults to "remove"
+        bot = MagicMock()
+        bot.get_player.return_value = player
+        bot.db = MagicMock()
+        cog = VocalCog(bot)
+        cog._check_permissions = AsyncMock(return_value=True)
+        cog._restart_audio = MagicMock()
+        inter = MagicMock()
+        inter.guild_id = 777
+        inter.response.defer = AsyncMock()
+        inter.followup.send = AsyncMock()
+
+        with patch("vocal.cog.get_locale", AsyncMock(return_value="en")):
+            await VocalCog.vocal.callback(cog, inter, mode=None, suppression=80)
+        assert player.vocal_mode == "remove"
+        assert player.vocal_suppression == 80
+
+    @pytest.mark.asyncio
+    async def test_phase5_request_channel_voice_isolation_and_volume_clamp(self):
+        from models.enums import NLUIntent
+        from core.nlu import NLUResult
+
+        bot = MusicBot()
+        bot.db = MagicMock()
+        cfg = MagicMock()
+        cfg.clean_mode = False
+        cfg.board_message_id = None
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+
+        player = bot.get_player(888)
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        vc.channel = MagicMock()
+        vc.channel.id = 1001
+        vc.channel.name = "BotVoice"
+
+        msg = MagicMock()
+        msg.guild.id = 888
+        msg.guild.voice_client = vc
+        msg.delete = AsyncMock()
+        msg.channel.send = AsyncMock()
+
+        # 1. User in a different voice channel cannot skip the bot's stream
+        msg.content = "skip"
+        msg.author.voice = MagicMock()
+        msg.author.voice.channel = MagicMock()
+        msg.author.voice.channel.id = 9999
+        bot.nlu = MagicMock()
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.SKIP)
+        await bot._handle_request_channel(msg)
+        vc.stop.assert_not_called()
+
+        # 2. User in the same voice channel sets volume 999 -> clamped to 2.0 (200%)
+        msg.author.voice.channel = vc.channel
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.VOLUME, volume=999)
+        await bot._handle_request_channel(msg)
+        assert player.volume == 2.0
+
+        # 3. User sends PAUSE while bot is idle (not playing) -> player.is_paused remains False
+        bot.nlu.parse.return_value = NLUResult(intent=NLUIntent.PAUSE)
+        await bot._handle_request_channel(msg)
+        assert player.is_paused is False
+
+

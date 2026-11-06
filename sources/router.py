@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from enum import Enum, auto
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Union
 
 import config
 from sources.soundcloud import SoundCloudExtractor, is_soundcloud_url, is_soundcloud_query
@@ -117,18 +117,28 @@ class MultiSourceRouter:
 
         return []
 
-    async def get_stream_url(self, track: Track) -> Optional[str]:
+    async def get_stream_url(self, track: Union[Track, str]) -> Optional[str]:
         """
         Resolve the direct audio stream URL for a Track that came from
         SoundCloud or Bandcamp.
 
         Falls back to track.url if the source can't be determined.
         """
-        if track and track.stream_url_cache and track.stream_url_expires:
-            if time.monotonic() < track.stream_url_expires - 60:
-                return track.stream_url_cache
+        if isinstance(track, str):
+            track_obj: Optional[Track] = None
+            url = track
+        else:
+            track_obj = track
+            if track_obj and track_obj.stream_url_cache and (
+                track_obj.stream_url_expires is None
+                or time.monotonic() < track_obj.stream_url_expires - 60
+            ):
+                return track_obj.stream_url_cache
+            url = track_obj.url if track_obj else ""
 
-        url  = track.url
+        if not url:
+            return None
+
         kind = classify(url)
 
         try:
@@ -138,8 +148,9 @@ class MultiSourceRouter:
             elif kind in (SourceKind.BANDCAMP_TRACK, SourceKind.BANDCAMP_ALBUM):
                 stream = await self._bc.get_stream_url(url)
             if stream:
-                track.stream_url_cache   = stream
-                track.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
+                if track_obj is not None:
+                    track_obj.stream_url_cache   = stream
+                    track_obj.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
                 return stream
         except Exception as exc:
             logger.error("MultiSourceRouter.get_stream_url failed for %r: %s", url[:60], exc)

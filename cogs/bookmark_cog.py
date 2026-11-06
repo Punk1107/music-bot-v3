@@ -228,22 +228,28 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
                 return
             try:
                 vc = await interaction.user.voice.channel.connect(timeout=10.0)
+                player.last_channel_id = vc.channel.id
+                player.text_channel = interaction.channel
             except Exception as exc:
                 await interaction.followup.send(
                     embed=error_embed("Connection Failed", str(exc)), ephemeral=True
                 )
                 return
 
+        was_active = bool(vc and (vc.is_playing() or vc.is_paused()))
         if mode == "replace":
+            player.undo_push("clear")
+            player.cancel_prefetch()
             await player.clear()
-            if vc and (vc.is_playing() or vc.is_paused()):
-                vc.stop()
 
         for t_track in tracks:
             t_track.requested_by_id   = interaction.user.id
             t_track.requested_by_name = interaction.user.display_name
 
         await player.extend(tracks)
+
+        if mode == "replace" and was_active and vc:
+            vc.stop()
 
         if vc:
             self.bot.track_task(
@@ -258,7 +264,7 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
         )
 
         # Start playback if bot is in voice and nothing playing
-        if vc and not vc.is_playing() and not vc.is_paused():
+        if vc and not was_active and not vc.is_playing() and not vc.is_paused():
             music_cog = self.bot.get_cog("Music")
             if music_cog:
                 self.bot.track_task(music_cog._play_next(interaction.guild_id))

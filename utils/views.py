@@ -499,6 +499,7 @@ class QueueView(discord.ui.View):
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         player = self.bot.get_player(self.guild_id)
         player.push_undo()
+        player.cancel_prefetch()
         await player.shuffle()
         if player.last_channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
             self.bot.track_task(self.bot.db.save_queue(self.guild_id, player.last_channel_id, player.queue))
@@ -512,8 +513,15 @@ class QueueView(discord.ui.View):
     @discord.ui.button(label="🗑 Clear", style=discord.ButtonStyle.danger, custom_id="q_clear")
     async def clear_queue(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         player = self.bot.get_player(self.guild_id)
+        if len(player) > 0:
+            player.undo_push("clear")
+        player.cancel_prefetch()
         count  = await player.clear()
         await self.bot.db.clear_queue(self.guild_id)
+        if not player.now_playing and hasattr(self.bot.db, "clear_session_state"):
+            self.bot.track_task(self.bot.db.clear_session_state(self.guild_id))
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(self.guild_id))
         locale = get_locale_sync(self.guild_id)
         clear_title = t("btn.clear", locale).replace("🗑️ ", "").replace("🗑 ", "")
         await interaction.response.edit_message(
@@ -722,6 +730,11 @@ class VoteSkipView(discord.ui.View):
         if len(player.skip_votes) >= self.threshold:
             self.stop()
             player.skip_votes.clear()
+            player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False) and len(player) == 0:
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(self.guild_id)
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             if self._message:
@@ -849,8 +862,13 @@ class VoteClearView(discord.ui.View):
             self.stop()
             player.clear_votes.clear()
             player.undo_push("clear")
+            player.cancel_prefetch()
             await player.clear()
             await self.bot.db.clear_queue(self.guild_id)
+            if not player.now_playing and hasattr(self.bot.db, "clear_session_state"):
+                self.bot.track_task(self.bot.db.clear_session_state(self.guild_id))
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(self.guild_id))
             if self._message:
                 await self._message.edit(
                     embed=success_embed(
@@ -979,7 +997,13 @@ class VoteShuffleView(discord.ui.View):
             self.stop()
             player.shuffle_votes.clear()
             player.undo_push("shuffle")
+            player.cancel_prefetch()
             await player.shuffle()
+            channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+            if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                self.bot.track_task(self.bot.db.save_queue(self.guild_id, channel_id, player.queue))
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(self.guild_id))
             if self._message:
                 await self._message.edit(
                     embed=success_embed(

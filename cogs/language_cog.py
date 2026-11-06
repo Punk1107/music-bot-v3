@@ -119,6 +119,27 @@ class LanguageCog(commands.Cog, name="Language"):
         # Update in-memory cache
         set_locale_cache(interaction.guild_id, locale)
 
+        player = self.bot.get_player(interaction.guild_id)
+        if player.now_playing and player.now_playing_msg:
+            try:
+                from utils.embeds import now_playing_embed
+                from utils.views import MusicControlView
+                vc = interaction.guild.voice_client if interaction.guild else None
+                color = getattr(player, "_cached_base_color", None) or 0x5865F2
+                np_embed = now_playing_embed(
+                    player, color, self.bot.user,
+                    paused=bool(vc and vc.is_paused()),
+                    theme=getattr(player, "embed_theme", "classic"),
+                    locale=locale,
+                )
+                view = MusicControlView(self.bot, interaction.guild_id)
+                await player.now_playing_msg.edit(embed=np_embed, view=view)
+            except Exception:
+                pass
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
+
         meta = get_locale_meta(locale)
 
         embed = discord.Embed(

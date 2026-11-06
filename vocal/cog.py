@@ -102,6 +102,8 @@ class VocalCog(commands.Cog, name="Vocal"):
         if mode is None and suppression is None:
             # Toggle off if active, otherwise activate remove mode
             mode = "off" if player.vocal_mode else "remove"
+        elif mode is None and suppression is not None and not player.vocal_mode:
+            mode = "remove"
 
         if suppression is not None:
             if not 1 <= int(suppression) <= 100:

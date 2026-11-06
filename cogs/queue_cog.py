@@ -154,7 +154,14 @@ class QueueCog(commands.Cog, name="Queue"):
         is_dj = await self._has_dj(interaction)
         if is_dj:
             player.undo_push("shuffle")    # F19: snapshot before mutation
+            player.cancel_prefetch()
             await player.shuffle()
+            vc = interaction.guild.voice_client if interaction.guild else None
+            channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+            if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                self.bot.track_task(
+                    self.bot.db.save_queue(interaction.guild_id, channel_id, player.queue)
+                )
             if hasattr(self.bot, "update_clean_board"):
                 self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(embed=success_embed(t("btn.shuffle", locale), t("queue.shuffled", locale, count=len(player))))
@@ -275,7 +282,14 @@ class QueueCog(commands.Cog, name="Queue"):
         if len(player.shuffle_votes) >= threshold:
             player.shuffle_votes.clear()
             player.undo_push("shuffle")
+            player.cancel_prefetch()
             await player.shuffle()
+            if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                self.bot.track_task(
+                    self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+                )
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(
                 embed=success_embed(
                     t("btn.shuffle", locale),
@@ -322,6 +336,7 @@ class QueueCog(commands.Cog, name="Queue"):
         is_dj = await self._has_dj(interaction)
         if is_dj:
             player.undo_push("clear")       # F19: snapshot before mutation
+            player.cancel_prefetch()
             count  = await player.clear()
             await self.bot.db.clear_queue(interaction.guild_id)
             if not player.now_playing and hasattr(self.bot.db, "clear_session_state"):
@@ -374,8 +389,13 @@ class QueueCog(commands.Cog, name="Queue"):
         if len(player.clear_votes) >= threshold:
             player.clear_votes.clear()
             player.undo_push("clear")
+            player.cancel_prefetch()
             await player.clear()
             await self.bot.db.clear_queue(interaction.guild_id)
+            if not player.now_playing and hasattr(self.bot.db, "clear_session_state"):
+                await self.bot.db.clear_session_state(interaction.guild_id)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(
                 embed=success_embed(
                     t("btn.clear", locale),
@@ -432,14 +452,17 @@ class QueueCog(commands.Cog, name="Queue"):
         player.undo_push("remove", extra=position)  # F19: snapshot before mutation
         removed = await player.remove(position - 1)
         if removed:
+            if position == 1:
+                player.cancel_prefetch()
             await interaction.followup.send(
                 embed=success_embed("Removed", t("queue.removed", locale, title=removed.short_title, pos=position)),
                 ephemeral=True,
             )
-            vc = interaction.guild.voice_client
-            if vc:
+            vc = interaction.guild.voice_client if interaction.guild else None
+            channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+            if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
                 self.bot.track_task(
-                    self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
+                    self.bot.db.save_queue(interaction.guild_id, channel_id, player.queue)
                 )
             if hasattr(self.bot, "update_clean_board"):
                 self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
@@ -464,6 +487,14 @@ class QueueCog(commands.Cog, name="Queue"):
         player.undo_push("move", extra=(from_pos, to_pos))  # F19: snapshot before mutation
         ok = await player.move(from_pos - 1, to_pos - 1)
         if ok:
+            if from_pos == 1 or to_pos == 1:
+                player.cancel_prefetch()
+            vc = interaction.guild.voice_client if interaction.guild else None
+            channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+            if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                self.bot.track_task(
+                    self.bot.db.save_queue(interaction.guild_id, channel_id, player.queue)
+                )
             if hasattr(self.bot, "update_clean_board"):
                 self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             await interaction.followup.send(
@@ -600,11 +631,19 @@ class QueueCog(commands.Cog, name="Queue"):
         # Jump callback
         async def do_jump(inter: discord.Interaction, pos: int) -> None:
             loc = await get_locale(inter.guild_id, self.bot.db)
+            player.undo_push("jump", extra=pos)
             target = await player.jump_to(pos - 1)
             if not target:
+                player.undo_pop()
                 await inter.followup.send(embed=error_embed("Jump Failed", t("queue.jump_failed", loc)), ephemeral=True)
                 return
-            vc = inter.guild.voice_client
+            player.cancel_prefetch()
+            vc = inter.guild.voice_client if inter.guild else None
+            channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+            if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                self.bot.track_task(
+                    self.bot.db.save_queue(inter.guild_id, channel_id, player.queue)
+                )
             if vc:
                 if vc.is_playing() or vc.is_paused():
                     vc.stop()  # triggers _play_next via after_play callback
@@ -612,18 +651,32 @@ class QueueCog(commands.Cog, name="Queue"):
                     music_cog = self.bot.get_cog("Music")
                     if music_cog:
                         self.bot.track_task(music_cog._play_next(inter.guild_id))
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(inter.guild_id))
             await inter.followup.send(
                 embed=success_embed("Jumped ↪", t("queue.jumped", loc, title=target.short_title, pos=pos)), ephemeral=True
             )
 
         # Remove callback
         async def do_remove(inter: discord.Interaction, pos: int) -> None:
+            player.undo_push("remove", extra=pos)
             removed = await player.remove(pos - 1)
             if removed:
+                if pos == 1:
+                    player.cancel_prefetch()
+                vc = inter.guild.voice_client if inter.guild else None
+                channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+                if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+                    self.bot.track_task(
+                        self.bot.db.save_queue(inter.guild_id, channel_id, player.queue)
+                    )
+                if hasattr(self.bot, "update_clean_board"):
+                    self.bot.track_task(self.bot.update_clean_board(inter.guild_id))
                 await inter.followup.send(
                     embed=success_embed("Removed 🗑", f"Removed **{removed.short_title}** from queue."), ephemeral=True
                 )
             else:
+                player.undo_pop()
                 await inter.followup.send(embed=error_embed("Remove Failed", "Position no longer valid."), ephemeral=True)
 
         embed = queue_search_embed(query, results)
@@ -641,15 +694,23 @@ class QueueCog(commands.Cog, name="Queue"):
 
         locale = await get_locale(interaction.guild_id, self.bot.db)
         player = self.bot.get_player(interaction.guild_id)
+        player.undo_push("jump", extra=position)
         target = await player.jump_to(position - 1)
 
         if not target:
+            player.undo_pop()
             await interaction.followup.send(
                 embed=error_embed(t("title.invalid_value", locale), t("queue.invalid_pos", locale, pos=position)), ephemeral=True
             )
             return
 
-        vc = interaction.guild.voice_client
+        player.cancel_prefetch()
+        vc = interaction.guild.voice_client if interaction.guild else None
+        channel_id = (vc.channel.id if vc and vc.channel else (player.last_channel_id or 0))
+        if channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(
+                self.bot.db.save_queue(interaction.guild_id, channel_id, player.queue)
+            )
         if vc:
             if vc.is_playing() or vc.is_paused():
                 vc.stop()  # after_play fires _play_next which picks up the jumped-to track
@@ -801,15 +862,41 @@ class QueueCog(commands.Cog, name="Queue"):
         player = self.bot.get_player(interaction.guild_id)
         vc     = interaction.guild.voice_client
 
+        if not vc or not vc.is_connected():
+            if getattr(interaction.user, "voice", None) and interaction.user.voice.channel:
+                try:
+                    vc = await interaction.user.voice.channel.connect(timeout=10.0)
+                    player.last_channel_id = vc.channel.id
+                    player.text_channel = interaction.channel
+                except Exception as exc:
+                    await interaction.followup.send(
+                        embed=error_embed("Connection Failed", str(exc)), ephemeral=True
+                    )
+                    return
+
+        for tr in tracks:
+            if not tr.requested_by_id:
+                tr.requested_by_id = interaction.user.id
+            if not tr.requested_by_name:
+                tr.requested_by_name = interaction.user.display_name
+
+        was_active = bool(vc and (vc.is_playing() or vc.is_paused()))
         if mode == "replace":
+            player.undo_push("clear")
+            player.cancel_prefetch()
             await player.clear()
 
         await player.extend(tracks)
 
-        if vc:
+        if mode == "replace" and was_active and vc:
+            vc.stop()
+
+        if vc and vc.channel:
             self.bot.track_task(
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         await interaction.followup.send(
             embed=success_embed(
@@ -820,7 +907,7 @@ class QueueCog(commands.Cog, name="Queue"):
         )
 
         # Start playback if nothing is playing
-        if vc and not vc.is_playing() and not vc.is_paused():
+        if vc and not was_active and not vc.is_playing() and not vc.is_paused():
             music_cog = self.bot.get_cog("Music")
             if music_cog:
                 await music_cog._play_next(interaction.guild_id)

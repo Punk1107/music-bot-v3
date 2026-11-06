@@ -59,16 +59,26 @@ class SeekService:
 
         # ── Resolve stream URL ────────────────────────────────────────────────
         stream_url: Optional[str] = None
-        if track.stream_url_cache and track.stream_url_expires:
-            if time.monotonic() < track.stream_url_expires - 60:
-                stream_url = track.stream_url_cache
+        if track.stream_url_cache and (
+            track.stream_url_expires is None
+            or time.monotonic() < track.stream_url_expires - 60
+        ):
+            stream_url = track.stream_url_cache
 
         if not stream_url:
             try:
-                stream_url = await asyncio.wait_for(
-                    self.bot.youtube.get_stream_url(track.url, track),
-                    timeout=15.0,
-                )
+                from sources.router import classify, SourceKind
+                sources = getattr(self.bot, "sources_router", None)
+                if sources and classify(track.url) != SourceKind.UNKNOWN:
+                    stream_url = await asyncio.wait_for(
+                        sources.get_stream_url(track),
+                        timeout=15.0,
+                    )
+                else:
+                    stream_url = await asyncio.wait_for(
+                        self.bot.youtube.get_stream_url(track.url, track),
+                        timeout=15.0,
+                    )
             except Exception as exc:
                 logger.error("seek_to: failed to resolve stream URL for guild %d: %s", guild_id, exc)
                 return False

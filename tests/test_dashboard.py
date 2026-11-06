@@ -878,3 +878,30 @@ class TestDashboardNextGenV2:
         mock_bot.update_clean_board.reset_mock()
         await svc.set_loop_mode(111, "track")
         mock_bot.update_clean_board.assert_called_with(111)
+
+    @pytest.mark.asyncio
+    async def test_dashboard_skip_unregisters_radio_watchdog_and_queue_cancels_prefetch(self, mock_bot, dummy_track):
+        svc = DashboardService(mock_bot)
+        player = mock_bot.get_player(111)
+        player.now_playing = dummy_track
+        player.is_radio_mode = True
+        mock_bot.radio_watchdog = MagicMock()
+
+        res = await svc.skip(111)
+        assert res["success"] is True
+        assert player.is_radio_mode is False
+        mock_bot.radio_watchdog.unregister.assert_called_once_with(111)
+
+        # Queue head mutation cancels prefetch
+        t0 = Track(title="Song 0", url="https://ex.com/0", duration=100)
+        t1 = Track(title="Song 1", url="https://ex.com/1", duration=100)
+        await player.extend([t0, t1])
+        player.cancel_prefetch = MagicMock()
+
+        await svc.move_queue(111, from_index=0, to_index=1)
+        player.cancel_prefetch.assert_called_once()
+
+        player.cancel_prefetch.reset_mock()
+        await svc.remove_from_queue(111, index=0)
+        player.cancel_prefetch.assert_called_once()
+

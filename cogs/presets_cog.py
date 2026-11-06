@@ -121,19 +121,46 @@ def _apply_preset(player, preset: dict[str, Any]) -> None:
     player.silence_trim      = bool(preset.get("silence_trim",  False))
     player.replay_gain       = bool(preset.get("replay_gain",   False))
 
+    # Gen 5.0 DSP fields (reset to defaults if not present in preset)
+    raw_eq = preset.get("equalizer_bands")
+    player.equalizer_bands   = dict(raw_eq) if isinstance(raw_eq, dict) else {}
+    player.equalizer_preset  = str(preset.get("equalizer_preset", "flat" if not player.equalizer_bands else "custom"))
+    player.pan_balance       = float(preset.get("pan_balance", 0.0))
+    player.stereo_width      = float(preset.get("stereo_width", 1.0))
+    player.vocal_mode        = preset.get("vocal_mode", None)
+    player.vocal_suppression = int(preset.get("vocal_suppression", 100))
+    player.spatial_preset    = preset.get("spatial_preset", None)
+    player.remaster          = bool(preset.get("remaster", False))
+    player.clarity_level     = int(preset.get("clarity_level", 2))
+    player.loudnorm          = bool(preset.get("loudnorm", False))
+    player.loudnorm_profile  = str(preset.get("loudnorm_profile", "broadcast"))
+    player.gapless           = bool(preset.get("gapless", False))
+
 
 def _player_to_preset(player, quality_value: str) -> dict[str, Any]:
     """Serialize current player state to a preset dict."""
     return {
-        "effects":      [e.value for e in player.effects],
-        "volume":       player.volume,
-        "quality":      quality_value,
-        "loop":         player.loop_mode.value,
-        "speed":        player.playback_speed,
-        "pitch":        player.pitch_semitones,
-        "crossfade":    player.crossfade_seconds,
-        "silence_trim": player.silence_trim,
-        "replay_gain":  player.replay_gain,
+        "effects":           [e.value for e in player.effects],
+        "volume":            player.volume,
+        "quality":           quality_value,
+        "loop":              player.loop_mode.value,
+        "speed":             player.playback_speed,
+        "pitch":             player.pitch_semitones,
+        "crossfade":         player.crossfade_seconds,
+        "silence_trim":      player.silence_trim,
+        "replay_gain":       player.replay_gain,
+        "equalizer_bands":   dict(getattr(player, "equalizer_bands", {}) or {}),
+        "equalizer_preset":  getattr(player, "equalizer_preset", "flat"),
+        "pan_balance":       getattr(player, "pan_balance", 0.0),
+        "stereo_width":      getattr(player, "stereo_width", 1.0),
+        "vocal_mode":        getattr(player, "vocal_mode", None),
+        "vocal_suppression": getattr(player, "vocal_suppression", 100),
+        "spatial_preset":    getattr(player, "spatial_preset", None),
+        "remaster":          getattr(player, "remaster", False),
+        "clarity_level":     getattr(player, "clarity_level", 2),
+        "loudnorm":          getattr(player, "loudnorm", False),
+        "loudnorm_profile":  getattr(player, "loudnorm_profile", "broadcast"),
+        "gapless":           getattr(player, "gapless", False),
     }
 
 
@@ -266,6 +293,12 @@ class PresetsCog(commands.Cog, name="Presets"):
 
         player = self.bot.get_player(interaction.guild_id)
         _apply_preset(player, preset)
+
+        vc = interaction.guild.voice_client if interaction.guild else None
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = player.volume
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
 
         quality_val = preset.get("quality", "high")
         try:

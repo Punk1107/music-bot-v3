@@ -632,8 +632,15 @@ class MusicBot(commands.Bot):
                                     )
                                 except Exception:
                                     pass
+                            _player.cancel_prefetch()
+                            if getattr(_player, "is_radio_mode", False):
+                                _player.is_radio_mode = False
+                                if getattr(self, "radio_watchdog", None):
+                                    self.radio_watchdog.unregister(gid)
                             _player.reset()
                             _player.intentional_disconnect = True
+                            if _vc2.is_playing() or _vc2.is_paused():
+                                _vc2.stop()
                             if hasattr(self, "db"):
                                 await self.db.clear_session_state(gid)
                                 await self.db.clear_queue(gid)
@@ -733,11 +740,35 @@ class MusicBot(commands.Bot):
         result = self.nlu.parse(content)
         query: Optional[str] = None
 
+        vc_current = message.guild.voice_client
+        if result.intent in (NLUIntent.SKIP, NLUIntent.PAUSE, NLUIntent.RESUME, NLUIntent.VOLUME):
+            if not getattr(message.author, "voice", None) or not message.author.voice.channel:
+                try:
+                    await message.channel.send(f"❌ {t('error.not_in_voice', locale)}", delete_after=5)
+                except Exception:
+                    pass
+                return
+            if vc_current and vc_current.channel and message.author.voice.channel != vc_current.channel:
+                try:
+                    await message.channel.send(
+                        f"❌ {t('error.wrong_channel', locale, channel=vc_current.channel.name)}",
+                        delete_after=5,
+                    )
+                except Exception:
+                    pass
+                return
+
         if result.intent == NLUIntent.PLAY and result.query:
             query = result.query
         elif result.intent == NLUIntent.SKIP:
             guild = message.guild
             vc    = guild.voice_client
+            player = self.get_player(message.guild.id)
+            player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False) and len(player) == 0:
+                player.is_radio_mode = False
+                if getattr(self, "radio_watchdog", None):
+                    self.radio_watchdog.unregister(message.guild.id)
             if vc and (vc.is_playing() or vc.is_paused()):
                 vc.stop()
             if cfg and cfg.clean_mode:
@@ -753,7 +784,7 @@ class MusicBot(commands.Bot):
             vc = message.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
-            player.pause()
+                player.pause()
             if cfg and cfg.clean_mode:
                 await _update_clean_board_if_needed()
             else:
@@ -767,7 +798,7 @@ class MusicBot(commands.Bot):
             vc = message.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
-            player.resume()
+                player.resume()
             if cfg and cfg.clean_mode:
                 await _update_clean_board_if_needed()
             else:
@@ -778,7 +809,8 @@ class MusicBot(commands.Bot):
             return
         elif result.intent == NLUIntent.VOLUME and result.volume is not None:
             player = self.get_player(message.guild.id)
-            player.volume = result.volume / 100
+            clamped_vol = max(0, min(200, int(result.volume)))
+            player.volume = clamped_vol / 100.0
             guild = message.guild
             vc = guild.voice_client if guild else None
             if vc and vc.source and hasattr(vc.source, "volume"):
@@ -787,7 +819,7 @@ class MusicBot(commands.Bot):
                 await _update_clean_board_if_needed()
             else:
                 try:
-                    await message.channel.send(t("volume.set", locale, vol=result.volume), delete_after=5)
+                    await message.channel.send(t("volume.set", locale, vol=clamped_vol), delete_after=5)
                 except Exception:
                     pass
             return
@@ -803,7 +835,7 @@ class MusicBot(commands.Bot):
         if not music_cog:
             return
 
-        if not message.author.voice:
+        if not message.author.voice or not message.author.voice.channel:
             try:
                 await message.channel.send(
                     f"❌ {t('error.not_in_voice', locale)}", delete_after=8
@@ -813,10 +845,30 @@ class MusicBot(commands.Bot):
             return
 
         vc = message.guild.voice_client
+        if vc and vc.is_connected() and vc.channel and message.author.voice.channel != vc.channel:
+            try:
+                await message.channel.send(
+                    f"❌ {t('error.wrong_channel', locale, channel=vc.channel.name)}",
+                    delete_after=8,
+                )
+            except Exception:
+                pass
+            return
+
+        player = self.get_player(message.guild.id)
+        if player.per_user_limit > 0 and player.user_track_count(message.author.id) >= player.per_user_limit:
+            try:
+                await message.channel.send(
+                    f"❌ {t('queue.user_limit_exceeded', locale, limit=player.per_user_limit)}",
+                    delete_after=8,
+                )
+            except Exception:
+                pass
+            return
+
         if not vc or not vc.is_connected():
             try:
                 vc = await message.author.voice.channel.connect(timeout=10.0)
-                player = self.get_player(message.guild.id)
                 player.last_channel_id = message.author.voice.channel.id
                 player.text_channel    = message.channel
             except Exception as exc:
@@ -849,12 +901,13 @@ class MusicBot(commands.Bot):
                 pass
             return
 
-        player = self.get_player(message.guild.id)
         track.requested_by_id   = message.author.id
         track.requested_by_name = message.author.display_name
         pos = await player.enqueue(track)
+        if player.queue_mode == "fair":
+            await player.reorder_fair_share()
 
-        asyncio.create_task(
+        self.track_task(
             self.db.save_queue(message.guild.id, vc.channel.id, player.queue)
         )
 
@@ -928,7 +981,9 @@ class MusicBot(commands.Bot):
                         )
                     except Exception:
                         pass
+                player.cancel_prefetch()
                 player.reset()
+                player.intentional_disconnect = True
                 if hasattr(self, "db"):
                     await self.db.clear_session_state(guild_id)
                     await self.db.clear_queue(guild_id)

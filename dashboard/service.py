@@ -226,6 +226,10 @@ class DashboardService:
 
         skipped_title = player.now_playing.title
         player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False) and len(player) == 0:
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(guild_id)
         vc.stop()
 
         await self.broadcast_state(guild_id)
@@ -332,6 +336,9 @@ class DashboardService:
             player.undo_pop()
             return {"success": False, "error": "Failed to reorder queue"}
 
+        if from_index == 0 or to_index == 0:
+            player.cancel_prefetch()
+
         await self._persist_queue(guild_id, player)
         if hasattr(self.bot, "update_clean_board"):
             self.bot.track_task(self.bot.update_clean_board(guild_id))
@@ -354,6 +361,8 @@ class DashboardService:
 
         removed = await player.remove(index)
         if removed:
+            if index == 0:
+                player.cancel_prefetch()
             player.undo_push("remove", extra=(index, removed))
             await self._persist_queue(guild_id, player)
             if hasattr(self.bot, "update_clean_board"):
@@ -367,6 +376,7 @@ class DashboardService:
         player = self.bot.get_player(guild_id)
         if len(player) > 0:
             player.undo_push("clear")
+        player.cancel_prefetch()
         count = await player.clear()
         await self._clear_db_queue(guild_id)
         if not player.now_playing and hasattr(self.bot, "db") and self.bot.db and hasattr(self.bot.db, "clear_session_state"):
@@ -388,6 +398,7 @@ class DashboardService:
             return {"success": False, "error": "Not enough tracks to shuffle"}
 
         player.undo_push("shuffle")
+        player.cancel_prefetch()
         await player.shuffle()
         await self._persist_queue(guild_id, player)
         if hasattr(self.bot, "update_clean_board"):
@@ -484,10 +495,15 @@ class DashboardService:
         player = self.bot.get_player(guild_id)
         yt = getattr(self.bot, "youtube", None)
         sp = getattr(self.bot, "spotify", None)
+        sources = getattr(self.bot, "sources_router", None)
         tracks = []
 
         try:
-            if sp and sp.is_spotify_url(query):
+            from sources.router import classify, SourceKind
+            if sources and classify(query) != SourceKind.UNKNOWN:
+                import config
+                tracks = await sources.resolve(query, max_tracks=config.MAX_PLAYLIST_TRACKS)
+            elif sp and sp.is_spotify_url(query):
                 import config
                 tracks = await sp.resolve(
                     query, self.bot.http_session, yt, config.MAX_PLAYLIST_TRACKS
@@ -514,6 +530,7 @@ class DashboardService:
             t.requested_by_name = requested_by
 
         if play_next:
+            player.cancel_prefetch()
             if len(tracks) == 1:
                 await player.enqueue_next(tracks[0])
             else:
@@ -523,6 +540,8 @@ class DashboardService:
                 await player.enqueue(tracks[0])
             else:
                 await player.extend(tracks)
+            if player.queue_mode == "fair":
+                await player.reorder_fair_share()
 
         # Atomic persistence of updated queue to MySQL queue table
         await self._persist_queue(guild_id, player)
@@ -673,6 +692,14 @@ class DashboardService:
 
         player = self.bot.get_player(guild_id)
         _apply_preset(player, preset)
+
+        guild = self.bot.get_guild(guild_id)
+        if guild and guild.voice_client and guild.voice_client.source:
+            src = guild.voice_client.source
+            if hasattr(src, "volume"):
+                src.volume = player.volume
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         # Apply equalizer bands if present in preset
         if "equalizer_bands" in preset:
