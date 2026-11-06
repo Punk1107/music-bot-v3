@@ -1167,14 +1167,20 @@ class CleanBoardControlView(discord.ui.View):
     Persistent view designed to remain attached to the pinned player message.
     """
 
-    def __init__(self, bot: "MusicBot", guild_id: int) -> None:
+    def __init__(self, bot: "MusicBot", guild_id: Optional[int] = None) -> None:
         super().__init__(timeout=None)
         self.bot = bot
         self.guild_id = guild_id
 
+    def _get_gid(self, interaction: discord.Interaction) -> Optional[int]:
+        return interaction.guild_id or self.guild_id
+
     @discord.ui.button(label="⏯ Pause", style=discord.ButtonStyle.primary, custom_id="board_playpause", row=0)
     async def btn_playpause(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guild = self.bot.get_guild(self.guild_id)
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
+        guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and vc.is_playing():
             vc.pause()
@@ -1186,7 +1192,10 @@ class CleanBoardControlView(discord.ui.View):
 
     @discord.ui.button(label="⏭ Skip", style=discord.ButtonStyle.secondary, custom_id="board_skip", row=0)
     async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guild = self.bot.get_guild(self.guild_id)
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
+        guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
@@ -1194,9 +1203,12 @@ class CleanBoardControlView(discord.ui.View):
 
     @discord.ui.button(label="⏹ Stop", style=discord.ButtonStyle.danger, custom_id="board_stop", row=0)
     async def btn_stop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        player = self.bot.get_player(self.guild_id)
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
+        player = self.bot.get_player(gid)
         player.clear_queue()
-        guild = self.bot.get_guild(self.guild_id)
+        guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
@@ -1204,14 +1216,20 @@ class CleanBoardControlView(discord.ui.View):
 
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="board_shuffle", row=0)
     async def btn_shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        player = self.bot.get_player(self.guild_id)
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
+        player = self.bot.get_player(gid)
         player.shuffle()
         await self._update_board(interaction)
 
     @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary, custom_id="board_loop", row=0)
     async def btn_loop(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
         from models.enums import LoopMode
-        player = self.bot.get_player(self.guild_id)
+        player = self.bot.get_player(gid)
         modes = [LoopMode.OFF, LoopMode.TRACK, LoopMode.QUEUE]
         idx = (modes.index(player.loop_mode) + 1) % len(modes)
         player.loop_mode = modes[idx]
@@ -1220,8 +1238,18 @@ class CleanBoardControlView(discord.ui.View):
 
     async def _update_board(self, interaction: discord.Interaction) -> None:
         from utils.embeds import request_channel_board_embed
-        player = self.bot.get_player(self.guild_id)
-        embed = request_channel_board_embed(player)
+        gid = self._get_gid(interaction)
+        if not gid:
+            return
+        player = self.bot.get_player(gid)
+        locale = "en"
+        if hasattr(self.bot, "db") and self.bot.db:
+            try:
+                from core.i18n import get_locale_sync
+                locale = get_locale_sync(gid)
+            except Exception:
+                pass
+        embed = request_channel_board_embed(player, locale=locale)
         if not interaction.response.is_done():
             await interaction.response.edit_message(embed=embed, view=self)
         else:

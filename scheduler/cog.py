@@ -66,6 +66,11 @@ class SchedulerCog(commands.Cog, name="Scheduler"):
             await interaction.followup.send("❌ This command can only be used in a server.", ephemeral=True)
             return
 
+        locale = await get_locale(guild.id, self.bot.db) if hasattr(self.bot, "db") else "en"
+        if not _is_admin(interaction.user):
+            await interaction.followup.send(f"❌ {t('error.admin_only', locale)}", ephemeral=True)
+            return
+
         # Voice channel resolution
         target_vc = voice_channel
         if not target_vc and isinstance(interaction.user, discord.Member) and interaction.user.voice:
@@ -118,6 +123,9 @@ class SchedulerCog(commands.Cog, name="Scheduler"):
             return
 
         locale = await get_locale(guild.id, self.bot.db) if hasattr(self.bot, "db") else "en"
+        if not _is_admin(interaction.user):
+            await interaction.followup.send(f"❌ {t('error.admin_only', locale)}", ephemeral=True)
+            return
         tasks = await self.service.list_tasks(guild.id)
         if not tasks:
             await interaction.followup.send(t("schedule.empty", locale), ephemeral=True)
@@ -149,6 +157,9 @@ class SchedulerCog(commands.Cog, name="Scheduler"):
             return
 
         locale = await get_locale(guild.id, self.bot.db) if hasattr(self.bot, "db") else "en"
+        if not _is_admin(interaction.user):
+            await interaction.followup.send(f"❌ {t('error.admin_only', locale)}", ephemeral=True)
+            return
         ok = await self.service.delete_task(guild.id, task_id)
         if ok:
             await interaction.followup.send(t("schedule.deleted", locale, task_id=task_id), ephemeral=True)

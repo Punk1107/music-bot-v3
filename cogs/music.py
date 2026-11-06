@@ -476,6 +476,8 @@ class MusicCog(commands.Cog, name="Music"):
 
         if not next_track:
             player.idle_since = discord.utils.utcnow()
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(guild_id))
             return None
 
         # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
@@ -621,7 +623,10 @@ class MusicCog(commands.Cog, name="Music"):
         # ── Update player state ───────────────────────────────────────────────
         import datetime
         player.now_playing     = next_track
-        player.play_start_time = datetime.datetime.now(datetime.timezone.utc)
+        base_time = datetime.datetime.now(datetime.timezone.utc)
+        if resume_offset:
+            base_time -= datetime.timedelta(seconds=resume_offset)
+        player.play_start_time = base_time
         player.idle_since      = None
 
         # ── Record analytics ───────────────────────────────────────────────────
@@ -639,8 +644,10 @@ class MusicCog(commands.Cog, name="Music"):
             prewarm_queue_thumbnails(player.queue, self.bot.http_session, limit=player.adaptive_prefetch_limit())
         )
 
-        # ── Send now-playing embed ────────────────────────────────────────────
-        if player.text_channel:
+        # ── Send now-playing embed / Clean Board update ───────────────────────
+        if cfg_server.clean_mode and cfg_server.board_message_id and hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
+        elif player.text_channel:
             # Disable components on old now_playing_msg to avoid lingering active buttons
             if player.now_playing_msg and hasattr(player.now_playing_msg, "edit"):
                 try:

@@ -2481,20 +2481,32 @@ class DatabaseManager:
                 )
                 claimed = [dict(r) for r in await cursor.fetchall()]
 
-        # Filter by day of week ('daily', 'weekdays', 'weekends', or comma-separated 'mon,wed,fri')
+        # Filter by day of week ('daily', 'weekdays', 'weekends', 'once', or comma-separated 'mon,wed,fri')
         due: list[dict] = []
+        skipped_ids: list[int] = []
         for task in claimed:
             dow = str(task.get("days_of_week") or "daily").lower()
             is_weekday = day_abbr in ("mon", "tue", "wed", "thu", "fri")
             is_weekend = day_abbr in ("sat", "sun")
             if (
-                dow == "daily"
+                dow in ("daily", "once")
                 or (dow == "weekdays" and is_weekday)
                 or (dow == "weekends" and is_weekend)
                 or day_abbr in [d.strip()[:3] for d in dow.split(",")]
             ):
                 task["scheduled_time"] = _format_time_col(task.get("scheduled_time"))
                 due.append(task)
+            else:
+                if "id" in task:
+                    skipped_ids.append(task["id"])
+
+        if skipped_ids and self.is_mysql_active:
+            for sid in skipped_ids:
+                try:
+                    await self.release_scheduled_task_lock(sid)
+                except Exception:
+                    pass
+
         return due
 
     async def release_scheduled_task_lock(self, task_id: int) -> None:
@@ -2507,6 +2519,26 @@ class DatabaseManager:
                 )
 
             await self._run_mysql(_op)
+
+    async def deactivate_scheduled_task(self, task_id: int) -> bool:
+        """Mark a scheduled task as inactive (e.g. after a 'once' task completes)."""
+        if self.is_mysql_active:
+            async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> bool:
+                await cur.execute(
+                    "UPDATE scheduled_tasks SET is_active = FALSE WHERE id = %s",
+                    (task_id,),
+                )
+                return cur.rowcount > 0
+
+            return bool(await self._run_mysql(_op))
+
+        async with self._sqlite_connect() as conn:
+            cur = await conn.execute(
+                "UPDATE scheduled_tasks SET is_active = 0 WHERE id = ?",
+                (task_id,),
+            )
+            await conn.commit()
+            return cur.rowcount > 0
 
     # ── 8. Session State Recovery (GEN 5.0 NEW: session_state) ────────────────
 

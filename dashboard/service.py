@@ -526,13 +526,26 @@ class DashboardService:
         player = self.bot.get_player(guild_id)
         if preset:
             p_lower = preset.lower().strip()
-            if p_lower not in EQ_PRESETS:
-                return {
-                    "success": False,
-                    "error": f"Unknown preset: {preset}. Choose from {list(EQ_PRESETS.keys())}",
-                }
-            player.equalizer_bands = EQ_PRESETS[p_lower].copy()
-            player.equalizer_preset = p_lower
+            if p_lower in EQ_PRESETS:
+                player.equalizer_bands = EQ_PRESETS[p_lower].copy()
+                player.equalizer_preset = p_lower
+            else:
+                custom_loaded = False
+                if hasattr(self.bot, "db") and self.bot.db:
+                    try:
+                        cfg = await self.bot.db.get_server_config(guild_id)
+                        guild_presets = getattr(cfg, "guild_presets", {}) or {}
+                        if p_lower in guild_presets or preset in guild_presets:
+                            res = await self.load_guild_preset(guild_id, name=preset)
+                            if res.get("success"):
+                                custom_loaded = True
+                    except Exception as exc:
+                        logger.warning("Error fetching custom guild preset: %s", exc)
+                if not custom_loaded:
+                    return {
+                        "success": False,
+                        "error": f"Unknown preset: {preset}. Choose from {list(EQ_PRESETS.keys())}",
+                    }
         elif bands:
             new_bands = {}
             for band_key in ("sub_bass", "bass", "mid", "treble"):
