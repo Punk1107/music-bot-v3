@@ -64,19 +64,26 @@ class AutoplayCog(commands.Cog, name="Autoplay"):
         is_on = mode == "on"
 
         # Permission check: DJ role / administrator / same voice channel
-        if interaction.guild and isinstance(interaction.user, discord.Member):
+        if interaction.guild:
+            user = interaction.user
+            perms = getattr(user, "guild_permissions", None)
+            is_admin = bool(perms and getattr(perms, "administrator", False))
+            user_voice = getattr(user, "voice", None)
+            user_channel = getattr(user_voice, "channel", None) if user_voice else None
+
             vc = interaction.guild.voice_client
-            if vc and vc.channel and (not interaction.user.voice or interaction.user.voice.channel != vc.channel):
-                if not interaction.user.guild_permissions.administrator:
+            if vc and vc.channel and (not user_channel or user_channel != vc.channel):
+                if not is_admin:
                     await interaction.followup.send(
                         embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)),
                         ephemeral=True,
                     )
                     return
             cfg = await self.bot.db.get_server_config(interaction.guild_id)
-            if cfg and cfg.dj_only and cfg.dj_role_id and not interaction.user.guild_permissions.administrator:
+            if cfg and cfg.dj_only and cfg.dj_role_id and not is_admin:
                 dj_role = interaction.guild.get_role(cfg.dj_role_id)
-                if dj_role and dj_role not in interaction.user.roles:
+                roles = getattr(user, "roles", [])
+                if dj_role and dj_role not in roles:
                     await interaction.followup.send(
                         embed=error_embed(t("title.permission_denied", locale), t("error.dj_only", locale, role=dj_role.name)),
                         ephemeral=True,

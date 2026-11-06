@@ -132,9 +132,14 @@ class SCSearchSelect(discord.ui.Select):
             embed.set_thumbnail(url=track.thumbnail)
 
         # Disable all items in the parent view
-        for child in self.view.children:
-            child.disabled = True
-        await interaction.message.edit(view=self.view)
+        if self.view:
+            for child in self.view.children:
+                child.disabled = True
+        if interaction.message:
+            try:
+                await interaction.message.edit(view=self.view)
+            except Exception:
+                pass
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 

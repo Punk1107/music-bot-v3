@@ -44,9 +44,11 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if not cfg.dj_role_id:
             return True
         member = interaction.user
-        if member.guild_permissions.administrator:
+        perms = getattr(member, "guild_permissions", None)
+        if perms and getattr(perms, "administrator", False):
             return True
-        if any(r.id == cfg.dj_role_id for r in member.roles):
+        roles = getattr(member, "roles", [])
+        if any(r.id == cfg.dj_role_id for r in roles):
             return True
         from utils.error_handler import dj_required_embed
         await interaction.followup.send(embed=dj_required_embed(interaction), ephemeral=True)

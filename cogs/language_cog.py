@@ -61,12 +61,15 @@ class LanguageCog(commands.Cog, name="Language"):
 
     async def _check_admin(self, interaction: discord.Interaction) -> bool:
         """Return True if the user is an Administrator or has the DJ role."""
-        if interaction.user.guild_permissions.administrator:
+        user = interaction.user
+        perms = getattr(user, "guild_permissions", None)
+        if perms and getattr(perms, "administrator", False):
             return True
         try:
             cfg = await self.bot.db.get_server_config(interaction.guild_id)
+            roles = getattr(user, "roles", [])
             if cfg.dj_role_id and any(
-                r.id == cfg.dj_role_id for r in interaction.user.roles
+                r.id == cfg.dj_role_id for r in roles
             ):
                 return True
         except Exception:

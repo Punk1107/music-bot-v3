@@ -154,12 +154,22 @@ class MusicSchedulerService:
             sources_router = getattr(self.bot, "sources_router", None)
             spotify = getattr(self.bot, "spotify", None)
             if spotify and getattr(spotify, "available", False) and spotify.is_spotify_url(task.query):
-                sp_tracks = await spotify.resolve(
-                    task.query,
-                    self.bot.http_session,
-                    self.bot.youtube,
-                    self.bot.yt_breaker,
-                )
+                sp_breaker = getattr(self.bot, "sp_breaker", None)
+                if sp_breaker:
+                    sp_tracks = await sp_breaker.call(
+                        spotify.resolve,
+                        task.query,
+                        self.bot.http_session,
+                        self.bot.youtube,
+                        50,
+                    )
+                else:
+                    sp_tracks = await spotify.resolve(
+                        task.query,
+                        self.bot.http_session,
+                        self.bot.youtube,
+                        50,
+                    )
                 track = sp_tracks[0] if sp_tracks else None
             elif sources_router and sources_router.is_supported(task.query):
                 sr_tracks, _ = await sources_router.resolve(task.query)

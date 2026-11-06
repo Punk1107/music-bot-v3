@@ -638,6 +638,14 @@ class MusicCog(commands.Cog, name="Music"):
                 except Exception as chime_exc:
                     logger.debug("Synthetic chime skipped: %s", chime_exc)
 
+            # Ensure any lingering chime or prior playback is cleanly stopped before starting track source
+            if vc and vc.is_connected() and (vc.is_playing() or vc.is_paused()):
+                try:
+                    vc.stop()
+                    await asyncio.sleep(0.05)
+                except Exception:
+                    pass
+
             # Feature 13: acquire pre-warmed source from pool
             raw_source = self.bot.ffmpeg_pool.acquire(stream_url, ffmpeg_opts)
             # Wrap in PCMVolumeTransformer for real-time live volume control without restarting FFmpeg

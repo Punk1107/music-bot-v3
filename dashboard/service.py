@@ -451,6 +451,9 @@ class DashboardService:
         if seek_svc and hasattr(seek_svc, "hot_reload"):
             asyncio.create_task(seek_svc.hot_reload(guild_id))
 
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
+
         await self.broadcast_state(guild_id)
         return {
             "success": True,
@@ -628,6 +631,9 @@ class DashboardService:
         if seek_svc and hasattr(seek_svc, "hot_reload"):
             asyncio.create_task(seek_svc.hot_reload(guild_id))
 
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
+
         await self.broadcast_state(guild_id)
         return {
             "success": True,
@@ -704,8 +710,6 @@ class DashboardService:
             src = guild.voice_client.source
             if hasattr(src, "volume"):
                 src.volume = player.volume
-        if hasattr(self.bot, "update_clean_board"):
-            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         # Apply equalizer bands if present in preset
         if "equalizer_bands" in preset:
@@ -730,6 +734,9 @@ class DashboardService:
                 seek_svc = None
         if seek_svc and hasattr(seek_svc, "hot_reload"):
             asyncio.create_task(seek_svc.hot_reload(guild_id))
+
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         await self.broadcast_state(guild_id)
         return {"success": True, "name": name_clean, "preset": preset}
