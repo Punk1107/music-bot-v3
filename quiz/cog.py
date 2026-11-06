@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
@@ -14,7 +14,7 @@ from discord.ext import commands
 from core.i18n import get_locale, t
 from quiz.engine import QuizSession
 from quiz.views import QuizQuestionView
-from utils.embeds import error_embed, info_embed, success_embed
+from utils.embeds import error_embed, info_embed
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -140,7 +140,13 @@ class QuizCog(commands.Cog, name="Quiz"):
                 if not stream_url:
                     continue
 
-                # Play snippet for 20 seconds
+                # Play snippet for 20 seconds (bump _play_seq first so MusicCog._after_track ignoresvc.stop())
+                if hasattr(self.bot, "get_player"):
+                    _p = self.bot.get_player(guild_id)
+                    if _p is not None:
+                        _p._play_seq = getattr(_p, "_play_seq", 0) + 1
+                        if hasattr(_p, "cancel_prefetch"):
+                            _p.cancel_prefetch()
                 if vc.is_playing() or vc.is_paused():
                     vc.stop()
 
@@ -175,7 +181,14 @@ class QuizCog(commands.Cog, name="Quiz"):
                         break
 
                 session.round_active = False
+                for child in view.children:
+                    if hasattr(child, "disabled"):
+                        child.disabled = True  # type: ignore[attr-defined]
                 view.stop()
+                try:
+                    await q_msg.edit(view=view)
+                except Exception:
+                    pass
                 if vc.is_playing():
                     vc.stop()
 

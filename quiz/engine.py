@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import difflib
 import logging
 import random
@@ -98,7 +97,28 @@ class QuizSession:
             source=self.source,
         )
 
-        options = [clean_correct] + [clean_song_title(d) for d in distractors]
+        cleaned_distractors: list[str] = []
+        seen_lower = {clean_correct.lower().strip()}
+        for d in distractors:
+            cd = clean_song_title(d).strip()
+            if cd and cd.lower() not in seen_lower:
+                seen_lower.add(cd.lower())
+                cleaned_distractors.append(cd)
+            if len(cleaned_distractors) >= 3:
+                break
+
+        fallback_titles = [
+            "Bohemian Rhapsody", "Hotel California", "Shape of You",
+            "Blinding Lights", "Billie Jean", "Smells Like Teen Spirit",
+        ]
+        for fb in fallback_titles:
+            if len(cleaned_distractors) >= 3:
+                break
+            if fb.lower() not in seen_lower:
+                seen_lower.add(fb.lower())
+                cleaned_distractors.append(fb)
+
+        options = [clean_correct] + cleaned_distractors[:3]
         random.shuffle(options)
         self.current_options = options
         self.correct_index = options.index(clean_correct)

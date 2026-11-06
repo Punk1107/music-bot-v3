@@ -30,7 +30,7 @@ import asyncio
 import random
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from models.enums import AudioEffect, LoopMode
@@ -144,7 +144,7 @@ class GuildPlayer:
         self._transaction: Optional[list[Track]] = None  # snapshot for rollback
 
         # ── Tier A+: Playback Controls (F21–F25) ───────────────────────
-        self.playback_speed:    float = 1.0   # F21: 0.5–2.0
+        self._playback_speed:   float = 1.0   # F21: 0.5–2.0
         self.pitch_semitones:   int   = 0     # F22: -6 to +6
         self.crossfade_seconds: int   = 0     # F23: 0 (off), 3, 5, 8
         self.silence_trim:      bool  = False # F24
@@ -340,6 +340,10 @@ class GuildPlayer:
         self.cancel_loop_ab()
         if self.now_playing:
             self._history_track = self.now_playing
+        self.now_playing        = None
+        self.play_start_time    = None
+        self.paused_at          = None
+        self.total_paused_duration = 0.0
         # Advance sequence so stale after_play callbacks are rejected (Bug 3)
         self._play_seq += 1
         # Reset vote-skip state for the next track
@@ -420,6 +424,31 @@ class GuildPlayer:
         return max(0, int(delta))
 
     # ── Progress & Playback State ─────────────────────────────────────────────
+
+    @property
+    def is_paused(self) -> bool:
+        """Return True if playback is currently marked as paused."""
+        return self.paused_at is not None
+
+    @property
+    def playback_speed(self) -> float:
+        return getattr(self, "_playback_speed", 1.0)
+
+    @playback_speed.setter
+    def playback_speed(self, value: float) -> None:
+        new_speed = float(value) if isinstance(value, (int, float)) and value > 0.001 else 1.0
+        old_speed = getattr(self, "_playback_speed", 1.0)
+        if (
+            abs(new_speed - old_speed) > 0.001
+            and getattr(self, "play_start_time", None) is not None
+            and getattr(self, "now_playing", None) is not None
+        ):
+            curr_audio_sec = self.elapsed_seconds
+            curr_time = self.paused_at or datetime.now(timezone.utc)
+            wall_offset = curr_audio_sec / new_speed if abs(new_speed - 1.0) > 0.001 else float(curr_audio_sec)
+            self.play_start_time = curr_time - timedelta(seconds=wall_offset)
+            self.total_paused_duration = 0.0
+        self._playback_speed = new_speed
 
     def pause(self) -> None:
         """Mark playback as paused and freeze elapsed timer."""

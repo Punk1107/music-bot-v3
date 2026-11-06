@@ -14,7 +14,7 @@ from discord.ext import commands
 from core.i18n import get_locale, t
 from models.track import Track
 from radio.watchdog import RadioWatchdog
-from utils.embeds import error_embed, info_embed, success_embed
+from utils.embeds import error_embed, success_embed
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -139,7 +139,10 @@ class RadioCog(commands.Cog, name="Radio"):
         embed.set_footer(text="24/7 Watchdog Active • Auto-reconnect enabled")
         await interaction.followup.send(embed=embed)
 
-        if not vc.is_playing() and not vc.is_paused():
+        if vc.is_playing() or vc.is_paused():
+            player.cancel_prefetch()
+            vc.stop()
+        else:
             await music_cog._play_next(interaction.guild_id)
 
     @radio_group.command(name="play", description="Tune into a curated 24/7 web radio station")

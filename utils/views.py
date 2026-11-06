@@ -16,10 +16,9 @@ Tier-S additions:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import math
-from typing import TYPE_CHECKING, Optional, Callable, Any
+from typing import TYPE_CHECKING, Optional
 import discord
 
 from core.i18n import t, get_locale_sync
@@ -27,7 +26,7 @@ from utils.embeds import (
     error_embed, success_embed, info_embed, queue_embed,
     now_playing_embed, favorite_added_embed,
     vote_skip_embed, vote_clear_embed, vote_shuffle_embed,
-    history_embed, queue_search_embed,
+    history_embed,
 )
 from utils.formatters import truncate, format_duration
 
@@ -225,6 +224,10 @@ class MusicControlView(discord.ui.View):
         await interaction.response.defer()
         player = self.bot.get_player(self.guild_id)
         player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False) and len(player) == 0:
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(self.guild_id)
         vc = self._vc(interaction)
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
@@ -260,7 +263,13 @@ class MusicControlView(discord.ui.View):
             return
         locale = get_locale_sync(self.guild_id)
         player = self.bot.get_player(self.guild_id)
+        player.push_undo()
         await player.shuffle()
+        vc = self._vc(interaction)
+        if vc and vc.channel and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(self.bot.db.save_queue(self.guild_id, vc.channel.id, player.queue))
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(self.guild_id))
         await interaction.response.send_message(
             embed=success_embed("Shuffled", t("queue.shuffled", locale, count=len(player))), ephemeral=True
         )
@@ -273,10 +282,18 @@ class MusicControlView(discord.ui.View):
         vc = self._vc(interaction)
         player = self.bot.get_player(self.guild_id)
         player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False):
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(self.guild_id)
+        player.reset()
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
-        player.reset()
         self.bot.track_task(self.bot.db.clear_queue(self.guild_id))
+        if hasattr(self.bot.db, "clear_session_state"):
+            self.bot.track_task(self.bot.db.clear_session_state(self.guild_id))
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(self.guild_id))
         await interaction.response.send_message(
             embed=success_embed(t("title.stopped", locale), t("leave.manual", locale)), ephemeral=True
         )
@@ -481,7 +498,12 @@ class QueueView(discord.ui.View):
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.primary, custom_id="q_shuffle")
     async def shuffle(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         player = self.bot.get_player(self.guild_id)
+        player.push_undo()
         await player.shuffle()
+        if player.last_channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(self.bot.db.save_queue(self.guild_id, player.last_channel_id, player.queue))
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(self.guild_id))
         locale = get_locale_sync(self.guild_id)
         embed = queue_embed(player, self.page, ITEMS_PER_PAGE, locale=locale)
         self._sync_nav()
@@ -1047,10 +1069,10 @@ class HistoryView(discord.ui.View):
                 row      = idx % 4,
             )
             # Capture loop variable
-            def make_callback(t: T):
+            def make_callback(tr: T):
                 async def _cb(inter: discord.Interaction, _btn: discord.ui.Button) -> None:
                     await inter.response.defer()
-                    await self._cb(inter, t)
+                    await self._cb(inter, tr)
                 return _cb
             btn.callback = make_callback(track)
             self.add_item(btn)
@@ -1129,7 +1151,7 @@ class QueueSearchResultView(discord.ui.View):
                 row      = row_idx,
             )
             rm_btn = discord.ui.Button(
-                label    = f"🗑 Remove",
+                label    = "🗑 Remove",
                 style    = discord.ButtonStyle.danger,
                 custom_id= f"qs_rm_{pos}",
                 row      = row_idx,
@@ -1200,6 +1222,12 @@ class CleanBoardControlView(discord.ui.View):
         gid = self._get_gid(interaction)
         if not gid:
             return
+        player = self.bot.get_player(gid)
+        player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False) and len(player) == 0:
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(gid)
         guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and (vc.is_playing() or vc.is_paused()):
@@ -1212,14 +1240,22 @@ class CleanBoardControlView(discord.ui.View):
         if not gid:
             return
         player = self.bot.get_player(gid)
+        player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False):
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(gid)
         await player.clear()
         player.reset()
         guild = self.bot.get_guild(gid)
         vc = guild.voice_client if guild else None
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
-        if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
-            self.bot.track_task(self.bot.db.clear_session_state(gid))
+        if hasattr(self.bot, "db"):
+            if hasattr(self.bot.db, "clear_queue"):
+                self.bot.track_task(self.bot.db.clear_queue(gid))
+            if hasattr(self.bot.db, "clear_session_state"):
+                self.bot.track_task(self.bot.db.clear_session_state(gid))
         await self._update_board(interaction)
 
     @discord.ui.button(label="🔀 Shuffle", style=discord.ButtonStyle.secondary, custom_id="board_shuffle", row=0)
@@ -1228,7 +1264,10 @@ class CleanBoardControlView(discord.ui.View):
         if not gid:
             return
         player = self.bot.get_player(gid)
+        player.push_undo()
         await player.shuffle()
+        if player.last_channel_id and hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(self.bot.db.save_queue(gid, player.last_channel_id, player.queue))
         await self._update_board(interaction)
 
     @discord.ui.button(label="🔁 Loop", style=discord.ButtonStyle.secondary, custom_id="board_loop", row=0)

@@ -148,7 +148,8 @@ def now_playing_embed(
     fraction = player.progress_fraction()
     elapsed  = format_duration(player.elapsed_seconds)
     total    = format_duration(track.duration) if track.duration else "?"
-    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=track.url or "", width=32)
+    bar_url  = (track.url or "") if theme == "classic" else ""
+    bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=bar_url, width=32)
     dur_val  = format_duration(track.duration) if track.duration else "?"
     view_val = format_views(track.view_count)  if track.view_count else "—"
     q_size   = len(player)
@@ -768,7 +769,7 @@ def request_channel_board_embed(
     except (TypeError, ValueError):
         elapsed = "0:00"
     total    = format_duration(track.duration) if getattr(track, "duration", 0) else "?"
-    paused   = bool(getattr(player, "is_paused", False))
+    paused   = bool(getattr(player, "is_paused", False) or getattr(player, "paused_at", None) is not None)
     bar_line = make_knob_progress_bar(fraction, elapsed, total, paused=paused, url=getattr(track, "url", "") or "")
 
     embed = discord.Embed(

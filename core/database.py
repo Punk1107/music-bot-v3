@@ -47,8 +47,7 @@ from typing import Any, Callable, Coroutine, Optional, TypeVar
 
 import aiosqlite
 import aiomysql
-import pymysql
-from pymysql.constants import ER
+import pymysql  # type: ignore[import-untyped]
 
 import config
 from models.server_config import ServerConfig
@@ -3329,6 +3328,22 @@ class DatabaseManager:
         if source == "favorites":
             rows = await self.get_favorites(1, guild_id, limit=100)
             if not rows:
+                if self.is_mysql_active:
+                    async def _fav_op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
+                        await cur.execute(
+                            "SELECT track_data FROM favorites WHERE guild_id = %s ORDER BY added_at DESC LIMIT 100",
+                            (guild_id,),
+                        )
+                        return list(await cur.fetchall())
+                    rows = await self._run_mysql(_fav_op, guild_id=guild_id, readonly=True) or []
+                else:
+                    async with self._sqlite_connect() as conn:
+                        cur = await conn.execute(
+                            "SELECT track_data FROM favorites WHERE guild_id = ? ORDER BY added_at DESC LIMIT 100",
+                            (guild_id,),
+                        )
+                        rows = [dict(r) for r in await cur.fetchall()]
+            if not rows:
                 return None
             chosen = random.choice(rows)
             if isinstance(chosen.get("track"), Track):
@@ -3345,27 +3360,34 @@ class DatabaseManager:
                 return None
             return random.choice(tracks)
 
-        # Default source: history via instant B-Tree index lookup
+        # Default source: history via instant B-Tree index lookup (scoped to guild_id)
         if self.is_mysql_active:
             async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> Optional[dict]:
-                # Instant B-Tree random index lookup
+                # Instant B-Tree random index lookup scoped to guild_id
                 await cur.execute(
                     """
                     SELECT track_data FROM history
-                    WHERE id >= (
-                        SELECT FLOOR(RAND() * (SELECT COALESCE(MAX(id), 1) FROM history))
+                    WHERE guild_id = %s AND id >= (
+                        SELECT FLOOR(RAND() * (SELECT COALESCE(MAX(id), 1) FROM history WHERE guild_id = %s))
                     )
                     ORDER BY id ASC
                     LIMIT 1
-                    """
+                    """,
+                    (guild_id, guild_id),
                 )
                 row = await cur.fetchone()
                 if not row:
-                    # Fallback on sparse IDs
-                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                    await cur.execute(
+                        "SELECT track_data FROM history WHERE guild_id = %s ORDER BY id DESC LIMIT 50",
+                        (guild_id,),
+                    )
                     recent = await cur.fetchall()
                     if recent:
                         return random.choice(recent)
+                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                    recent_all = await cur.fetchall()
+                    if recent_all:
+                        return random.choice(recent_all)
                 return row
 
             res = await self._run_mysql(_op, guild_id=guild_id, readonly=True)
@@ -3373,24 +3395,33 @@ class DatabaseManager:
                 return Track.from_json(res["track_data"])
             return None
 
-        # SQLite fallback with B-Tree modulo lookup
+        # SQLite fallback with B-Tree modulo lookup scoped to guild_id
         async with self._sqlite_connect() as conn:
             cursor = await conn.execute(
                 """
                 SELECT track_data FROM history
-                WHERE id >= (
-                    SELECT (ABS(RANDOM()) % (SELECT COALESCE(MAX(id), 1) FROM history) + 1)
+                WHERE guild_id = ? AND id >= (
+                    SELECT (ABS(RANDOM()) % (SELECT COALESCE(MAX(id), 1) FROM history WHERE guild_id = ?) + 1)
                 )
                 ORDER BY id ASC
                 LIMIT 1
-                """
+                """,
+                (guild_id, guild_id),
             )
             row = await cursor.fetchone()
             if not row:
-                cursor = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                cursor = await conn.execute(
+                    "SELECT track_data FROM history WHERE guild_id = ? ORDER BY id DESC LIMIT 50",
+                    (guild_id,),
+                )
                 recent = await cursor.fetchall()
                 if recent:
                     row = random.choice(recent)
+                else:
+                    cursor = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 50")
+                    recent_all = await cursor.fetchall()
+                    if recent_all:
+                        row = random.choice(recent_all)
             if row and row["track_data"]:
                 return Track.from_json(row["track_data"])
             return None
@@ -3403,26 +3434,42 @@ class DatabaseManager:
         source: str = "history",
     ) -> list[str]:
         """Fetch distinct track titles to serve as multiple-choice distractors."""
+        from quiz.engine import clean_song_title
+
         distractors: list[str] = []
-        clean_exclude = exclude_title.strip().lower()
+        clean_exclude = clean_song_title(exclude_title).strip().lower()
+        seen_clean: set[str] = {clean_exclude}
 
         if self.is_mysql_active:
             async def _op(conn: aiomysql.Connection, cur: aiomysql.DictCursor) -> list[dict]:
                 await cur.execute(
-                    "SELECT track_data FROM history ORDER BY id DESC LIMIT 100"
+                    "SELECT track_data FROM history WHERE guild_id = %s ORDER BY id DESC LIMIT 100",
+                    (guild_id,),
                 )
-                return list(await cur.fetchall())
+                guild_rows = list(await cur.fetchall())
+                if len(guild_rows) < limit * 2:
+                    await cur.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
+                    guild_rows.extend(list(await cur.fetchall()))
+                return guild_rows
             rows = await self._run_mysql(_op, guild_id=guild_id, readonly=True) or []
         else:
             async with self._sqlite_connect() as conn:
-                cur = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
+                cur = await conn.execute(
+                    "SELECT track_data FROM history WHERE guild_id = ? ORDER BY id DESC LIMIT 100",
+                    (guild_id,),
+                )
                 rows = [dict(r) for r in await cur.fetchall()]
+                if len(rows) < limit * 2:
+                    cur = await conn.execute("SELECT track_data FROM history ORDER BY id DESC LIMIT 100")
+                    rows.extend([dict(r) for r in await cur.fetchall()])
 
         for r in rows:
             try:
                 t = Track.from_json(r["track_data"])
                 title = t.title.strip()
-                if title.lower() != clean_exclude and title not in distractors:
+                cleaned_t = clean_song_title(title).strip().lower()
+                if cleaned_t and cleaned_t not in seen_clean and title not in distractors:
+                    seen_clean.add(cleaned_t)
                     distractors.append(title)
                 if len(distractors) >= limit:
                     break
@@ -3438,7 +3485,9 @@ class DatabaseManager:
         for fb in fallback_titles:
             if len(distractors) >= limit:
                 break
-            if fb.lower() != clean_exclude and fb not in distractors:
+            cleaned_fb = clean_song_title(fb).strip().lower()
+            if cleaned_fb not in seen_clean and fb not in distractors:
+                seen_clean.add(cleaned_fb)
                 distractors.append(fb)
 
         return distractors[:limit]

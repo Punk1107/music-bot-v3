@@ -178,4 +178,4 @@ class SpotifyExtractor:
         # Resolve concurrently (semaphore inside _resolve_track_item)
         tasks = [self._resolve_track_item(item, youtube) for item in items[:max_tracks]]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        return [t for t in results if isinstance(t, object) and t is not None and not isinstance(t, Exception)]
+        return [t for t in results if isinstance(t, object) and t is not None and not isinstance(t, BaseException)]

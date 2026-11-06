@@ -436,10 +436,17 @@ class YouTubeExtractor:
         async with self._search_cache_lock:
             entry = self._search_cache.get(cache_key)
             if entry:
-                tracks, ts = entry
+                cached_tracks, ts = entry
                 if now - ts < config.SEARCH_CACHE_TTL:
                     logger.debug("Search cache hit for '%s'", query)
-                    return tracks
+                    import copy
+                    cloned: list[Track] = []
+                    for t_item in cached_tracks:
+                        c = copy.copy(t_item)
+                        c._skip_votes = set()
+                        c._resume_offset = 0
+                        cloned.append(c)
+                    return cloned
                 del self._search_cache[cache_key]
 
         info = await self._extract(

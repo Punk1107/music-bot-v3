@@ -431,6 +431,7 @@ class MusicCog(commands.Cog, name="Music"):
             logger.debug("guild %d: _play_next while already playing/paused — ignoring.", guild_id)
             return None
 
+        old_np_msg = getattr(player, "now_playing_msg", None)
         await player.finish_track()
 
         next_track = await player.dequeue()
@@ -475,6 +476,11 @@ class MusicCog(commands.Cog, name="Music"):
                     next_track = await player.dequeue()
 
         if not next_track:
+            if old_np_msg and hasattr(old_np_msg, "edit"):
+                try:
+                    await old_np_msg.edit(view=None)
+                except Exception:
+                    pass
             player.idle_since = discord.utils.utcnow()
             if hasattr(self.bot, "db") and hasattr(self.bot.db, "clear_session_state"):
                 await self.bot.db.clear_session_state(guild_id)
@@ -483,8 +489,20 @@ class MusicCog(commands.Cog, name="Music"):
             return None
 
         # ── Resolve stream URL (circuit breaker guarded) ──────────────────────
+        import time as _time
         try:
-            if next_track.stream_url_cache:
+            cache_valid = bool(
+                next_track.stream_url_cache
+                and (
+                    next_track.stream_url_expires is None
+                    or _time.monotonic() < next_track.stream_url_expires - 60
+                )
+            )
+            if not cache_valid and next_track.stream_url_cache:
+                next_track.stream_url_cache = None
+                next_track.stream_url_expires = None
+
+            if cache_valid:
                 stream_url = next_track.stream_url_cache
             else:
                 router = getattr(self.bot, "sources_router", None)
@@ -668,9 +686,9 @@ class MusicCog(commands.Cog, name="Music"):
             self.bot.track_task(self.bot.update_clean_board(guild_id))
         elif player.text_channel:
             # Disable components on old now_playing_msg to avoid lingering active buttons
-            if player.now_playing_msg and hasattr(player.now_playing_msg, "edit"):
+            if old_np_msg and hasattr(old_np_msg, "edit"):
                 try:
-                    await player.now_playing_msg.edit(view=None)
+                    await old_np_msg.edit(view=None)
                 except Exception:
                     pass
             try:
@@ -815,6 +833,8 @@ class MusicCog(commands.Cog, name="Music"):
             await interaction.followup.send(
                 embed=track_added_embed(track, pos, color, interaction.user, eta_secs=eta, locale=locale, is_next=play_next)
             )
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
         else:
             play_task = self.bot.track_task(self._play_next(interaction.guild_id))
             await interaction.followup.send(
@@ -888,16 +908,18 @@ class MusicCog(commands.Cog, name="Music"):
             if not vc:
                 return
             player = self.bot.get_player(interaction.guild_id)
-            for t in tracks:
-                t.requested_by_id   = interaction.user.id
-                t.requested_by_name = interaction.user.display_name
+            for t_item in tracks:
+                t_item.requested_by_id   = interaction.user.id
+                t_item.requested_by_name = interaction.user.display_name
             if shuffle and len(tracks) > 1:
                 random.shuffle(tracks)
             await player.extend(tracks)
             self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
-            if not vc.is_playing():
+            if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
+            elif hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             return
 
         # ── YouTube playlist ──────────────────────────────────────────────────
@@ -913,16 +935,18 @@ class MusicCog(commands.Cog, name="Music"):
             if not vc:
                 return
             player = self.bot.get_player(interaction.guild_id)
-            for t in tracks:
-                t.requested_by_id   = interaction.user.id
-                t.requested_by_name = interaction.user.display_name
+            for t_item in tracks:
+                t_item.requested_by_id   = interaction.user.id
+                t_item.requested_by_name = interaction.user.display_name
             if shuffle and len(tracks) > 1:
                 random.shuffle(tracks)
             await player.extend(tracks)
             self.bot.track_task(self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue))
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), shuffled=shuffle, locale=locale))
-            if not vc.is_playing():
+            if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
+            elif hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             return
 
         # ── YouTube URL ───────────────────────────────────────────────────────
@@ -1071,6 +1095,8 @@ class MusicCog(commands.Cog, name="Music"):
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), locale=locale))
             if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
+            elif hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             return
 
         # ── YouTube playlist ──────────────────────────────────────────────────
@@ -1094,6 +1120,8 @@ class MusicCog(commands.Cog, name="Music"):
             await interaction.followup.send(embed=playlist_added_embed(len(tracks), locale=locale))
             if not vc.is_playing() and not vc.is_paused():
                 await self._play_next(interaction.guild_id)
+            elif hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             return
 
         # ── YouTube URL ───────────────────────────────────────────────────────
@@ -1139,6 +1167,8 @@ class MusicCog(commands.Cog, name="Music"):
                     await interaction.followup.send(embed=playlist_added_embed(len(resolved), locale=locale))
                     if not vc.is_playing() and not vc.is_paused():
                         await self._play_next(interaction.guild_id)
+                    elif hasattr(self.bot, "update_clean_board"):
+                        self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
                 return
             else:
                 await interaction.followup.send(
@@ -1229,6 +1259,8 @@ class MusicCog(commands.Cog, name="Music"):
             vc.pause()
             player.pause()
             await interaction.followup.send(embed=success_embed("Paused", t("now_playing.paused", locale)), ephemeral=True)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             if player.now_playing_msg:
                 try:
                     color = getattr(player, "_cached_base_color", None) or 0x5865F2
@@ -1256,6 +1288,8 @@ class MusicCog(commands.Cog, name="Music"):
             vc.resume()
             player.resume()
             await interaction.followup.send(embed=success_embed("Resumed", t("now_playing.playing", locale)), ephemeral=True)
+            if hasattr(self.bot, "update_clean_board"):
+                self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
             if player.now_playing_msg:
                 try:
                     color = getattr(player, "_cached_base_color", None) or 0x5865F2
@@ -1297,6 +1331,10 @@ class MusicCog(commands.Cog, name="Music"):
         if is_dj or is_owner:
             # Bug 1: cancel prefetch before stopping so no stale FFmpeg task races
             player.cancel_prefetch()
+            if getattr(player, "is_radio_mode", False) and len(player) == 0:
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(interaction.guild_id)
             vc.stop()
             label = "DJ Skip ⏭" if is_dj else "Skipped (Your Track) ⏭"
             await interaction.followup.send(
@@ -1329,6 +1367,10 @@ class MusicCog(commands.Cog, name="Music"):
         if len(player.skip_votes) >= threshold:
             player.cancel_prefetch()
             player.skip_votes.clear()
+            if getattr(player, "is_radio_mode", False) and len(player) == 0:
+                player.is_radio_mode = False
+                if getattr(self.bot, "radio_watchdog", None):
+                    self.bot.radio_watchdog.unregister(interaction.guild_id)
             vc.stop()
             await interaction.followup.send(
                 embed=success_embed(
@@ -1359,7 +1401,7 @@ class MusicCog(commands.Cog, name="Music"):
             voters      = voter_names,
             locale      = locale,
         )
-        msg = await interaction.followup.send(embed=embed, view=view)
+        msg = await interaction.followup.send(embed=embed, view=view)  # type: ignore[func-returns-value]
         view.set_message(msg)
 
     @app_commands.command(name="stop", description="Stop playback and clear the queue (bot stays in channel)")
@@ -1371,9 +1413,13 @@ class MusicCog(commands.Cog, name="Music"):
         player = self.bot.get_player(interaction.guild_id)
         vc = interaction.guild.voice_client
         player.cancel_prefetch()
+        if getattr(player, "is_radio_mode", False):
+            player.is_radio_mode = False
+            if getattr(self.bot, "radio_watchdog", None):
+                self.bot.radio_watchdog.unregister(interaction.guild_id)
+        player.reset()
         if vc and (vc.is_playing() or vc.is_paused()):
             vc.stop()
-        player.reset()
         await self.bot.db.clear_queue(interaction.guild_id)
         if hasattr(self.bot.db, "clear_session_state"):
             await self.bot.db.clear_session_state(interaction.guild_id)

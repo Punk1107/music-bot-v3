@@ -25,7 +25,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from core.i18n import get_locale, get_locale_sync, t
-from utils.embeds import error_embed, success_embed
+from utils.embeds import error_embed
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -306,11 +306,20 @@ class PlaybackCog(commands.Cog, name="Playback"):
         if track.duration and start_sec + clamped_dur > track.duration:
             start_sec = max(0, int(track.duration - clamped_dur))
 
-        # Resolve stream URL
-        stream_url = track.stream_url_cache
+        # Resolve stream URL (respecting TTL expiry and non-YouTube sources)
+        import time as _time
+        stream_url = None
+        if track.stream_url_cache and (
+            track.stream_url_expires is None or _time.monotonic() < track.stream_url_expires - 60
+        ):
+            stream_url = track.stream_url_cache
         if not stream_url:
             try:
-                stream_url = await self.bot.youtube.get_stream_url(track.url, track)
+                sources_cog = self.bot.cogs.get("Sources") if hasattr(self.bot, "cogs") else None
+                if sources_cog and hasattr(sources_cog, "router") and sources_cog.router.is_supported(track.url):
+                    stream_url = await sources_cog.router.get_stream_url(track.url)
+                else:
+                    stream_url = await self.bot.youtube.get_stream_url(track.url, track)
             except Exception as e:
                 logger.error("Clip URL resolve failed: %s", e)
 
@@ -327,6 +336,7 @@ class PlaybackCog(commands.Cog, name="Playback"):
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             tmp_path = tmp.name
 
+        discord_file = None
         try:
             cmd = [
                 "ffmpeg", "-nostdin", "-y",
@@ -337,7 +347,12 @@ class PlaybackCog(commands.Cog, name="Playback"):
                 tmp_path,
             ]
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, lambda: subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+            await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
+                ),
+            )
 
             if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 0:
                 safe_title = "".join(c for c in track.title if c.isalnum() or c in (" ", "_", "-")).rstrip()[:30]
@@ -353,7 +368,17 @@ class PlaybackCog(commands.Cog, name="Playback"):
                 await interaction.followup.send(
                     embed=error_embed("Clip Failed", t("clip.failed", locale)), ephemeral=True
                 )
+        except Exception as e:
+            logger.error("Clip ffmpeg failed: %s", e)
+            await interaction.followup.send(
+                embed=error_embed("Clip Failed", t("clip.failed", locale)), ephemeral=True
+            )
         finally:
+            if discord_file is not None:
+                try:
+                    discord_file.close()
+                except Exception:
+                    pass
             if os.path.exists(tmp_path):
                 try:
                     os.remove(tmp_path)
