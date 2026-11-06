@@ -250,6 +250,9 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
                 self.bot.db.save_queue(interaction.guild_id, vc.channel.id, player.queue)
             )
 
+        if hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(interaction.guild_id))
+
         await interaction.followup.send(
             embed=bookmark_loaded_embed(name, len(tracks), mode, locale=locale), ephemeral=True
         )

@@ -1112,3 +1112,125 @@ class TestPhase5ServerAutomationAndGovernance:
         assert "daily" in choice_values
         assert "weekdays" in choice_values
         assert "once" in choice_values
+
+    @pytest.mark.asyncio
+    async def test_scheduler_midnight_rollover_sql_claim(self):
+        import datetime
+        from core.database import DatabaseManager
+        db = DatabaseManager()
+        db._migration_mode = "mysql"
+        db.router.master_pool = MagicMock()
+        mock_cur = MagicMock()
+        mock_cur.rowcount = 1
+        mock_cur.fetchall = AsyncMock(return_value=[{"id": 1, "days_of_week": "daily", "scheduled_time": "23:59:00"}])
+
+        executed_queries = []
+        async def fake_execute(query, params=None):
+            executed_queries.append((query, params))
+
+        mock_cur.execute = AsyncMock(side_effect=fake_execute)
+
+        async def fake_run_mysql(op, *a, **k):
+            return await op(MagicMock(), mock_cur)
+
+        db._run_mysql = AsyncMock(side_effect=fake_run_mysql)
+
+        # Midnight boundary time: 23:59 UTC
+        t_2359 = datetime.datetime(2026, 11, 6, 23, 59, 10, tzinfo=datetime.timezone.utc)
+        due = await db.claim_due_scheduled_tasks(worker_id="test_worker", now_utc=t_2359)
+
+        assert len(due) == 1
+        update_query = executed_queries[0][0]
+        # Must contain OR condition for midnight rollover
+        assert "OR scheduled_time < %s" in update_query
+
+    @pytest.mark.asyncio
+    async def test_seek_and_resume_speed_scaling_math(self):
+        from seek.service import SeekService
+        bot = MagicMock()
+        player = GuildPlayer(123)
+        dummy_track = Track(title="Speed Math", url="https://yt.com/watch?v=speed", duration=300)
+        dummy_track.stream_url_cache = "https://stream.url"
+        dummy_track.stream_url_expires = time.monotonic() + 3600
+        player.now_playing = dummy_track
+        player.playback_speed = 2.0  # 2x speed
+        bot.get_player.return_value = player
+
+        guild = MagicMock()
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        guild.voice_client = vc
+        bot.get_guild.return_value = guild
+        bot.audio_processor = MagicMock()
+        bot.audio_processor.build_ffmpeg_options.return_value = {"options": "-vn"}
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(audio_quality=MagicMock(value="high")))
+
+        svc = SeekService(bot)
+        with patch("discord.FFmpegPCMAudio"), patch("discord.PCMVolumeTransformer"):
+            ok = await svc.seek_to(123, 60)
+            assert ok is True
+            # At 2.0x speed, seeking to 60s should compute elapsed_seconds exactly as 60s (not 120s)
+            assert player.elapsed_seconds == 60
+
+    @pytest.mark.asyncio
+    async def test_request_channel_set_deletes_old_board_message(self):
+        from cogs.admin import AdminCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        cfg = MagicMock()
+        cfg.request_channel_id = 101
+        cfg.board_message_id = 202
+        cfg.clean_mode = True
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.db.save_server_config = AsyncMock()
+
+        cog = AdminCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 999
+        interaction.user.guild_permissions.administrator = True
+        old_ch = MagicMock(spec=discord.TextChannel)
+        old_msg = MagicMock()
+        old_msg.delete = AsyncMock()
+        old_ch.fetch_message = AsyncMock(return_value=old_msg)
+
+        new_ch = MagicMock(spec=discord.TextChannel)
+        new_ch.id = 303
+        new_board_msg = MagicMock()
+        new_board_msg.id = 404
+        new_ch.send = AsyncMock(return_value=new_board_msg)
+
+        interaction.guild.get_channel.side_effect = lambda cid: old_ch if cid == 101 else new_ch
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("cogs.admin.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, cog.rc_set.callback)(cog, interaction, channel=new_ch, clean_mode=True)
+
+        old_msg.delete.assert_awaited_once()
+        assert cfg.request_channel_id == 303
+        assert cfg.board_message_id == 404
+
+    @pytest.mark.asyncio
+    async def test_autoresume_off_clears_session_state(self):
+        from cogs.admin import AdminCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        bot.db.clear_session_state = AsyncMock()
+        cfg = MagicMock()
+        bot.db.get_server_config = AsyncMock(return_value=cfg)
+        bot.db.save_server_config = AsyncMock()
+
+        cog = AdminCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 888
+        interaction.user.guild_permissions.administrator = True
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("cogs.admin.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, cog.autoresume.callback)(cog, interaction, state="off")
+
+        assert cfg.auto_resume is False
+        bot.db.clear_session_state.assert_awaited_once_with(888)

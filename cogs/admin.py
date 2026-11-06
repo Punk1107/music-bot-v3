@@ -116,6 +116,16 @@ class AdminCog(commands.Cog, name="Admin"):
             return
 
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
+        # Delete old board message if present
+        if cfg.request_channel_id and cfg.board_message_id and interaction.guild:
+            try:
+                ch = interaction.guild.get_channel(cfg.request_channel_id)
+                if isinstance(ch, discord.TextChannel):
+                    old_msg = await ch.fetch_message(cfg.board_message_id)
+                    await old_msg.delete()
+            except Exception as e:
+                logger.debug("Failed deleting old board message on rc_set: %s", e)
+        cfg.board_message_id = None
         cfg.request_channel_id = channel.id
         cfg.clean_mode = clean_mode
 
@@ -331,6 +341,8 @@ class AdminCog(commands.Cog, name="Admin"):
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         cfg.auto_resume = is_on
         await self.bot.db.save_server_config(cfg)
+        if not is_on and hasattr(self.bot.db, "clear_session_state"):
+            await self.bot.db.clear_session_state(interaction.guild_id)
 
         status_str = "enabled" if is_on else "disabled"
         desc = t("autoresume.status", locale, status=status_str)

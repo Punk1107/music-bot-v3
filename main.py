@@ -634,6 +634,11 @@ class MusicBot(commands.Bot):
                                     pass
                             _player.reset()
                             _player.intentional_disconnect = True
+                            if hasattr(self, "db"):
+                                await self.db.clear_session_state(gid)
+                                await self.db.clear_queue(gid)
+                            if hasattr(self, "update_clean_board"):
+                                self.track_task(self.update_clean_board(gid))
                             try:
                                 await _vc2.disconnect(force=True)
                             except Exception:
@@ -744,9 +749,11 @@ class MusicBot(commands.Bot):
                     pass
             return
         elif result.intent == NLUIntent.PAUSE:
+            player = self.get_player(message.guild.id)
             vc = message.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
+            player.pause()
             if cfg and cfg.clean_mode:
                 await _update_clean_board_if_needed()
             else:
@@ -756,9 +763,11 @@ class MusicBot(commands.Bot):
                     pass
             return
         elif result.intent == NLUIntent.RESUME:
+            player = self.get_player(message.guild.id)
             vc = message.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
+            player.resume()
             if cfg and cfg.clean_mode:
                 await _update_clean_board_if_needed()
             else:
@@ -770,6 +779,10 @@ class MusicBot(commands.Bot):
         elif result.intent == NLUIntent.VOLUME and result.volume is not None:
             player = self.get_player(message.guild.id)
             player.volume = result.volume / 100
+            guild = message.guild
+            vc = guild.voice_client if guild else None
+            if vc and vc.source and hasattr(vc.source, "volume"):
+                vc.source.volume = player.volume
             if cfg and cfg.clean_mode:
                 await _update_clean_board_if_needed()
             else:
@@ -916,6 +929,11 @@ class MusicBot(commands.Bot):
                     except Exception:
                         pass
                 player.reset()
+                if hasattr(self, "db"):
+                    await self.db.clear_session_state(guild_id)
+                    await self.db.clear_queue(guild_id)
+                if hasattr(self, "update_clean_board"):
+                    self.track_task(self.update_clean_board(guild_id))
                 try:
                     await vc.disconnect(force=True)
                 except Exception:
@@ -1129,7 +1147,7 @@ class MusicBot(commands.Bot):
                     continue
                 voice_ch = guild.get_channel(vc_id)
                 text_ch = guild.get_channel(tc_id)
-                if not isinstance(voice_ch, discord.VoiceChannel):
+                if not isinstance(voice_ch, (discord.VoiceChannel, discord.StageChannel)):
                     continue
 
                 vc = guild.voice_client
@@ -1137,6 +1155,12 @@ class MusicBot(commands.Bot):
                 if not vc or not vc.is_connected():
                     vc = await voice_ch.connect(timeout=10.0)
                     player.last_channel_id = voice_ch.id
+                elif vc.channel and vc.channel.id != voice_ch.id:
+                    try:
+                        await vc.move_to(voice_ch)
+                        player.last_channel_id = voice_ch.id
+                    except Exception as move_exc:
+                        logger.warning("Scheduled playback move voice error: %s", move_exc)
                 if isinstance(text_ch, discord.TextChannel):
                     player.text_channel = text_ch
 
@@ -1151,6 +1175,8 @@ class MusicBot(commands.Bot):
                     track.requested_by_name = "Scheduled Task ⏰"
                     await player.enqueue(track)
                     await self.db.save_queue(guild_id, voice_ch.id, player.queue)
+                    if hasattr(self, "update_clean_board"):
+                        self.track_task(self.update_clean_board(guild_id))
                     if not vc.is_playing() and not vc.is_paused():
                         await music_cog._play_next(guild_id)
             except Exception as exc:
