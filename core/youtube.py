@@ -515,7 +515,7 @@ class YouTubeExtractor:
             return []
 
         tracks: list[Track] = []
-        for entry in result["entries"][:max_tracks]:
+        for entry in result.get("entries", []):
             if not entry:
                 continue
             title     = entry.get("title") or entry.get("ie_key", "Unknown")
@@ -541,6 +541,8 @@ class YouTubeExtractor:
                 view_count  = entry.get("view_count"),
                 upload_date = entry.get("upload_date"),
             ))
+            if len(tracks) >= max_tracks:
+                break
 
         logger.info("Extracted %d/%d tracks from playlist", len(tracks), max_tracks)
         return tracks

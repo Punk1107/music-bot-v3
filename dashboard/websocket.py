@@ -264,6 +264,10 @@ class DashboardWebSocketManager:
         self._clients -= dead
         for ws in dead:
             self._client_guilds.pop(ws, None)
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
     async def _sync_loop(self) -> None:
         """Periodic loop (every 3s) pushing elapsed progress to active sessions."""

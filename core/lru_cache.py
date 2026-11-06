@@ -278,6 +278,11 @@ async def check_memory_pressure() -> dict:
         freed = 0
         for c in all_caches():
             freed += await c.clear()
+        try:
+            from core import media_cache
+            freed += media_cache.clear_all()
+        except Exception:
+            pass
         result["freed"] = freed
         freed_gc = gc.collect(2)
         result["gc_freed"] = freed_gc
@@ -294,6 +299,12 @@ async def check_memory_pressure() -> dict:
         freed = 0
         for c in all_caches():
             freed += await c.evict_fraction(0.5)
+        try:
+            from core import media_cache
+            tp, mp = media_cache.prune_caches()
+            freed += (tp + mp)
+        except Exception:
+            pass
         result["freed"] = freed
         freed_gc = gc.collect(1)
         result["gc_freed"] = freed_gc
@@ -310,6 +321,12 @@ async def check_memory_pressure() -> dict:
         freed = 0
         for c in all_caches():
             freed += await c.prune_expired()
+        try:
+            from core import media_cache
+            tp, mp = media_cache.prune_caches()
+            freed += (tp + mp)
+        except Exception:
+            pass
         result["freed"] = freed
         if freed:
             logger.info(

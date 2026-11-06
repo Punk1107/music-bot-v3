@@ -151,6 +151,8 @@ class AudioEffectsProcessor:
             "-reconnect", "1",
             "-reconnect_streamed", "1",
             "-reconnect_delay_max", delay_max,
+            "-reconnect_on_network_error", "1",
+            "-reconnect_on_http_error", "4xx,5xx",
             "-probesize", probesize,
             "-analyzeduration", "0",
         ]
@@ -216,9 +218,10 @@ class AudioEffectsProcessor:
             # F25: Legacy Replay Gain / Normalize
             filters.append("dynaudnorm=f=75:g=25:p=0.95")
 
-        # Volume filter (always last so it applies cleanly)
+        # Volume filter (only when non-unity; unity volume is handled directly by PCMVolumeTransformer)
         vol_clamped = max(0.0, min(2.0, volume))
-        filters.append(f"volume={vol_clamped:.2f}")
+        if abs(vol_clamped - 1.0) > 0.001:
+            filters.append(f"volume={vol_clamped:.2f}")
 
         # F23: Crossfade fade-out -- only apply at track end if duration is known
         if crossfade_secs > 0 and track_duration and track_duration > crossfade_secs:

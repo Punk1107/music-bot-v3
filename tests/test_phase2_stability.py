@@ -2169,6 +2169,127 @@ class TestPhase5ServerAutomationAndGovernance:
         with patch("autoplay.cog.get_locale", AsyncMock(return_value="en")):
             await cast(Any, a_cog.autoplay.callback)(a_cog, inter_perm, mode="off")
 
+    @pytest.mark.asyncio
+    async def test_phase8_performance_and_resiliency(self, tmp_path):
+        from core.database import DatabaseManager
+        from core.audio import AudioEffectsProcessor
+        from core.ffmpeg_pool import FFmpegWarmPool
+        from core.spotify import SpotifyExtractor
+        from core import media_cache, lru_cache
+        from core.youtube import YouTubeExtractor
+        from models.track import Track
+        from core.player import GuildPlayer
+
+        # 1. SQLite Schema has Secondary Indexes
+        db_file = tmp_path / "sqlite_perf_test.db"
+        db = DatabaseManager(str(db_file))
+        await db.init_db()
+
+        async with db._sqlite_conn.execute("SELECT name FROM sqlite_master WHERE type='index'") as cur:
+            rows = await cur.fetchall()
+            index_names = {r[0] for r in rows}
+
+        assert "idx_sqlite_queue_guild" in index_names
+        assert "idx_sqlite_history_guild_played" in index_names
+        assert "idx_sqlite_playlist_tracks" in index_names
+        assert "idx_sqlite_quiz_scores" in index_names
+        await db.close()
+
+        # 2. Audio processor: unity volume bypass and reconnect flags
+        proc = AudioEffectsProcessor()
+        opts_unity = proc.build_ffmpeg_options(volume=1.0)
+        assert "volume=" not in opts_unity["options"]
+        assert "-reconnect_on_network_error 1" in opts_unity["before_options"]
+        assert "-reconnect_on_http_error 4xx,5xx" in opts_unity["before_options"]
+
+        opts_scaled = proc.build_ffmpeg_options(volume=0.8)
+        assert "volume=0.80" in opts_scaled["options"]
+
+        # 3. FFmpegWarmPool properly waits and closes stdout on warm disposal
+        pool = FFmpegWarmPool(pool_size=1)
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdout = MagicMock()
+        mock_proc.wait = MagicMock()
+        mock_proc.kill = MagicMock()
+
+        mock_src = MagicMock()
+        mock_src._process = mock_proc
+        pool._ready.put_nowait(mock_src)
+
+        fresh_src = pool.acquire("https://stream.mp3", opts_unity)
+        assert fresh_src is not None
+        mock_proc.kill.assert_called_once()
+        mock_proc.stdout.close.assert_called_once()
+        mock_proc.wait.assert_called_once_with(timeout=1.0)
+
+        # 4. SpotifyExtractor uses async with session context
+        sp = SpotifyExtractor()
+        sp._available = True
+        mock_session = MagicMock()
+        mock_post_ctx = AsyncMock()
+        mock_resp = AsyncMock()
+        mock_resp.json = AsyncMock(return_value={"access_token": "tok123", "expires_in": 3600})
+        mock_post_ctx.__aenter__.return_value = mock_resp
+        mock_session.post.return_value = mock_post_ctx
+
+        token = await sp._get_token(mock_session)
+        assert token == "tok123"
+        mock_post_ctx.__aenter__.assert_awaited_once()
+        mock_post_ctx.__aexit__.assert_awaited_once()
+
+        # 5. Media cache clear_all and check_memory_pressure
+        media_cache._THUMB_CACHE["http://thumb"] = (b"img", 1.0)
+        media_cache._META_CACHE["http://track"] = ({"title": "T"}, 1.0)
+        assert len(media_cache._THUMB_CACHE) == 1
+
+        freed = media_cache.clear_all()
+        assert freed == 2
+        assert len(media_cache._THUMB_CACHE) == 0
+
+        # Memory pressure aggressive clear
+        media_cache._THUMB_CACHE["http://thumb2"] = (b"img2", 1.0)
+        with patch("core.lru_cache._try_import_psutil") as mock_psutil_imp, \
+             patch("core.lru_cache._load_thresholds", return_value=(400.0, 600.0, 900.0)):
+            mock_ps = MagicMock()
+            mock_ps.Process.return_value.memory_info.return_value.rss = 1000 * 1024 * 1024  # 1000 MiB -> aggressive
+            mock_psutil_imp.return_value = mock_ps
+            res = await lru_cache.check_memory_pressure()
+            assert res["action"] == "aggressive_clear"
+            assert len(media_cache._THUMB_CACHE) == 0
+
+        # 6. YouTube playlist extraction skips private/deleted without premature truncation
+        yt = YouTubeExtractor()
+        fake_entries = [
+            {"title": "[Private video]"},
+            {"title": "[Deleted video]"},
+            {"title": "Track 1", "url": "https://youtube.com/watch?v=1", "duration": 180},
+            {"title": "Track 2", "url": "https://youtube.com/watch?v=2", "duration": 200},
+        ]
+        with patch.object(yt, "_run_ytdl", return_value={"entries": fake_entries}):
+            extracted = await yt._get_playlist_inner("https://playlist", max_tracks=2)
+            assert len(extracted) == 2
+            assert extracted[0].title == "Track 1"
+            assert extracted[1].title == "Track 2"
+
+        # 7. Fair-share queue reordering O(N) round-robin
+        player = GuildPlayer(111)
+        t_u1_a = Track(title="U1-A", url="u1a", duration=100)
+        t_u1_a.requested_by_id = 1
+        t_u1_b = Track(title="U1-B", url="u1b", duration=100)
+        t_u1_b.requested_by_id = 1
+        t_u2_a = Track(title="U2-A", url="u2a", duration=100)
+        t_u2_a.requested_by_id = 2
+        t_u3_a = Track(title="U3-A", url="u3a", duration=100)
+        t_u3_a.requested_by_id = 3
+
+        await player.extend([t_u1_a, t_u1_b, t_u2_a, t_u3_a])
+        await player.reorder_fair_share()
+        titles = [t.title for t in player.queue]
+        # First round: U1-A, U2-A, U3-A, second round: U1-B
+        assert titles == ["U1-A", "U2-A", "U3-A", "U1-B"]
+
+
 
 
 
