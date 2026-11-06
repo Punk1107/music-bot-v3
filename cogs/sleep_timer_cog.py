@@ -189,11 +189,18 @@ class SleepTimerCog(commands.Cog, name="SleepTimer"):
                 if not _guild:
                     return
                 _vc = _guild.voice_client
-                if _vc and (_vc.is_playing() or _vc.is_paused()):
-                    _vc.stop()
+                _player.cancel_prefetch()
                 _player.reset()
                 _player.intentional_disconnect = True
+                if _vc and (_vc.is_playing() or _vc.is_paused()):
+                    _vc.stop()
                 await self.bot.db.clear_queue(guild_id)
+                if hasattr(self.bot.db, "clear_session_state"):
+                    _res = self.bot.db.clear_session_state(guild_id)
+                    if asyncio.iscoroutine(_res):
+                        await _res
+                if hasattr(self.bot, "update_clean_board"):
+                    self.bot.track_task(self.bot.update_clean_board(guild_id))
                 if _vc and _vc.is_connected():
                     await _vc.disconnect(force=True)
                 # Notify

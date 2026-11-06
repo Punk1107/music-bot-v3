@@ -12,7 +12,7 @@ from discord.ext import commands
 
 from core.i18n import get_locale, t
 from playlist.service import PlaylistService
-from utils.embeds import error_embed, info_embed, success_embed
+from utils.embeds import error_embed, success_embed
 
 if TYPE_CHECKING:
     from main import MusicBot
@@ -108,14 +108,27 @@ class PlaylistCog(commands.Cog, name="Playlist"):
                 )
                 return
         else:
-            tracks, _ = await self.bot.youtube.extract_tracks(query, interaction.user)
-            if not tracks:
+            if hasattr(self.bot, "youtube"):
+                if hasattr(self.bot.youtube, "is_youtube_url") and self.bot.youtube.is_youtube_url(query):
+                    if hasattr(self.bot, "yt_breaker") and self.bot.yt_breaker:
+                        track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, query)
+                    else:
+                        track = await self.bot.youtube.get_track(query)
+                elif hasattr(self.bot.youtube, "search"):
+                    if hasattr(self.bot, "yt_breaker") and self.bot.yt_breaker:
+                        results = await self.bot.yt_breaker.call(self.bot.youtube.search, query, 1)
+                    else:
+                        results = await self.bot.youtube.search(query, 1)
+                    track = results[0] if results else None
+                elif hasattr(self.bot.youtube, "extract_tracks"):
+                    tracks, _ = await self.bot.youtube.extract_tracks(query, interaction.user)
+                    track = tracks[0] if tracks else None
+            if not track:
                 await interaction.followup.send(
                     embed=error_embed("Track Not Found", "Could not resolve audio for that query."),
                     ephemeral=True,
                 )
                 return
-            track = tracks[0]
 
         ok = await self.bot.db.add_track_to_playlist(
             user_id=interaction.user.id,
@@ -189,6 +202,14 @@ class PlaylistCog(commands.Cog, name="Playlist"):
             return
 
         locale = await get_locale(guild_id, self.bot.db)
+        member = interaction.user
+        if not getattr(member, "voice", None) or not member.voice.channel:
+            await interaction.followup.send(
+                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
+                ephemeral=True,
+            )
+            return
+
         tracks = await self.bot.db.load_playlist(
             user_id=interaction.user.id,
             guild_id=guild_id,
@@ -203,20 +224,12 @@ class PlaylistCog(commands.Cog, name="Playlist"):
             )
             return
 
-        member = interaction.user
-        if not isinstance(member, discord.Member) or not member.voice or not member.voice.channel:
-            await interaction.followup.send(
-                embed=error_embed(t("title.not_in_voice", locale), t("error.not_in_voice", locale)),
-                ephemeral=True,
-            )
-            return
-
         channel = member.voice.channel
         guild = interaction.guild
         vc = guild.voice_client if guild else None
-        if not vc:
+        if not vc or not vc.is_connected():
             vc = await channel.connect(self_deaf=True)
-        elif vc.channel != channel:
+        elif vc.channel and vc.channel != channel:
             await interaction.followup.send(
                 embed=error_embed(t("title.wrong_channel", locale), t("error.wrong_channel", locale, channel=vc.channel.name)),
                 ephemeral=True,
@@ -232,14 +245,23 @@ class PlaylistCog(commands.Cog, name="Playlist"):
             t_obj.requested_by_name = interaction.user.display_name
 
         player = self.bot.get_player(guild_id)
+        player.last_channel_id = channel.id
+        if isinstance(interaction.channel, discord.TextChannel):
+            player.text_channel = interaction.channel
         was_empty = (len(player) == 0 and player.now_playing is None)
         await player.extend(tracks)
+        if getattr(player, "queue_mode", "fifo") == "fair":
+            await player.reorder_fair_share()
+        if hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue"):
+            self.bot.track_task(self.bot.db.save_queue(guild_id, channel.id, player.queue))
 
         # Trigger playback if idle
         if was_empty or (not vc.is_playing() and not vc.is_paused()):
             music_cog = self.bot.cogs.get("Music")
             if music_cog:
                 self.bot.track_task(music_cog._play_next(guild_id))
+        elif hasattr(self.bot, "update_clean_board"):
+            self.bot.track_task(self.bot.update_clean_board(guild_id))
 
         embed = success_embed(
             "Playlist Queued",

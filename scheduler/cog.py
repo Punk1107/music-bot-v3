@@ -58,7 +58,7 @@ class SchedulerCog(commands.Cog, name="Scheduler"):
         interaction: discord.Interaction,
         time: str,
         query: str,
-        voice_channel: Optional[discord.VoiceChannel] = None,
+        voice_channel: Optional[discord.VoiceChannel | discord.StageChannel] = None,
         repeat: str = "daily",
     ) -> None:
         await interaction.response.defer(ephemeral=True)

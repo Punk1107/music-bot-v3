@@ -111,8 +111,8 @@ class MusicSchedulerService:
                 except Exception:
                     pass
 
-                # If repeat_mode is once, delete or deactivate task
-                if task.days_of_week == "once":
+                # If repeat_mode is once and execution succeeded, delete task
+                if task.days_of_week == "once" and task.id in executed_ids:
                     try:
                         await self.bot.db.delete_scheduled_task(task.guild_id, task.id)
                     except Exception:
@@ -142,7 +142,7 @@ class MusicSchedulerService:
             except Exception as e:
                 logger.error("Scheduler voice connect error in guild %d: %s", task.guild_id, e)
                 return
-        elif vc.channel.id != vc_channel.id:
+        elif vc.channel and vc.channel.id != vc_channel.id:
             try:
                 await vc.move_to(vc_channel)
             except Exception as e:
@@ -160,10 +160,12 @@ class MusicSchedulerService:
             logger.warning("Scheduler track search error: %s", exc)
 
         if not track:
+            import urllib.parse
             from models.track import Track
+            encoded_q = urllib.parse.quote_plus(task.query)
             track = Track(
                 title=task.query[:60],
-                url=task.query if task.query.startswith("http") else f"https://www.youtube.com/results?search_query={task.query}",
+                url=task.query if task.query.startswith("http") else f"https://www.youtube.com/results?search_query={encoded_q}",
                 duration=0,
                 uploader="Scheduled Alarm",
             )
@@ -173,14 +175,19 @@ class MusicSchedulerService:
 
         # 3. Enqueue & Play
         player = self.bot.get_player(task.guild_id)
+        player.last_channel_id = vc_channel.id
         if text_channel and isinstance(text_channel, discord.TextChannel):
             player.text_channel = text_channel
 
         await player.enqueue(track)
+        if hasattr(self.bot, "db") and hasattr(self.bot.db, "save_queue") and hasattr(self.bot, "track_task"):
+            self.bot.track_task(self.bot.db.save_queue(task.guild_id, vc_channel.id, player.queue))
 
         music_cog = self.bot.cogs.get("Music")
         if music_cog and not vc.is_playing() and not vc.is_paused():
             await music_cog._play_next(task.guild_id)
+        elif hasattr(self.bot, "update_clean_board") and hasattr(self.bot, "track_task"):
+            self.bot.track_task(self.bot.update_clean_board(task.guild_id))
 
         # 4. Announce alarm in text channel
         if text_channel and isinstance(text_channel, discord.TextChannel):

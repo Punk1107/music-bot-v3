@@ -972,9 +972,9 @@ class TestPhase5ServerAutomationAndGovernance:
         assert player.total_paused_duration >= 4.9
 
         # Speed scaling: at 2.0x speed, 20 seconds playtime yields 40 elapsed seconds
+        player.playback_speed = 2.0
         player.total_paused_duration = 0.0
         player.play_start_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=20)
-        player.playback_speed = 2.0
         assert player.elapsed_seconds >= 39
 
     @pytest.mark.asyncio
@@ -1234,3 +1234,231 @@ class TestPhase5ServerAutomationAndGovernance:
 
         assert cfg.auto_resume is False
         bot.db.clear_session_state.assert_awaited_once_with(888)
+
+    # ── Phase 4 Bug Fix Verification Tests ────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_phase4_playlist_cog_add_and_play_voice_check(self):
+        from playlist.cog import PlaylistCog
+
+        bot = MagicMock()
+        bot.db = MagicMock()
+        t1 = Track(title="Song 1", url="https://youtube.com/watch?v=111", duration=180)
+        bot.youtube = MagicMock()
+        bot.youtube.is_youtube_url.return_value = False
+        bot.yt_breaker = MagicMock()
+        bot.yt_breaker.call = AsyncMock(return_value=[t1])
+        bot.db.add_track_to_playlist = AsyncMock(return_value=True)
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(language="en"))
+
+        cog = PlaylistCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 123
+        interaction.user.id = 456
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("playlist.cog.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, cog.add.callback)(cog, interaction, name="MyFavs", query="Song 1")
+
+        bot.yt_breaker.call.assert_awaited_once_with(bot.youtube.search, "Song 1", 1)
+        bot.db.add_track_to_playlist.assert_awaited_once()
+
+        # Playlist play when user is NOT in voice -> must NOT increment play_count
+        bot.db.load_playlist = AsyncMock(return_value=[t1])
+        interaction.user = MagicMock(spec=discord.Member)
+        interaction.user.voice = None
+        interaction.followup.send.reset_mock()
+
+        with patch("playlist.cog.get_locale", AsyncMock(return_value="en")):
+            await cast(Any, cog.play.callback)(cog, interaction, name="MyFavs")
+
+        bot.db.load_playlist.assert_not_awaited()
+        interaction.followup.send.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_phase4_finish_track_clears_now_playing_and_pause_timing(self):
+        import datetime
+        player = GuildPlayer(123)
+        t1 = Track(title="Finished Song", url="https://yt.com/1", duration=180)
+        player.now_playing = t1
+        player.play_start_time = datetime.datetime.now(datetime.timezone.utc)
+        player.paused_at = datetime.datetime.now(datetime.timezone.utc)
+        player.total_paused_duration = 12.5
+        assert player.is_paused is True
+
+        nxt = await player.finish_track()
+        assert nxt is None
+        assert player.now_playing is None
+        assert player.play_start_time is None
+        assert player.paused_at is None
+        assert player.total_paused_duration == 0.0
+        assert player.is_paused is False
+        assert player._history_track == t1
+
+    def test_phase4_playback_speed_mid_track_rebases_without_jump(self):
+        import datetime
+        player = GuildPlayer(123)
+        player.now_playing = Track(title="Speed Rebase", url="https://yt.com/1", duration=300)
+        # Played 60 seconds at 1.0x speed
+        player.play_start_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=60)
+        assert 59 <= player.elapsed_seconds <= 61
+
+        # Change speed to 1.5x mid-track -> elapsed_seconds must remain ~60s, NOT jump to 90s
+        player.playback_speed = 1.5
+        assert 59 <= player.elapsed_seconds <= 61
+
+        # Change speed to 0.5x mid-track -> elapsed_seconds must remain ~60s, NOT drop to 30s
+        player.playback_speed = 0.5
+        assert 59 <= player.elapsed_seconds <= 61
+
+    @pytest.mark.asyncio
+    async def test_phase4_sleep_timer_sets_reset_before_vc_stop(self):
+        from cogs.sleep_timer_cog import SleepTimerCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        bot.db.clear_queue = AsyncMock()
+        bot.db.clear_session_state = AsyncMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(dj_role_id=None, language="en"))
+        bot.update_clean_board = AsyncMock()
+        bot.track_task = MagicMock(side_effect=lambda c: c.close() if hasattr(c, "close") else None)
+
+        player = GuildPlayer(555)
+        player.now_playing = Track(title="Sleep Track", url="https://yt.com/s", duration=200)
+        bot.get_player.return_value = player
+
+        vc = MagicMock()
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        vc.is_connected.return_value = True
+        vc.disconnect = AsyncMock()
+
+        seq_Observed_at_stop = []
+        def on_vc_stop():
+            seq_Observed_at_stop.append((player._play_seq, player.intentional_disconnect))
+        vc.stop.side_effect = on_vc_stop
+
+        guild = MagicMock()
+        guild.voice_client = vc
+        bot.get_guild.return_value = guild
+
+        cog = SleepTimerCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 555
+        interaction.guild = guild
+        member = MagicMock(spec=discord.Member)
+        member.guild_permissions.administrator = True
+        interaction.user = member
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        orig_seq = player._play_seq
+        with patch("cogs.sleep_timer_cog.get_locale", AsyncMock(return_value="en")), \
+             patch("cogs.sleep_timer_cog.asyncio.sleep", AsyncMock()):
+            await cast(Any, cog.sleep.callback)(cog, interaction, "1m")
+            if player.sleep_timer_task:
+                await player.sleep_timer_task
+
+        assert len(seq_Observed_at_stop) == 1
+        seq_at_stop, intentional_at_stop = seq_Observed_at_stop[0]
+        assert seq_at_stop > orig_seq
+        assert intentional_at_stop is True
+        bot.db.clear_session_state.assert_awaited_once_with(555)
+
+    @pytest.mark.asyncio
+    async def test_phase4_radio_switch_while_playing_stops_vc(self):
+        from radio.cog import RadioCog
+        bot = MagicMock()
+        bot.db = MagicMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(language="en"))
+        player = GuildPlayer(777)
+        bot.get_player.return_value = player
+        music_cog = MagicMock()
+        music_cog._play_next = AsyncMock()
+        vc = MagicMock()
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        music_cog._ensure_voice = AsyncMock(return_value=vc)
+        bot.cogs = {"Music": music_cog}
+
+        cog = RadioCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 777
+        interaction.user.id = 111
+        interaction.user.display_name = "Tester"
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+
+        with patch("radio.cog.get_locale", AsyncMock(return_value="en")):
+            await cog._play_radio_station(interaction, station_id="custom", custom_url="https://stream.example.com/live.mp3")
+
+        vc.stop.assert_called_once()
+        music_cog._play_next.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_phase4_quiz_prepare_round_deduplicates_cleaned_titles(self):
+        from quiz.engine import QuizSession
+        bot = MagicMock()
+        bot.db = MagicMock()
+        t_correct = Track(title="Shape of You (Official Video)", url="https://yt.com/shape", duration=240)
+        bot.db.get_random_quiz_track = AsyncMock(return_value=t_correct)
+        # Return distractors that clean to the same title as the correct track
+        bot.db.get_quiz_distractors = AsyncMock(return_value=[
+            "Shape of You [Lyrics]",
+            "Shape of You (Official Audio)",
+            "Blinding Lights (Official Video)",
+        ])
+
+        session = QuizSession(bot, guild_id=123, channel=MagicMock(), total_rounds=3)
+        data = await session.prepare_round()
+        assert data is not None
+        options = data["options"]
+        assert len(options) == 4
+        assert len({o.lower() for o in options}) == 4  # All 4 options must be distinct
+
+    @pytest.mark.asyncio
+    async def test_phase4_youtube_search_cache_returns_clones_and_spotify_cancelled_error(self):
+        from core.youtube import YouTubeExtractor
+        from core.spotify import SpotifyExtractor
+
+        yt = YouTubeExtractor()
+        cached_track = Track(title="Cached Song", url="https://yt.com/c", duration=100)
+        yt._search_cache["lofi::1"] = ([cached_track], time.monotonic())
+
+        res1 = await yt.search("lofi", 1)
+        res1[0].requested_by_id = 111
+        res1[0]._resume_offset = 55
+        res1[0]._skip_votes.add(111)
+
+        res2 = await yt.search("lofi", 1)
+        assert res2[0] is not res1[0]
+        assert res2[0].requested_by_id != 111
+        assert res2[0]._resume_offset == 0
+        assert len(res2[0]._skip_votes) == 0
+
+        # Spotify resolve filters out CancelledError (BaseException)
+        sp = SpotifyExtractor()
+        sp._available = True
+        sp._api_get = AsyncMock(return_value={"items": [{"name": "A"}, {"name": "B"}]})
+        valid_track = Track(title="Valid", url="https://yt.com/v", duration=100)
+        sp._resolve_track_item = AsyncMock(side_effect=[asyncio.CancelledError(), valid_track])
+        tracks = await sp.resolve("https://open.spotify.com/album/1234567890abc", MagicMock(), MagicMock())
+        assert tracks == [valid_track]
+
+    def test_phase4_embeds_non_classic_progress_bar_no_raw_markdown_link(self):
+        import datetime
+        from utils.embeds import now_playing_embed
+        player = GuildPlayer(123)
+        player.now_playing = Track(title="Theme Test", url="https://youtube.com/watch?v=abc", duration=200)
+        player.play_start_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=60)
+
+        for theme in ("spotify", "minimal", "glass"):
+            emb = now_playing_embed(player, 0x1DB954, None, theme=theme)
+            desc = emb.description or ""
+            # Must not contain markdown link syntax inside code blocks
+            assert "](https://" not in desc
+
+        emb_classic = now_playing_embed(player, 0x1DB954, None, theme="classic")
+        progress_field = next(f for f in emb_classic.fields if "Progress" in f.name or "ความคืบหน้า" in f.name)
+        assert "](https://youtube.com/watch?v=abc)" in progress_field.value
+

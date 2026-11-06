@@ -145,7 +145,7 @@ def _create_json_backup(
     db: str,
 ) -> Path:
     """Fallback logical exporter dumping table records to JSON."""
-    import pymysql
+    import pymysql  # type: ignore[import-untyped]
     ext = ".json.gz" if compress else ".json"
     out_file = target_dir / f"backup_{db}_{timestamp}{ext}"
 
