@@ -350,8 +350,10 @@ class GuildPlayer:
         self.total_paused_duration = 0.0
         # Advance sequence so stale after_play callbacks are rejected (Bug 3)
         self._play_seq += 1
-        # Reset vote-skip state for the next track
+        # Reset democratic voting state for the next track
         self.skip_votes.clear()
+        self.clear_votes.clear()
+        self.shuffle_votes.clear()
         # Perf-1: clear embed color cache so the next track re-resolves its color
         self._cached_base_color = None
         self._np_last_bar_step  = -1

@@ -756,6 +756,10 @@ class DatabaseManager:
             Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
         self._sqlite_conn = await aiosqlite.connect(self._db_path)
         self._sqlite_conn.row_factory = aiosqlite.Row
+        if self._db_path != ":memory:":
+            await self._sqlite_conn.execute("PRAGMA journal_mode=WAL;")
+            await self._sqlite_conn.execute("PRAGMA synchronous=NORMAL;")
+            await self._sqlite_conn.execute("PRAGMA busy_timeout=5000;")
         await self._sqlite_conn.executescript(_SQLITE_SCHEMA_SQL)
         await self._sqlite_conn.commit()
         logger.info("SQLite engine initialised at %s (mode=%s)", self._db_path, self._migration_mode)

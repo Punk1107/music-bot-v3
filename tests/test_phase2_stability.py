@@ -2744,6 +2744,96 @@ class TestPhase5ServerAutomationAndGovernance:
         eta_2 = player.eta_seconds(2)  # remaining halved (~50) + 30 = ~80
         assert 70 <= eta_2 <= 85
 
+    @pytest.mark.asyncio
+    async def test_phase14_concurrency_audio_and_guild_guards(self, tmp_path):
+        import math
+        from core.database import DatabaseManager
+        from core.audio import AudioEffectsProcessor, _build_atempo_chain
+        from core.spotify import SpotifyExtractor
+        from cogs.music import MusicCog
+        from cogs.queue_cog import QueueCog
+        from cogs.effects import EffectsCog
+        from cogs.playback_cog import PlaybackCog
+
+        # 1. Database SQLite WAL mode & busy timeout
+        db_file = tmp_path / "test_phase14.db"
+        db = DatabaseManager(db_path=str(db_file), migration_mode="sqlite_only")
+        await db._init_sqlite()
+        cursor = await db._sqlite_conn.execute("PRAGMA journal_mode;")
+        row = await cursor.fetchone()
+        assert row[0].lower() == "wal"
+        cursor2 = await db._sqlite_conn.execute("PRAGMA busy_timeout;")
+        row2 = await cursor2.fetchone()
+        assert row2[0] == 5000
+        await db.close()
+
+        # 2. bot.get_player validation
+        from main import MusicBot
+        bot_mock = MagicMock(spec=MusicBot)
+        bot_mock._players = {}
+        # Bind the actual get_player method
+        bot_mock.get_player = MusicBot.get_player.__get__(bot_mock, MusicBot)
+        with pytest.raises(ValueError, match="Invalid guild_id"):
+            bot_mock.get_player(None)
+        with pytest.raises(ValueError, match="Invalid guild_id"):
+            bot_mock.get_player("invalid_gid")
+        p = bot_mock.get_player(98765)
+        assert isinstance(p, GuildPlayer)
+        assert p.guild_id == 98765
+
+        # 3. Audio filter NaN/Inf protection
+        # Speed NaN -> 1.0 (empty chain)
+        assert _build_atempo_chain(float("nan")) == ""
+        assert _build_atempo_chain(float("inf")) == ""
+
+        proc = AudioEffectsProcessor()
+        opts = proc.build_ffmpeg_options(volume=float("nan"))
+        assert "volume=nan" not in opts["options"]
+        opts_inf = proc.build_ffmpeg_options(volume=float("inf"))
+        assert "volume=inf" not in opts_inf["options"]
+
+        cf_opts = proc.build_crossfade_in_options(crossfade_secs=-5, volume=float("nan"))
+        assert "afade=t=in:st=0:d=0" in cf_opts["options"]
+        assert "volume=1.00" in cf_opts["options"]
+
+        # 4. Spotify resilient item parsing
+        sp = SpotifyExtractor()
+        mock_yt = MagicMock()
+        mock_yt.search = AsyncMock(return_value=[Track(title="Episode", url="http://ep")])
+        # Episode without artists or null artists
+        track = await sp._resolve_track_item({"name": "Podcast Ep 1", "artists": None}, mock_yt)
+        assert track is not None
+        assert track.title == "Episode"
+        # Non-dict item
+        assert await sp._resolve_track_item("not_a_dict", mock_yt) is None
+
+        # 5. Cog interaction_check guild guards
+        cogs_to_test = [MusicCog(bot_mock), QueueCog(bot_mock), EffectsCog(bot_mock), PlaybackCog(bot_mock)]
+        dm_inter = MagicMock()
+        dm_inter.guild_id = None
+        dm_inter.response.is_done.return_value = False
+        dm_inter.response.send_message = AsyncMock()
+
+        guild_inter = MagicMock()
+        guild_inter.guild_id = 12345
+
+        for cog in cogs_to_test:
+            dm_allowed = await cog.interaction_check(dm_inter)
+            assert dm_allowed is False
+            guild_allowed = await cog.interaction_check(guild_inter)
+            assert guild_allowed is True
+
+        # 6. Vote state reset in finish_track
+        player = GuildPlayer(111)
+        player.skip_votes.add(1)
+        player.clear_votes.add(2)
+        player.shuffle_votes.add(3)
+        await player.finish_track()
+        assert len(player.skip_votes) == 0
+        assert len(player.clear_votes) == 0
+        assert len(player.shuffle_votes) == 0
+
+
 
 
 

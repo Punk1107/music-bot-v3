@@ -52,7 +52,9 @@ def _build_atempo_chain(speed: float) -> str:
     For values outside that we chain multiple atempo filters.
     Returns empty string if speed == 1.0.
     """
-    speed = max(0.1, min(10.0, speed))
+    if not isinstance(speed, (int, float)) or math.isnan(speed) or math.isinf(speed):
+        speed = 1.0
+    speed = max(0.1, min(10.0, float(speed)))
     if abs(speed - 1.0) < 0.001:
         return ""
 
@@ -219,11 +221,15 @@ class AudioEffectsProcessor:
             filters.append("dynaudnorm=f=75:g=25:p=0.95")
 
         # Volume filter (only when non-unity; unity volume is handled directly by PCMVolumeTransformer)
-        vol_clamped = max(0.0, min(2.0, volume))
+        if not isinstance(volume, (int, float)) or math.isnan(volume) or math.isinf(volume):
+            vol_clamped = 1.0
+        else:
+            vol_clamped = max(0.0, min(2.0, float(volume)))
         if abs(vol_clamped - 1.0) > 0.001:
             filters.append(f"volume={vol_clamped:.2f}")
 
         # F23: Crossfade fade-out -- only apply at track end if duration is known
+        crossfade_secs = max(0, int(crossfade_secs)) if isinstance(crossfade_secs, (int, float)) and not math.isnan(crossfade_secs) and not math.isinf(crossfade_secs) else 0
         if crossfade_secs > 0 and track_duration and track_duration > crossfade_secs:
             fade_start = max(0, int(track_duration - crossfade_secs))
             filters.append(f"afade=t=out:st={fade_start}:d={crossfade_secs}")
@@ -253,9 +259,14 @@ class AudioEffectsProcessor:
         Build FFmpeg options for the incoming track in a crossfade (F23).
         Adds a fade-in filter at the start of the track.
         """
+        if not isinstance(volume, (int, float)) or math.isnan(volume) or math.isinf(volume):
+            vol_clamped = 1.0
+        else:
+            vol_clamped = max(0.0, min(2.0, float(volume)))
+        fade_secs = max(0, int(crossfade_secs)) if isinstance(crossfade_secs, (int, float)) and not math.isnan(crossfade_secs) and not math.isinf(crossfade_secs) else 0
         filters = [
-            f"afade=t=in:st=0:d={crossfade_secs}",
-            f"volume={max(0.0, min(2.0, volume)):.2f}",
+            f"afade=t=in:st=0:d={fade_secs}",
+            f"volume={vol_clamped:.2f}",
         ]
         # Note: no -b:a here for the same reason as build_ffmpeg_options.
         return {

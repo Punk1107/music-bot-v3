@@ -63,6 +63,19 @@ class MusicCog(commands.Cog, name="Music"):
         self.bot          = bot
         self.rate_limiter = RateLimiter(max_calls=5, window=10.0)
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild_id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            return False
+        return True
+
     # ── Permission helpers ────────────────────────────────────────────────────
 
     async def _check_dj(self, interaction: discord.Interaction, command_name: str = "") -> bool:

@@ -200,6 +200,8 @@ class MusicBot(commands.Bot):
 
     def get_player(self, guild_id: int) -> GuildPlayer:
         """Return (or create) the GuildPlayer for a guild."""
+        if not isinstance(guild_id, int):
+            raise ValueError(f"Invalid guild_id: {guild_id!r} (must be an int)")
         if guild_id not in self._players:
             self._players[guild_id] = GuildPlayer(guild_id)
         return self._players[guild_id]

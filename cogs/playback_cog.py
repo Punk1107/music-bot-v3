@@ -39,6 +39,19 @@ class PlaybackCog(commands.Cog, name="Playback"):
     def __init__(self, bot: "MusicBot") -> None:
         self.bot = bot
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild_id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            return False
+        return True
+
     async def _check_dj(self, interaction: discord.Interaction) -> bool:
         cfg = await self.bot.db.get_server_config(interaction.guild_id)
         if not cfg.dj_role_id:
