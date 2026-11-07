@@ -39,6 +39,19 @@ class RadioCog(commands.Cog, name="Radio"):
         self.watchdog = RadioWatchdog(bot)
         self.watchdog.start()
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild_id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            return False
+        return True
+
     async def cog_unload(self) -> None:
         self.watchdog.stop()
 

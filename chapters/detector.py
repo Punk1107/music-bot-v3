@@ -17,6 +17,7 @@ import asyncio
 import logging
 from pathlib import Path
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -191,6 +192,11 @@ class ChapterDetector:
         chapters = await detector.get_chapters(track.url, fallback_duration=track.duration)
     """
 
+    def __init__(self, cache_ttl: float = 900.0, max_cache: int = 50) -> None:
+        self._cache: dict[str, tuple[list[Chapter], float]] = {}
+        self._cache_ttl: float = cache_ttl
+        self._max_cache: int = max_cache
+
     async def get_chapters(
         self,
         video_url:         str,
@@ -201,6 +207,13 @@ class ChapterDetector:
 
         Tries yt-dlp metadata first, then description timestamp fallback.
         """
+        now = time.monotonic()
+        if video_url in self._cache:
+            chapters, ts = self._cache[video_url]
+            if now - ts < self._cache_ttl:
+                logger.debug("Chapters cache HIT for %s", video_url[:80])
+                return chapters
+
         loop = asyncio.get_running_loop()
 
         try:
@@ -221,13 +234,21 @@ class ChapterDetector:
         chapters = _chapters_from_metadata(meta, duration)
         if chapters:
             logger.info("Found %d structured chapters for %s", len(chapters), video_url[:60])
-            return chapters
-
-        # 2. Fallback: scan description
-        chapters = _chapters_from_description(meta.get("description", ""), duration)
-        if chapters:
-            logger.info("Found %d description-parsed chapters for %s", len(chapters), video_url[:60])
         else:
-            logger.info("No chapters found for %s", video_url[:60])
+            # 2. Fallback: scan description
+            chapters = _chapters_from_description(meta.get("description", ""), duration)
+            if chapters:
+                logger.info("Found %d description-parsed chapters for %s", len(chapters), video_url[:60])
+            else:
+                logger.info("No chapters found for %s", video_url[:60])
 
+        # Cache result
+        if len(self._cache) >= self._max_cache:
+            expired = [k for k, (_, ts) in self._cache.items() if now - ts >= self._cache_ttl]
+            for k in expired:
+                self._cache.pop(k, None)
+            if len(self._cache) >= self._max_cache:
+                self._cache.pop(next(iter(self._cache)), None)
+
+        self._cache[video_url] = (chapters, now)
         return chapters

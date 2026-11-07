@@ -64,8 +64,13 @@ class RadioWatchdog:
     def unregister(self, guild_id: int) -> None:
         if guild_id in self._sessions:
             del self._sessions[guild_id]
-        player = self.bot.get_player(guild_id)
-        player.is_radio_mode = False
+        if hasattr(self.bot, "get_player"):
+            try:
+                player = self.bot.get_player(guild_id)
+                if player is not None:
+                    player.is_radio_mode = False
+            except Exception as exc:
+                logger.error("watchdog.unregister failed for guild %d: %s", guild_id, exc)
 
     def is_active(self, guild_id: int) -> bool:
         return guild_id in self._sessions
@@ -109,6 +114,15 @@ class RadioWatchdog:
                 self.unregister(guild_id)
                 if music_cog and hasattr(music_cog, "_play_next"):
                     await music_cog._play_next(guild_id)
+                return
+
+            MAX_RECONNECTS = 10
+            if session.reconnect_count >= MAX_RECONNECTS:
+                logger.warning(
+                    "24/7 Radio stream in guild %d ('%s') exceeded max reconnect attempts (%d). Stopping session.",
+                    guild_id, session.station_name, MAX_RECONNECTS,
+                )
+                self.unregister(guild_id)
                 return
 
             session.reconnect_count += 1

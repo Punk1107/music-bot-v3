@@ -29,6 +29,19 @@ class PodcastCog(commands.Cog, name="Podcast"):
     def __init__(self, bot: "MusicBot") -> None:
         self.bot = bot
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild_id:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "❌ This command can only be used in a server.", ephemeral=True
+                )
+            return False
+        return True
+
     podcast_group = app_commands.Group(
         name="podcast",
         description="Native Podcast & Audio RSS XML Parser",

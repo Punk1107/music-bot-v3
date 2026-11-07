@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional, TYPE_CHECKING
 
 import aiohttp
@@ -157,6 +158,11 @@ class LyricsService:
             lines, is_auto = result
     """
 
+    def __init__(self, cache_ttl: float = 900.0, max_cache: int = 50) -> None:
+        self._cache: dict[str, tuple[list[LyricLine], bool, float]] = {}
+        self._cache_ttl: float = cache_ttl
+        self._max_cache: int = max_cache
+
     async def get_lyrics(
         self,
         video_url: str,
@@ -169,6 +175,13 @@ class LyricsService:
             (lines, is_auto_caption) on success.
             None if no subtitles are available or fetching fails.
         """
+        now = time.monotonic()
+        if video_url in self._cache:
+            lines, is_auto, ts = self._cache[video_url]
+            if now - ts < self._cache_ttl:
+                logger.debug("Lyrics cache HIT for %s", video_url[:80])
+                return lines, is_auto
+
         loop = asyncio.get_running_loop()
 
         # Step 1: extract subtitle metadata (blocking yt-dlp in thread)
@@ -216,5 +229,14 @@ class LyricsService:
             logger.info("Subtitle parsed but produced 0 lines for %s", video_url[:80])
             return None
 
+        # Cache result
+        if len(self._cache) >= self._max_cache:
+            expired = [k for k, (_, _, ts) in self._cache.items() if now - ts >= self._cache_ttl]
+            for k in expired:
+                self._cache.pop(k, None)
+            if len(self._cache) >= self._max_cache:
+                self._cache.pop(next(iter(self._cache)), None)
+
+        self._cache[video_url] = (lines, is_auto, now)
         logger.info("Parsed %d lyric lines for %s (auto=%s)", len(lines), video_url[:80], is_auto)
         return lines, is_auto

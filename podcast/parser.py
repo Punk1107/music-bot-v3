@@ -98,6 +98,9 @@ def parse_podcast_xml(xml_content: Union[str, bytes]) -> Optional[PodcastShow]:
         audio_url = enclosure.attrib.get("url")
         if not audio_url:
             continue
+        audio_url = audio_url.strip()
+        if not (audio_url.startswith("http://") or audio_url.startswith("https://")):
+            continue
 
         # Duration
         dur_node = item.find(f"{_ITUNES_NS}duration")
@@ -138,12 +141,19 @@ async def fetch_and_parse_podcast(
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
     timeout = aiohttp.ClientTimeout(total=15.0)
+    MAX_FEED_BYTES = 10 * 1024 * 1024  # 10MB limit
     try:
         async with session.get(url, headers=headers, timeout=timeout) as resp:
             if resp.status != 200:
                 logger.warning("Podcast fetch returned HTTP %d for %s", resp.status, url)
                 return None
+            if resp.content_length and resp.content_length > MAX_FEED_BYTES:
+                logger.warning("Podcast feed %s exceeds size limit (%d bytes)", url, resp.content_length)
+                return None
             xml_bytes = await resp.read()
+            if len(xml_bytes) > MAX_FEED_BYTES:
+                logger.warning("Podcast feed %s body exceeded size limit (%d bytes)", url, len(xml_bytes))
+                return None
             return parse_podcast_xml(xml_bytes)
     except Exception as exc:
         logger.error("Podcast fetch exception for %s: %s", url, exc)
