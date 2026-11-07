@@ -401,14 +401,15 @@ class MemoryLeakDetector:
         except RuntimeError:
             task_count = 0
 
+        gc_objs = gc.get_objects()
         return _MemSnapshot(
             ts           = time.monotonic(),
             rss_mb       = rss_mb,
             vms_mb       = vms_mb,
             thread_count = threading.active_count(),
             task_count   = task_count,
-            gc_objects   = len(gc.get_objects()),
-            top_types    = dict(Counter(type(o).__name__ for o in gc.get_objects()).most_common(8)),
+            gc_objects   = len(gc_objs),
+            top_types    = dict(Counter(type(o).__name__ for o in gc_objs).most_common(8)),
             top_allocations = [f"{s.traceback[0].filename}:{s.traceback[0].lineno} ({s.size/1024:.1f}KB)" for s in tracemalloc.take_snapshot().statistics("lineno")[:3] if s.traceback] if tracemalloc.is_tracing() else [],
         )
 

@@ -172,7 +172,9 @@ class MusicSchedulerService:
                     )
                 track = sp_tracks[0] if sp_tracks else None
             elif sources_router and sources_router.is_supported(task.query):
-                sr_tracks, _ = await sources_router.resolve(task.query)
+                sr_tracks = await sources_router.resolve(task.query)
+                if isinstance(sr_tracks, tuple):
+                    sr_tracks = sr_tracks[0]
                 track = sr_tracks[0] if sr_tracks else None
             elif hasattr(self.bot, "youtube") and self.bot.youtube.is_youtube_url(task.query):
                 track = await self.bot.yt_breaker.call(self.bot.youtube.get_track, task.query)

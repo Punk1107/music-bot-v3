@@ -407,7 +407,7 @@ class WebServer:
             return self._stats_cache
 
         active_players = [
-            (g_id, p) for g_id, p in self.bot._players.items()
+            (g_id, p) for g_id, p in list(self.bot._players.items())
             if p.now_playing is not None
         ]
 

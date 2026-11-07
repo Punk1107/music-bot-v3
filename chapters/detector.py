@@ -208,8 +208,8 @@ class ChapterDetector:
                 loop.run_in_executor(None, _fetch_chapter_metadata, video_url),
                 timeout=20.0,
             )
-        except asyncio.TimeoutError:
-            logger.warning("Chapter metadata fetch timed out for %s", video_url[:80])
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Chapter metadata fetch timed out or failed for %s: %s", video_url[:80], exc)
             return []
 
         if not meta:
