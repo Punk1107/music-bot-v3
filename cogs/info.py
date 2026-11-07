@@ -83,7 +83,7 @@ class InfoCog(commands.Cog, name="Info"):
     async def botstats(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True)
         active_players = sum(
-            1 for p in self.bot._players.values() if p.now_playing is not None
+            1 for p in list(self.bot._players.values()) if p.now_playing is not None
         )
         guild_count = len(self.bot.guilds)
         uptime_str  = format_uptime(self.bot.start_time)

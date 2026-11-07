@@ -167,6 +167,15 @@ async def forward_to_dev_channel(
     ctx:   Optional[discord.Interaction] = None,
 ) -> None:
     """Forward a full traceback to all configured developer log channels with deduplication & rate limiting."""
+    import asyncio
+    # Suppress normal task cancellation and benign interaction lifecycles
+    if isinstance(error, (asyncio.CancelledError, discord.NotFound, discord.InteractionResponded)):
+        return
+
+    from core.stability import classify_exception, ExceptionKind
+    if classify_exception(error) == ExceptionKind.EXPECTED:
+        return
+
     global _recent_errors, _suppressed_counts
     import config as cfg
     channel_ids: list[int] = getattr(cfg, "DEV_LOG_CHANNEL_IDS", [])

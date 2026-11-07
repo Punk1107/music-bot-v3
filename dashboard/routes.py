@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -143,6 +144,8 @@ class DashboardRouter:
             vol_raw = request.rel_url.query.get("volume", "100")
         try:
             vol = float(vol_raw)
+            if math.isnan(vol) or math.isinf(vol):
+                raise ValueError("Volume must be a finite number")
         except (ValueError, TypeError):
             raise web.HTTPBadRequest(
                 text=json.dumps({"error": "invalid_volume"}),
@@ -159,7 +162,10 @@ class DashboardRouter:
         if pos_raw is None:
             pos_raw = request.rel_url.query.get("position", request.rel_url.query.get("seconds"))
         try:
-            pos = int(pos_raw)
+            pos_flt = float(pos_raw)
+            if math.isnan(pos_flt) or math.isinf(pos_flt):
+                raise ValueError("Position must be a finite number")
+            pos = max(0, int(pos_flt))
         except (ValueError, TypeError):
             raise web.HTTPBadRequest(
                 text=json.dumps({"error": "invalid_position"}),

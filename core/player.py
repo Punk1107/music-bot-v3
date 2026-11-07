@@ -502,12 +502,23 @@ class GuildPlayer:
         position=1  → next up after current track finishes
         position=N  → after (N-1) tracks before it complete
         """
+        if position <= 0:
+            return 0
+        speed = getattr(self, "playback_speed", 1.0)
+        speed = float(speed) if isinstance(speed, (int, float)) and speed > 0.001 else 1.0
+
         eta = self.remaining_seconds
+        if abs(speed - 1.0) > 0.001:
+            eta = int(eta / speed)
+
         queue = self.queue
         for i, track in enumerate(queue):
             if i + 1 >= position:  # reached or passed target position
                 break
-            eta += (track.duration or 0)
+            dur = track.duration or 0
+            if abs(speed - 1.0) > 0.001:
+                dur = int(dur / speed)
+            eta += dur
         return max(0, eta)
 
     def vote_threshold(self, voice_member_count: int) -> int:
