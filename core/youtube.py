@@ -182,7 +182,8 @@ class YouTubeExtractor:
         if timeout is None:
             timeout = config.YTDL_TIMEOUT
 
-        cache_key = f"{query}::{id(opts)}"
+        flat_val = bool(opts.get("extract_flat")) if opts else False
+        cache_key = f"{query}::flat={flat_val}"
 
         if use_cache:
             async with self._cache_lock:

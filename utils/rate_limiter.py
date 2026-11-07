@@ -26,17 +26,19 @@ class RateLimiter:
         Return True if the (guild_id, user_id) pair has exceeded the rate limit.
         Also registers the current call.
         """
-        key = (guild_id, user_id)
         now = time.monotonic()
+
+        # Throttled cleanup when tracking table grows large (at most once every 60s)
+        # Checked before accessing self._windows[key] so new keys are never popped prematurely
+        if len(self._windows) > 1000 and (now - self._last_cleanup) > self._cleanup_interval:
+            self.cleanup()
+
+        key = (guild_id, user_id)
         dq  = self._windows[key]
 
         # Evict expired entries
         while dq and now - dq[0] > self.window:
             dq.popleft()
-
-        # Throttled cleanup when tracking table grows large (at most once every 60s)
-        if len(self._windows) > 1000 and (now - self._last_cleanup) > self._cleanup_interval:
-            self.cleanup()
 
         if len(dq) >= self.max_calls:
             return True

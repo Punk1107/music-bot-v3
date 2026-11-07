@@ -1316,7 +1316,9 @@ class MusicBot(commands.Bot):
                         )
                     track = sp_tracks[0] if sp_tracks else None
                 elif sources_router and sources_router.is_supported(query):
-                    sr_tracks, _ = await sources_router.resolve(query)
+                    sr_tracks = await sources_router.resolve(query)
+                    if isinstance(sr_tracks, tuple):
+                        sr_tracks = sr_tracks[0]
                     track = sr_tracks[0] if sr_tracks else None
                 elif hasattr(self, "youtube") and self.youtube.is_youtube_url(query):
                     track = await self.yt_breaker.call(self.youtube.get_track, query)

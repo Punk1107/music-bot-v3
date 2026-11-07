@@ -48,6 +48,11 @@ class SpotifyExtractor:
         self._sem                             = asyncio.Semaphore(5)
         self._available                       = bool(config.SPOTIFY_CLIENT_ID and config.SPOTIFY_CLIENT_SECRET)
 
+    @property
+    def available(self) -> bool:
+        """Whether Spotify credentials are configured and client is available."""
+        return self._available
+
     def is_available(self) -> bool:
         return self._available
 

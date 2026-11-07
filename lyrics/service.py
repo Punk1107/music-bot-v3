@@ -173,10 +173,17 @@ class LyricsService:
 
         # Step 1: extract subtitle metadata (blocking yt-dlp in thread)
         logger.debug("Fetching subtitle metadata for %s", video_url[:80])
-        meta = await asyncio.wait_for(
-            loop.run_in_executor(None, _extract_subtitle_metadata, video_url),
-            timeout=20.0,
-        )
+        try:
+            meta = await asyncio.wait_for(
+                loop.run_in_executor(None, _extract_subtitle_metadata, video_url),
+                timeout=20.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning("Subtitle metadata extraction timed out or failed for %s: %s", video_url[:80], exc)
+            return None
+
+        if not meta:
+            return None
 
         subs_dict  = meta.get("subtitles", {})
         auto_dict  = meta.get("automatic_captions", {})

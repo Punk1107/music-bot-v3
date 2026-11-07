@@ -2485,6 +2485,75 @@ class TestPhase5ServerAutomationAndGovernance:
         assert kwargs["skipped"] is True
         assert player._was_skipped is False
 
+    @pytest.mark.asyncio
+    async def test_phase11_performance_and_stability(self):
+        # 1. YouTubeExtractor cache key allows cache hit across distinct dict instances
+        from core.youtube import YouTubeExtractor
+        yt = YouTubeExtractor()
+        mock_data = {"id": "test1234567", "title": "Test Song", "webpage_url": "https://youtube.com/watch?v=test1234567"}
+        with patch.object(yt, "_run_ytdl", return_value=mock_data) as mock_ytdl:
+            res1 = await yt._extract("https://youtube.com/watch?v=test1234567", opts={"extract_flat": False})
+            res2 = await yt._extract("https://youtube.com/watch?v=test1234567", opts={"extract_flat": False})
+            assert res1 == mock_data
+            assert res2 == mock_data
+            # Cache must hit on second call — _run_ytdl called only once
+            assert mock_ytdl.call_count == 1
+
+        # 2. SpotifyExtractor.available property
+        from core.spotify import SpotifyExtractor
+        sp = SpotifyExtractor()
+        assert sp.available == sp.is_available()
+        assert getattr(sp, "available", False) == sp._available
+
+        # 3. Sources router returns list[Track] and scheduler/main unpacks safely
+        from sources.router import MultiSourceRouter
+        router = MultiSourceRouter()
+        mock_track = Track(title="SC Track", url="https://soundcloud.com/artist/track", duration=120)
+        with patch.object(router._sc, "get_track", AsyncMock(return_value=mock_track)):
+            resolved = await router.resolve("https://soundcloud.com/artist/track")
+            assert isinstance(resolved, list)
+            assert len(resolved) == 1
+            assert resolved[0].title == "SC Track"
+
+        # 4. RateLimiter does not evict active new key when cleanup triggers
+        from utils.rate_limiter import RateLimiter
+        limiter = RateLimiter(max_calls=3, window=10.0)
+        limiter._last_cleanup = 0.0
+        # Pretend there are > 1000 old windows
+        for i in range(1005):
+            limiter._windows[(i, 1)] = deque([time.monotonic() - 20.0])
+        assert len(limiter._windows) > 1000
+        # Check rate limit for a new user
+        is_limited = limiter.is_rate_limited(99999, 88888)
+        assert is_limited is False
+        assert (99999, 88888) in limiter._windows
+        assert len(limiter._windows[(99999, 88888)]) == 1
+
+        # 5. LyricsService & ChapterDetector handle TimeoutError gracefully
+        from lyrics.service import LyricsService
+        from chapters.detector import ChapterDetector
+        lyrics_svc = LyricsService()
+        chapters_det = ChapterDetector()
+        with patch("asyncio.wait_for", AsyncMock(side_effect=asyncio.TimeoutError)):
+            lyrics_res = await lyrics_svc.get_lyrics("https://youtube.com/watch?v=timeout1", MagicMock())
+            assert lyrics_res is None
+            chap_res = await chapters_det.get_chapters("https://youtube.com/watch?v=timeout1")
+            assert chap_res == []
+
+        # 6. WebServer._build_stats safely copies player dict
+        from webserver import WebServer
+        mock_bot = MagicMock()
+        mock_p = MagicMock()
+        mock_p.now_playing = None
+        mock_bot._players = {1: mock_p, 2: mock_p}
+        mock_bot.is_ready.return_value = True
+        mock_bot.guilds = []
+        server = WebServer(mock_bot)
+        stats = await server._build_stats()
+        assert stats["status"] == "online"
+        assert stats["active_players"] == 0
+
+
 
 
 
