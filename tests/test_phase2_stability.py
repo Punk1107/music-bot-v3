@@ -2833,6 +2833,123 @@ class TestPhase5ServerAutomationAndGovernance:
         assert len(player.clear_votes) == 0
         assert len(player.shuffle_votes) == 0
 
+    @pytest.mark.asyncio
+    async def test_phase15_metadata_caching_watchdog_and_podcast_guards(self):
+        from lyrics.service import LyricsService
+        from lyrics.parser import LyricLine
+        from chapters.detector import ChapterDetector, Chapter
+        from cogs.favorites import FavoritesCog
+        from cogs.presets_cog import PresetsCog
+        from cogs.theme_cog import ThemeCog
+        from cogs.sleep_timer_cog import SleepTimerCog
+        from podcast.cog import PodcastCog
+        from radio.cog import RadioCog
+        from radio.watchdog import RadioWatchdog, RadioSession
+        from podcast.parser import parse_podcast_xml, fetch_and_parse_podcast
+
+        # 1. LyricsService & ChapterDetector in-memory caching
+        ls = LyricsService(cache_ttl=60.0)
+        dummy_lines = [LyricLine(start_sec=0.0, timestamp_str="00:00", text="Hello world")]
+        ls._cache["https://youtube.com/watch?v=lyric_test"] = (dummy_lines, False, time.monotonic())
+        res_lyrics = await ls.get_lyrics("https://youtube.com/watch?v=lyric_test", MagicMock())
+        assert res_lyrics is not None
+        assert res_lyrics[0] == dummy_lines
+
+        cd = ChapterDetector(cache_ttl=60.0)
+        dummy_chapters = [Chapter(index=1, title="Intro", start_sec=0.0, end_sec=30.0, duration_sec=30.0)]
+        cd._cache["https://youtube.com/watch?v=chap_test"] = (dummy_chapters, time.monotonic())
+        res_chapters = await cd.get_chapters("https://youtube.com/watch?v=chap_test")
+        assert res_chapters == dummy_chapters
+
+        # 2. Universal interaction_check on remaining cogs
+        bot_mock = MagicMock()
+        bot_mock._players = {}
+        cogs_phase15 = [
+            FavoritesCog(bot_mock),
+            PresetsCog(bot_mock),
+            ThemeCog(bot_mock),
+            SleepTimerCog(bot_mock),
+            PodcastCog(bot_mock),
+            RadioCog(bot_mock),
+        ]
+        dm_inter = MagicMock()
+        dm_inter.guild_id = None
+        dm_inter.response.is_done.return_value = False
+        dm_inter.response.send_message = AsyncMock()
+
+        guild_inter = MagicMock()
+        guild_inter.guild_id = 99999
+
+        for cog in cogs_phase15:
+            assert await cog.interaction_check(dm_inter) is False
+            assert await cog.interaction_check(guild_inter) is True
+        cogs_phase15[5].watchdog.stop()
+
+        # 3. RadioWatchdog reconnect cap & safe unregister
+        watchdog = RadioWatchdog(bot_mock)
+        watchdog.register(101, "lofi", "Lofi Beats", "http://stream")
+        session = watchdog.get_session(101)
+        assert session is not None
+        session.reconnect_count = 10  # hit max limit
+        guild_mock = MagicMock()
+        vc_mock = MagicMock()
+        vc_mock.is_connected.return_value = True
+        vc_mock.is_playing.return_value = False
+        vc_mock.is_paused.return_value = False
+        guild_mock.voice_client = vc_mock
+        bot_mock.get_guild.return_value = guild_mock
+        p_mock = GuildPlayer(101)
+        p_mock.is_radio_mode = True
+        bot_mock._players[101] = p_mock
+        bot_mock.get_player.return_value = p_mock
+
+        await watchdog._check_guild_stream(101, session)
+        assert not watchdog.is_active(101)
+        assert p_mock.is_radio_mode is False
+
+        # Safe unregister on non-existent guild
+        watchdog.unregister(9999999)  # does not raise
+
+        # 4. Podcast parser oversized feed guard & URL sanitize
+        oversized_resp = AsyncMock()
+        oversized_resp.status = 200
+        oversized_resp.content_length = 20 * 1024 * 1024  # 20MB
+        mock_session = MagicMock()
+        mock_session.get.return_value.__aenter__.return_value = oversized_resp
+        show = await fetch_and_parse_podcast(mock_session, "http://feed.xml")
+        assert show is None
+
+        xml_data = """<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+            <channel>
+                <title>Test Pod</title>
+                <item>
+                    <title>Ep 1</title>
+                    <enclosure url="  https://cdn.example.com/audio.mp3  " />
+                </item>
+            </channel>
+        </rss>
+        """
+        show_parsed = parse_podcast_xml(xml_data)
+        assert show_parsed is not None
+        assert len(show_parsed.episodes) == 1
+        assert show_parsed.episodes[0].audio_url == "https://cdn.example.com/audio.mp3"
+
+        # 5. GuildPlayer session status properties
+        player = GuildPlayer(777)
+        assert player.has_tracks is False
+        assert player.is_active_session is False
+
+        player.now_playing = Track(title="Song", url="http://s", duration=100)
+        assert player.has_tracks is True
+        assert player.is_active_session is True
+
+        player.now_playing = None
+        player.is_radio_mode = True
+        assert player.has_tracks is False
+        assert player.is_active_session is True
+
+
 
 
 

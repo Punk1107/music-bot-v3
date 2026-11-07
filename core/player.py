@@ -186,6 +186,10 @@ class GuildPlayer:
 
     # ── Queue helpers ─────────────────────────────────────────────────────────
 
+    def __bool__(self) -> bool:
+        """GuildPlayer instances are always truthy regardless of queue length."""
+        return True
+
     def __len__(self) -> int:
         return len(self._queue)
 
@@ -493,6 +497,16 @@ class GuildPlayer:
         if not self.now_playing or not self.now_playing.duration:
             return 0.0
         return min(1.0, self.elapsed_seconds / self.now_playing.duration)
+
+    @property
+    def has_tracks(self) -> bool:
+        """Return True if currently playing or has tracks in queue."""
+        return self.now_playing is not None or len(self._queue) > 0
+
+    @property
+    def is_active_session(self) -> bool:
+        """Return True if active audio session (playing, paused, radio, or has queued tracks)."""
+        return self.has_tracks or getattr(self, "is_radio_mode", False)
 
     # ── Tier-S: ETA (Feature 9) ───────────────────────────────────────────────
 

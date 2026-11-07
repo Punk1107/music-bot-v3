@@ -237,6 +237,10 @@ class AutoplayService:
         logger.debug("Smart Autoplay: fetched %d related tracks for %s", len(tracks), video_id)
         if tracks:
             if len(self._recommendation_cache) >= self._cache_max:
+                expired = [k for k, (_, ts) in self._recommendation_cache.items() if now - ts >= self._cache_ttl]
+                for k in expired:
+                    self._recommendation_cache.pop(k, None)
+            if len(self._recommendation_cache) >= self._cache_max:
                 oldest_k = next(iter(self._recommendation_cache))
                 self._recommendation_cache.pop(oldest_k, None)
             self._recommendation_cache[video_id] = ([copy.copy(t) for t in tracks], time.monotonic())
