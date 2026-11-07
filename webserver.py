@@ -460,6 +460,11 @@ class WebServer:
                             await ws.send_json(stats)
                         except Exception:
                             dead.add(ws)
+                    for ws in dead:
+                        try:
+                            await ws.close()
+                        except Exception:
+                            pass
                     self._ws_clients -= dead
                 except Exception as exc:
                     logger.debug("WS push error: %s", exc)

@@ -234,24 +234,38 @@ async def get_dominant_color(
 
     async with _get_sem():
         try:
-            close_session = session is None
-            if close_session:
-                session = aiohttp.ClientSession()
-
+            # Check pre-fetched media cache first to avoid redundant network download
+            raw: Optional[bytes] = None
+            content_type = "image/jpeg"
             try:
-                assert session is not None
-                async with session.get(
-                    url,
-                    timeout=aiohttp.ClientTimeout(total=8),
-                    headers={"User-Agent": "MusicBotV3/1.0"},
-                ) as resp:
-                    if not resp.ok:
-                        return fallback
-                    content_type = resp.headers.get("Content-Type", "image/jpeg")
-                    raw = await resp.content.read(5 * 1024 * 1024)
-            finally:
-                if close_session and session:
-                    await session.close()
+                from core.media_cache import _THUMB_CACHE, _THUMB_LOCK, THUMBNAIL_CACHE_TTL
+                async with _THUMB_LOCK:
+                    if url in _THUMB_CACHE:
+                        cached_bytes, ts = _THUMB_CACHE[url]
+                        if now - ts < THUMBNAIL_CACHE_TTL:
+                            raw = cached_bytes
+            except Exception:
+                raw = None
+
+            if raw is None:
+                close_session = session is None
+                if close_session:
+                    session = aiohttp.ClientSession()
+
+                try:
+                    assert session is not None
+                    async with session.get(
+                        url,
+                        timeout=aiohttp.ClientTimeout(total=8),
+                        headers={"User-Agent": "MusicBotV3/1.0"},
+                    ) as resp:
+                        if not resp.ok:
+                            return fallback
+                        content_type = resp.headers.get("Content-Type", "image/jpeg")
+                        raw = await resp.content.read(5 * 1024 * 1024)
+                finally:
+                    if close_session and session:
+                        await session.close()
 
             # Dispatch CPU work to dedicated bounded executor (Perf-1)
             loop = asyncio.get_running_loop()

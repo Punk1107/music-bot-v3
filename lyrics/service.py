@@ -44,6 +44,7 @@ _SUBTITLE_OPTS: dict = {
     "writesubtitles":     False,   # we fetch ourselves
     "writeautomaticsub":  False,
     "subtitlesformat":    "vtt",
+    "socket_timeout":     15,
 }
 
 

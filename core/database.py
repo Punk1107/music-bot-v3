@@ -659,6 +659,8 @@ class DatabaseManager:
                 name="db_analytics_flush",
             )
 
+    init_db = initialise
+
     async def _init_mysql_pools(self) -> None:
         """Create database if missing, then open Master, Replica, and Shard pools."""
         # Step 1: Ensure target database exists with utf8mb4
@@ -1440,6 +1442,8 @@ class DatabaseManager:
                 )
                 await conn.commit()
 
+    add_history = record_track_played
+
     async def get_history(
         self,
         guild_id: int,
@@ -2079,6 +2083,8 @@ class DatabaseManager:
             return ok
 
         return await self._sqlite_save_playlist(user_id, guild_id, clean_name, tracks, clean_desc, clean_scope, is_public)
+
+    save_playlist = create_playlist
 
     async def _sqlite_save_playlist(
         self,

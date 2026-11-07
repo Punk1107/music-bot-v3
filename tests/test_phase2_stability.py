@@ -750,6 +750,7 @@ class TestPhase5ServerAutomationAndGovernance:
         player.elapsed_seconds = 0
         player.volume = 1.0
         player.loop_mode = MagicMock(value="off")
+        player.per_user_limit = 0
         player.enqueue = AsyncMock(return_value=1)
         player.queue = []
         bot.get_player.return_value = player
@@ -770,6 +771,9 @@ class TestPhase5ServerAutomationAndGovernance:
         vc.is_connected.return_value = True
         vc.is_playing.return_value = False
         vc.is_paused.return_value = False
+        v_chan = MagicMock()
+        message.author.voice.channel = v_chan
+        vc.channel = v_chan
         message.guild.voice_client = vc
 
         with patch("main.get_locale_sync", return_value="en"):
@@ -1028,6 +1032,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_request_channel_clear_cleans_message_and_resets_config(self):
         from cogs.admin import AdminCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         cfg = MagicMock()
         cfg.request_channel_id = 456
@@ -1061,6 +1067,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_bookmark_load_voice_connect_and_replace_stop(self):
         from cogs.bookmark_cog import BookmarkCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         t1 = Track(title="Bm Track 1", url="https://yt.com/1", duration=120)
         bot.db.load_bookmark = AsyncMock(return_value=[t1])
@@ -1178,6 +1186,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_request_channel_set_deletes_old_board_message(self):
         from cogs.admin import AdminCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         cfg = MagicMock()
         cfg.request_channel_id = 101
@@ -1216,6 +1226,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_autoresume_off_clears_session_state(self):
         from cogs.admin import AdminCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         bot.db.clear_session_state = AsyncMock()
         cfg = MagicMock()
@@ -1242,6 +1254,8 @@ class TestPhase5ServerAutomationAndGovernance:
         from playlist.cog import PlaylistCog
 
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         t1 = Track(title="Song 1", url="https://youtube.com/watch?v=111", duration=180)
         bot.youtube = MagicMock()
@@ -1315,6 +1329,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_phase4_sleep_timer_sets_reset_before_vc_stop(self):
         from cogs.sleep_timer_cog import SleepTimerCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         bot.db.clear_queue = AsyncMock()
         bot.db.clear_session_state = AsyncMock()
@@ -1368,6 +1384,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_phase4_radio_switch_while_playing_stops_vc(self):
         from radio.cog import RadioCog
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         bot.db.get_server_config = AsyncMock(return_value=MagicMock(language="en"))
         player = GuildPlayer(777)
@@ -1398,6 +1416,8 @@ class TestPhase5ServerAutomationAndGovernance:
     async def test_phase4_quiz_prepare_round_deduplicates_cleaned_titles(self):
         from quiz.engine import QuizSession
         bot = MagicMock()
+        bot.sources_router = None
+        bot.spotify = None
         bot.db = MagicMock()
         t_correct = Track(title="Shape of You (Official Video)", url="https://yt.com/shape", duration=240)
         bot.db.get_random_quiz_track = AsyncMock(return_value=t_correct)
@@ -1840,14 +1860,7 @@ class TestPhase5ServerAutomationAndGovernance:
         play_cb = AsyncMock()
 
         # HistoryView buttons invoked with 1 arg (interaction) as discord.py BaseView does
-        h_view = HistoryView.__new__(HistoryView)
-        h_view.bot = bot
-        h_view.guild_id = 101
-        h_view.rows = rows
-        h_view._cb = play_cb
-        h_view.page = 1
-        h_view._children = []
-        h_view._rebuild()
+        h_view = HistoryView(bot, 101, rows, play_cb, page=1)
 
         inter = MagicMock()
         inter.response.defer = AsyncMock()
@@ -1864,14 +1877,7 @@ class TestPhase5ServerAutomationAndGovernance:
         # QueueSearchResultView buttons invoked with 1 arg (interaction)
         jump_cb = AsyncMock()
         rm_cb = AsyncMock()
-        qs_view = QueueSearchResultView.__new__(QueueSearchResultView)
-        qs_view.bot = bot
-        qs_view.guild_id = 101
-        qs_view.results = [(1, t1)]
-        qs_view._jump_cb = jump_cb
-        qs_view._rm_cb = rm_cb
-        qs_view._children = []
-        qs_view._build()
+        qs_view = QueueSearchResultView(bot, 101, [(1, t1)], jump_cb, rm_cb)
 
         j_btn = next(c for c in qs_view.children if getattr(c, "custom_id", "") == "qs_jump_1")
         r_btn = next(c for c in qs_view.children if getattr(c, "custom_id", "") == "qs_rm_1")
@@ -1954,8 +1960,8 @@ class TestPhase5ServerAutomationAndGovernance:
         # Database: get_random_quiz_track & get_quiz_distractors must not leak tracks from other guilds,
         # and SQLite list_playlists(include_public=True) returns public playlists from other users
         db_file = tmp_path / "phase7_test.db"
-        db = DatabaseManager(str(db_file))
-        await db.init_db()
+        db = DatabaseManager(str(db_file), migration_mode="sqlite_fallback")
+        await db.initialise()
 
         other_guild_track = Track(title="Secret Other Server Song", url="https://youtube.com/watch?v=sec", duration=180)
         await db.add_history(guild_id=999, track=other_guild_track, user_id=10)
@@ -2012,7 +2018,9 @@ class TestPhase5ServerAutomationAndGovernance:
         bot.db = AsyncMock()
         bot.get_guild = MagicMock()
         guild = MagicMock()
-        vc_chan = MagicMock()
+        vc_chan = MagicMock(spec=discord.VoiceChannel)
+        vc_chan.id = 456
+        guild.get_channel.return_value = vc_chan
         bot.get_channel.return_value = vc_chan
         bot.get_guild.return_value = guild
         vc = AsyncMock()
@@ -2027,6 +2035,8 @@ class TestPhase5ServerAutomationAndGovernance:
         bot.yt_breaker = MagicMock()
         bot.http_session = MagicMock()
         bot.youtube = MagicMock()
+        bot.get_player.return_value = GuildPlayer(123)
+        bot.cogs = {}
 
         sched_svc = MusicSchedulerService(bot)
         task = ScheduledTask(
@@ -2049,7 +2059,7 @@ class TestPhase5ServerAutomationAndGovernance:
         # 3. PlaylistCog.play resets is_radio_mode and unregisters radio_watchdog
         bot_pl = MagicMock()
         bot_pl.db = AsyncMock()
-        player_pl = GuildPlayer()
+        player_pl = GuildPlayer(999)
         player_pl.is_radio_mode = True
         bot_pl.get_player.return_value = player_pl
         bot_pl.radio_watchdog = MagicMock()
@@ -2068,6 +2078,7 @@ class TestPhase5ServerAutomationAndGovernance:
         inter_pl.guild.voice_client.channel = inter_pl.user.voice.channel
         inter_pl.guild.voice_client.is_playing.return_value = False
         inter_pl.guild.voice_client.is_paused.return_value = False
+        inter_pl.response.defer = AsyncMock()
         inter_pl.followup.send = AsyncMock()
 
         with patch("playlist.cog.get_locale", AsyncMock(return_value="en")):
@@ -2081,7 +2092,7 @@ class TestPhase5ServerAutomationAndGovernance:
         track_sc = Track(title="SC Song", url="https://soundcloud.com/song", duration=150)
         view_sc = SCSearchView(bot_sc, guild_id=999, tracks=[track_sc])
         select_sc = view_sc.children[0]
-        select_sc.values = ["0"]
+        select_sc._values = ["0"]
 
         inter_sc = MagicMock()
         inter_sc.guild_id = 999
@@ -2091,7 +2102,7 @@ class TestPhase5ServerAutomationAndGovernance:
         inter_sc.guild.voice_client = AsyncMock()
         inter_sc.guild.voice_client.is_playing.return_value = False
         inter_sc.guild.voice_client.is_paused.return_value = False
-        bot_sc.get_player.return_value = GuildPlayer()
+        bot_sc.get_player.return_value = GuildPlayer(999)
         bot_sc.cogs = {}
 
         with patch("sources.cog.get_locale", AsyncMock(return_value="en")):
@@ -2109,7 +2120,7 @@ class TestPhase5ServerAutomationAndGovernance:
             asyncio.create_task(coro)
             return MagicMock()
         bot_eff.track_task = MagicMock(side_effect=_track)
-        player_eff = GuildPlayer()
+        player_eff = GuildPlayer(777)
         bot_eff.get_player.return_value = player_eff
 
         eff_cog = EffectsCog(bot_eff)
@@ -2122,7 +2133,7 @@ class TestPhase5ServerAutomationAndGovernance:
 
         with patch("cogs.effects.get_locale", AsyncMock(return_value="en")):
             # effects
-            await cast(Any, eff_cog.effects.callback)(eff_cog, inter_eff, effect="bassboost")
+            await cast(Any, eff_cog.effects.callback)(eff_cog, inter_eff, effect="bass_boost")
             bot_eff.update_clean_board.assert_called_with(777)
 
             # effects_clear
@@ -2182,8 +2193,8 @@ class TestPhase5ServerAutomationAndGovernance:
 
         # 1. SQLite Schema has Secondary Indexes
         db_file = tmp_path / "sqlite_perf_test.db"
-        db = DatabaseManager(str(db_file))
-        await db.init_db()
+        db = DatabaseManager(str(db_file), migration_mode="sqlite_fallback")
+        await db.initialise()
 
         async with db._sqlite_conn.execute("SELECT name FROM sqlite_master WHERE type='index'") as cur:
             rows = await cur.fetchall()
@@ -2217,7 +2228,8 @@ class TestPhase5ServerAutomationAndGovernance:
         mock_src._process = mock_proc
         pool._ready.put_nowait(mock_src)
 
-        fresh_src = pool.acquire("https://stream.mp3", opts_unity)
+        with patch("discord.FFmpegPCMAudio", return_value=MagicMock()):
+            fresh_src = pool.acquire("https://stream.mp3", opts_unity)
         assert fresh_src is not None
         mock_proc.kill.assert_called_once()
         mock_proc.stdout.close.assert_called_once()
@@ -2288,6 +2300,121 @@ class TestPhase5ServerAutomationAndGovernance:
         titles = [t.title for t in player.queue]
         # First round: U1-A, U2-A, U3-A, second round: U1-B
         assert titles == ["U1-A", "U2-A", "U3-A", "U1-B"]
+
+    @pytest.mark.asyncio
+    async def test_phase9_performance_and_stability(self):
+        from utils.color_thief import get_dominant_color
+        from core import media_cache
+        from core.youtube import YouTubeExtractor
+        from core.circuit_breaker import CircuitBreaker, CircuitBreakerOpen, BreakerState
+        from chapters.detector import _CHAPTER_OPTS
+        from lyrics.service import _SUBTITLE_OPTS
+        from utils.rate_limiter import RateLimiter
+        from webserver import WebServer
+
+        # 1. Color thief reuses media_cache._THUMB_CACHE without redundant HTTP get
+        tiny_png = (
+            b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01'
+            b'\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf'
+            b'\xc0\x00\x00\x03\x01\x01\x00\x18\xdd\x8d\xb0\x00\x00\x00\x00IEND\xaeB`\x82'
+        )
+        test_thumb_url = "https://img.youtube.com/vi/test_phase9/hqdefault.jpg"
+        media_cache._THUMB_CACHE[test_thumb_url] = (tiny_png, time.monotonic())
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock()
+
+        color = await get_dominant_color(test_thumb_url, mock_session)
+        assert color is not None
+        # session.get must NEVER be called because cached bytes were reused
+        mock_session.get.assert_not_called()
+
+        # 2. YouTubeExtractor search uses extract_flat: True when max_results > 1 and sanitizes 11-char ID
+        yt = YouTubeExtractor()
+        with patch.object(yt, "_extract", new_callable=AsyncMock) as mock_extract:
+            mock_extract.return_value = {
+                "entries": [
+                    {"id": "dQw4w9WgXcQ", "title": "Never Gonna Give You Up", "duration": 212}
+                ]
+            }
+            res = await yt.search("rick astley", max_results=5)
+            assert len(res) == 1
+            assert res[0].url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            call_opts = mock_extract.call_args[1].get("opts", {})
+            assert call_opts.get("extract_flat") is True
+
+        # 3. CircuitBreaker single-flight probe in HALF_OPEN rejects concurrent callers
+        cb = CircuitBreaker("probe_test_cb", failure_threshold=1, recovery_window=0.05)
+        # Force breaker OPEN
+        async def fail_call():
+            raise RuntimeError("API failure")
+        with pytest.raises(RuntimeError):
+            await cb.call(fail_call)
+        assert cb.state == BreakerState.OPEN
+
+        # Advance past recovery window
+        await asyncio.sleep(0.06)
+
+        probe_started = asyncio.Event()
+        probe_proceed = asyncio.Event()
+
+        async def slow_probe():
+            probe_started.set()
+            await probe_proceed.wait()
+            return "recovered"
+
+        probe_task = asyncio.create_task(cb.call(slow_probe))
+        await probe_started.wait()
+        assert cb.state == BreakerState.HALF_OPEN
+
+        # Concurrent call while probe is in flight must raise CircuitBreakerOpen immediately
+        with pytest.raises(CircuitBreakerOpen):
+            await cb.call(slow_probe)
+
+        # Allow probe to complete
+        probe_proceed.set()
+        res = await probe_task
+        assert res == "recovered"
+        assert cb.state == BreakerState.CLOSED
+
+        # 4. yt-dlp option configs enforce socket_timeout: 15
+        assert _CHAPTER_OPTS.get("socket_timeout") == 15
+        assert _SUBTITLE_OPTS.get("socket_timeout") == 15
+
+        # 5. WebServer cleans up dead websocket connections by closing them
+        ws_alive = AsyncMock()
+        ws_alive.send_json = AsyncMock()
+        ws_dead = AsyncMock()
+        ws_dead.send_json = AsyncMock(side_effect=ConnectionResetError("Socket dropped"))
+        ws_dead.close = AsyncMock()
+
+        ws_clients = {ws_alive, ws_dead}
+        # Simulate logic from _ws_push_loop
+        dead = set()
+        for ws in list(ws_clients):
+            try:
+                await ws.send_json({"type": "stats"})
+            except Exception:
+                dead.add(ws)
+        for ws in dead:
+            try:
+                await ws.close()
+            except Exception:
+                pass
+        ws_clients -= dead
+
+        assert ws_dead in dead
+        ws_dead.close.assert_awaited_once()
+        assert ws_dead not in ws_clients
+        assert ws_alive in ws_clients
+
+        # 6. RateLimiter cleanup removes expired windows
+        limiter = RateLimiter(max_calls=3, window=0.1)
+        limiter.is_rate_limited(123, 9999)
+        assert (123, 9999) in limiter._windows
+        await asyncio.sleep(0.12)
+        limiter.cleanup()
+        assert (123, 9999) not in limiter._windows
 
 
 

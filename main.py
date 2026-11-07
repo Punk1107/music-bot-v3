@@ -1158,6 +1158,8 @@ class MusicBot(commands.Bot):
         try:
             raw_n, search_n = await self.youtube.prune_cache()
             thumb_n, meta_n = prune_media_caches()
+            if hasattr(self, "rate_limiter"):
+                self.rate_limiter.cleanup()
             if raw_n or search_n or thumb_n or meta_n:
                 logger.debug(
                     "Cache prune: yt-dlp raw=%d search=%d  media thumb=%d meta=%d",
