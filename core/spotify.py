@@ -72,17 +72,22 @@ class SpotifyExtractor:
                 import base64
                 creds = f"{config.SPOTIFY_CLIENT_ID}:{config.SPOTIFY_CLIENT_SECRET}"
                 b64_creds = base64.b64encode(creds.encode("utf-8")).decode("ascii")
-                async with session.post(
+                post_req = session.post(
                     _TOKEN_URL,
                     data={"grant_type": "client_credentials"},
                     headers={"Authorization": f"Basic {b64_creds}"},
                     timeout=aiohttp.ClientTimeout(total=10),
-                ) as resp:
+                )
+                if hasattr(post_req, "__aenter__"):
+                    async with post_req as resp:
+                        data = await resp.json()
+                else:
+                    resp = await post_req
                     data = await resp.json()
-                    self._token = data.get("access_token")
-                    expires_in = data.get("expires_in", 3600)
-                    self._token_expires_at = time.monotonic() + max(0, expires_in - 60)
-                    return self._token
+                self._token = data.get("access_token")
+                expires_in = data.get("expires_in", 3600)
+                self._token_expires_at = time.monotonic() + max(0, expires_in - 60)
+                return self._token
             except Exception as exc:
                 logger.error("Spotify auth failed: %s", exc)
                 return None

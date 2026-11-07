@@ -1,79 +1,82 @@
-# 🎵 Music Bot Gen 4.0
+# 🎵 Music Bot Gen 5.0
 
-> **Enterprise-Grade Discord Music Ecosystem** — Studio DSP Audio Engine, Native Multi-Source Streaming (Zero Lavalink), 100% Offline Local Web Dashboard, Voice Democracy, Universal 9-Language Localization, and 679 Automated Tests.
+> **Enterprise-Grade Discord Music Ecosystem** — Studio DSP Audio Engine, Native Multi-Source Streaming (YouTube, Spotify, SoundCloud, Bandcamp, 24/7 Web Radio & Podcasts), 100% Offline Local Web Dashboard v2, Server Automation & Governance, Voice Democracy, Universal 9-Language Localization, and 863 Automated Tests.
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![discord.py](https://img.shields.io/badge/discord.py-2.6.3%2B-5865F2?logo=discord&logoColor=white)](https://github.com/Rapptz/discord.py)
-[![Tests](https://img.shields.io/badge/Tests-679%20Passed%20(100%25)-success?logo=pytest&logoColor=white)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-863%20Passed%20(100%25)-success?logo=pytest&logoColor=white)](tests/)
 [![Locales](https://img.shields.io/badge/i18n-9%20Languages%20(100%25)-orange?logo=translate&logoColor=white)](locales/)
 [![Audio](https://img.shields.io/badge/Audio-Pure%20FFmpeg%20(Zero%20Lavalink)-red?logo=ffmpeg&logoColor=white)](core/audio.py)
+[![Database](https://img.shields.io/badge/Database-MySQL%208.0%2B%20%2B%20SQLite%20Dual--Write-4479A1?logo=mysql&logoColor=white)](core/database.py)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ---
 
-## 🚀 The Generational Leap: Gen 1.0 ➔ Gen 4.0
+## 🚀 The Generational Leap: Gen 1.0 ➔ Gen 5.0
 
-Music Bot Gen 4.0 is not merely an incremental update; it is an architectural transformation into an enterprise-ready music ecosystem:
+Music Bot Gen 5.0 is the definitive evolution into an enterprise-ready Discord music ecosystem:
 
-| Architecture Domain | Gen 1.0 (V1) | Gen 2.0 (V2) | Gen 3.0 (V3) | **Gen 4.0 (Current)** |
-|---|---|---|---|---|
-| **Audio Sources** | YouTube only | YouTube + Spotify | YouTube + Spotify | **YouTube + Spotify + SoundCloud + Bandcamp** (Multi-Source Router, zero Lavalink) |
-| **Audio Processing** | Raw volume | Basic FFmpeg | 18 Audio Effects + Speed/Pitch | **Studio DSP: 18 FX + 4-Band EQ + EBU R128 Loudnorm + L-R Pan + Stereo Widener + Hot-Reload Seek** |
-| **Recommendation Engine** | None | Manual Queue | Play-history Auto-playlist | **Smart Autoplay (YouTube Radio Mix Recommendations + Concurrency Semaphore + In-Memory TTL Cache)** |
-| **Lyrics & Metadata** | None | None | Basic track title | **Real-Time Synced Lyrics (YouTube Subtitles live line tracking) + Video Chapters Dropdown Navigator** |
-| **Web Dashboard** | None | `/health` endpoint only | Read-only Stats HTML + REST v1 | **100% Offline Interactive Web Player + Drag-and-Drop Queue Reordering + Real-Time Bi-Directional WebSocket (`/ws/dashboard`)** |
-| **Voice Governance** | Anyone / Admin | Basic DJ Role | DJ Role + Request Channel | **Voice Democracy (`/voteskip`, `/voteshuffle`, `/voteclear` with live progress bars) + Queue Lock / Permissions / Transactions** |
-| **Localization (i18n)** | English only | English only | Bilingual (EN + TH) | **Universal 9-Language Parity (`en`, `th`, `zh_cn`, `ja`, `ko`, `es`, `ru`, `fr`, `de`) with 249 identical keys** |
-| **Audio Infrastructure** | Basic voice | Lavalink stub + FFmpeg | FFmpeg only | **FFmpeg Warm Process Pool + Self-Healing Voice Reconnect (Zero external audio servers)** |
-| **Watchdogs & Resilience** | None | Basic error logs | Crash recovery | **10 Background Watchdogs + Dead-Task Watchdog + Memory Leak Detector + 3-State Circuit Breakers + VPS Anti-Bot Bypass** |
-| **Automated Testing** | None | ~50 tests | ~200 tests | **679 Automated Unit & Integration Tests (100% pass rate in ~6.5s)** |
+| Architecture Domain | Gen 1.0 (V1) | Gen 2.0 (V2) | Gen 3.0 (V3) | Gen 4.0 | **Gen 5.0 (Current)** |
+|---|---|---|---|---|---|
+| **Audio Sources** | YouTube only | YouTube + Spotify | YouTube + Spotify | YouTube + Spotify + SoundCloud + Bandcamp | **Multi-Source Router + 24/7 Web Radio Directory (Watchdog) + Native Audio Podcast RSS Engine** |
+| **Audio Processing** | Raw volume | Basic FFmpeg | 18 Audio Effects + Speed/Pitch | Studio DSP: 18 FX + 4-Band EQ + EBU R128 Loudnorm | **Gen 5.0 Studio DSP: Mid-Side Vocal Remover/Isolator + Spatial 3D/Binaural + Remaster & Clarity + Synthetic Chimes + Gapless Mixing** |
+| **Server Governance** | Anyone / Admin | Basic DJ Role | DJ Role + Request Channel | Voice Democracy (`/voteskip`, `/voteclear`, `/voteshuffle`) | **Clean Board Channel Mode (`CleanBoardControlView`) + Server Music Scheduler & Alarms (`locked_by`) + Auto-Resume Voice Recovery** |
+| **Queue Management** | FIFO list | FIFO list | FIFO list | FIFO list + Undo Stack | **Fair-Share Round-Robin Scheduling + Per-User Limits + Transaction Rollbacks + Relational Multi-Playlists (1:N)** |
+| **Recommendation Engine** | None | Manual Queue | Play-history Auto-playlist | Smart Autoplay (YouTube Radio Mix + Concurrency Semaphore) | **Smart Autoplay (1h In-Memory TTL Cache & Housekeeping) + Auto-Playlist History Fallback** |
+| **Lyrics & Metadata** | None | None | Basic track title | Real-Time Synced Lyrics + Video Chapters Dropdown | **Real-Time Synced Lyrics + Video Chapters Navigator + 15m Metadata In-Memory TTL Cache** |
+| **Web Dashboard** | None | `/health` only | Read-only Stats + REST v1 | 100% Offline Interactive Web Player + WS v1 | **Next-Gen v2 Offline Dashboard + Canvas Audio Spectrum + Preset Manager + Click-to-Seek Synced Lyrics + WebSocket v2** |
+| **Resilience & Watchdogs** | None | Basic error logs | Crash recovery | 10 Watchdogs + Circuit Breakers | **Gateway Latency Monitor (A–F Grades) + 3-Tier Exception Taxonomy (Expected vs Unexpected) + 11 Loop Watchdogs + DeadTaskWatchdog** |
+| **Database Architecture** | Single SQLite | SQLite | SQLite | MySQL 8.0+ Pool | **Enterprise MySQL 8.0+ (aiomysql) Pool + Deadlock Retry Jitter + Read-Replicas / Sharding + SQLite WAL Dual-Write** |
+| **Automated Testing** | None | ~50 tests | ~200 tests | 679 tests | **863 Automated Tests (Unit, Integration, Hypothesis, Concurrency Stress, 100% passing)** |
 
 ---
 
-## ✨ Gen 4.0 Highlights
+## ✨ Gen 5.0 Highlights
 
 | Icon | Core Capability | Architectural Details |
 |:---:|---|---|
-| 🎛 | **Studio DSP Audio Engine** | 18 audio effects, 4-band frequency equalizer with 8 studio presets, EBU R128 broadcast loudness normalization, pan balance, and stereo soundstage widening. |
-| 🌐 | **100% Offline Local Web Dashboard** | Self-contained Vanilla HTML/CSS/JS web player and drag-and-drop queue management with real-time bi-directional WebSocket sync (`/ws/dashboard`). |
-| 📻 | **Smart Autoplay & Radio Mix** | Automatically fetches related YouTube mix recommendations when the queue empties, complete with deduplication caching and concurrency throttling. |
-| 📜 | **Real-Time Synced Lyrics & Chapters** | Subtitle-based live synced lyrics with interactive paginator and video chapter detection with instant dropdown seek navigation. |
-| 🗳️ | **Voice Democracy System** | Quorum-based voting for skipping, clearing, and shuffling with dynamic live progress bar calculation (`ceil(50% of listeners)`). |
-| 🌍 | **Universal 9-Language Parity** | 100% translated across 9 global languages (`en`, `th`, `zh_cn`, `ja`, `ko`, `es`, `ru`, `fr`, `de`) with 249 keys and zero missing placeholders. |
-| 🛡 | **Enterprise Self-Healing Architecture** | 10 background loop watchdogs, dead-task auto-restarting, memory leak detection, 3-state circuit breakers, and warm FFmpeg process pools. |
-| ⚡ | **Zero Third-Party Audio Servers** | No Lavalink, no external proxy bots, no OpenAI/Anthropic token costs. 100% local processing with internal Regex NLU. |
+| 🎛 | **Studio DSP Audio Engine** | Mid-Side stereo vocal remover & acapella isolator (`/vocal`), spatial 3D & binaural virtualizer (`/spatial`), clarity & sub-harmonic remaster (`/remaster`, `/clarity`), gapless mixing (`/gapless`), and fileless synthetic chimes (`/chimes`). |
+| 📻 | **24/7 Web Radio & Native Podcasts** | Dedicated 24/7 web radio station directory with automated stall watchdog (`/radio`) and native iTunes-compliant podcast RSS XML feed ingestion (`/podcast`) with 10MB payload security. |
+| ⏰ | **Server Music Scheduler & Alarms** | Schedule recurring or one-off music playback alarms across server voice channels (`/schedule`) with distributed database locking (`locked_by`). |
+| 🛡 | **Server Governance & Clean Board** | Clean Board Channel Mode (`/requestchannel set clean_mode:True`) maintaining a single interactive pinned player board (`CleanBoardControlView`) with auto-deleted chat queries. |
+| ⚖️ | **Fair-Share Queue & Multi-Playlists** | Fair-share round-robin queue scheduling (`/queue mode:fair`), per-user track limits, 5-level undo stack (`/undo`), queue bookmarks (`/bookmark`), and relational multi-playlists (`/playlist`). |
+| 🌐 | **Next-Gen v2 Offline Web Dashboard** | 100% offline HTML5 canvas spectrum visualizer, preset manager, click-to-seek synced lyrics, bi-directional WebSocket sync (`/ws/dashboard`), and REST API v1. |
+| 📡 | **Gateway Latency & Telemetry Monitor** | High-precision rolling gateway latency tracking with packet jitter detection, quality grade classification (A–F), and spike alerting. |
+| 🛡 | **Enterprise Resilience & Self-Healing** | 11 background loop watchdogs, 3-tier exception taxonomy with expected error classification (preventing false circuit breaker trips), memory leak detector, and auto-resume voice recovery. |
+| 🏛 | **Async MySQL 8.0+ & SQLite Dual-Write** | High-throughput `aiomysql` pool (5–25 warm connections), InnoDB deadlock auto-retry with jitter, master-replica routing, and SQLite WAL fallback dual-write. |
+| 🌍 | **Universal 9-Language Localization** | 100% translated across 9 global languages (`en`, `th`, `zh_cn`, `ja`, `ko`, `es`, `ru`, `fr`, `de`) with 294 keys and zero missing placeholders. |
 
 ---
 
 ## 📁 Project Architecture
 
-The Gen 4.0 codebase is cleanly decomposed into **24 cogs**, **10 dedicated feature packages**, **18 core services**, and **9 localized string catalogues**:
+The Gen 5.0 codebase is cleanly decomposed into **32 cogs** (14 standard + 18 feature packages), **18 core services**, and **9 localized string catalogues**:
 
 ```text
 music-bot-v3/
-├── main.py                     # Bot entrypoint, 24 cogs loader, 10 background watchdogs
+├── main.py                     # Bot entrypoint, 32 cogs loader, 11 background watchdogs
 ├── config.py                   # Centralized configuration & environment loader (.env)
-├── webserver.py                # aiohttp REST API v1 + WebSocket + Dashboard router
+├── webserver.py                # aiohttp REST API v1 + WebSocket + Dashboard v2 router
 ├── Dockerfile & docker-compose # Containerized production builds
 ├── render.yaml                 # One-click Render.com web service configuration
 │
 ├── autoplay/                   # Feature: Smart YouTube Radio Mix recommendations
 │   ├── cog.py                  # Slash command: /autoplay (on, off, status)
-│   └── service.py              # In-memory TTL cache (1h, 256 size), semaphore & deduplication
+│   └── service.py              # In-memory TTL cache (1h, 256 size), semaphore & auto-pruning
 │
 ├── chapters/                   # Feature: Video chapters parser & seamless jumping
 │   ├── cog.py                  # Slash commands: /chapters, /chapter_jump, /cjump
-│   ├── detector.py             # Description timestamp parser & yt-dlp chapter extractor
+│   ├── detector.py             # Description timestamp parser & yt-dlp chapter extractor (15m TTL cache)
 │   ├── seek_handler.py         # Hot-reload audio re-attachment at chapter timestamp
 │   └── views.py                # Interactive chapter select dropdown menu
 │
-├── dashboard/                  # Feature: 100% Offline Local Web Dashboard
+├── dashboard/                  # Feature: Next-Gen v2 Local Web Dashboard
 │   ├── cog.py                  # Slash command: /dashboard
 │   ├── routes.py               # REST API endpoints (/api/v1/...) & WebSocket routes
-│   ├── service.py              # Dashboard state aggregation & queue mutators
-│   ├── templates.py            # Self-contained offline HTML/CSS/JS (no external CDN)
-│   └── websocket.py            # Live real-time WebSocket connection manager (/ws/dashboard)
+│   ├── service.py              # Dashboard state aggregation, preset CRUD & queue mutators
+│   ├── templates.py            # Self-contained offline HTML/CSS/JS with Canvas Spectrum Visualizer
+│   └── websocket.py            # Live real-time WebSocket connection manager (/ws/dashboard, /ws/stats)
 │
 ├── equalizer/                  # Feature: 4-Band Frequency Equalizer
 │   ├── cog.py                  # Slash commands: /equalizer, /eq (preset, custom, view, reset)
@@ -84,13 +87,13 @@ music-bot-v3/
 │   └── service.py              # Sub-second loop timer worker & automatic boundary seek
 │
 ├── loudnorm/                   # Feature: EBU R128 Smart Loudness Normalization
-│   ├── cog.py                  # Slash command: /loudnorm
+│   ├── cog.py                  # Slash command: /loudnorm (broadcast, podcast, background, party)
 │   └── filter.py               # Dual-pass EBU R128 broadcast filtergraph generator
 │
 ├── lyrics/                     # Feature: YouTube subtitle-based synced lyrics
 │   ├── cog.py                  # Slash command: /lyrics (with sync & paginator)
 │   ├── parser.py               # WebVTT / SRT subtitle timestamp parser & active line tracker
-│   └── service.py              # Subtitle stream resolution & caching
+│   └── service.py              # Subtitle stream resolution & in-memory TTL caching (15m TTL)
 │
 ├── pan/                        # Feature: Audio pan & stereo soundstage enhancer
 │   ├── cog.py                  # Slash commands: /pan, /stereowide
@@ -100,10 +103,27 @@ music-bot-v3/
 │   ├── cog.py                  # Slash commands: /playlist create, add, remove, play, share, list, delete
 │   └── service.py              # Relational playlist service and list embed formatter
 │
+├── podcast/                    # Gen 5.0 Feature: Native Audio Podcast & RSS XML Parser
+│   ├── cog.py                  # Slash command: /podcast (search, browse episodes, play)
+│   └── parser.py               # iTunes namespace RSS XML parser with 10MB payload size guard
+│
 ├── quiz/                       # Feature: Interactive Blind Music Quiz (B-Tree Instant Sampling)
 │   ├── cog.py                  # Slash commands: /quiz start, /quiz leaderboard
 │   ├── engine.py               # Game session, difflib title matching, random track fetcher
 │   └── views.py                # 4-option UI buttons with atomic lock and answer validation
+│
+├── radio/                      # Gen 5.0 Feature: 24/7 Curated Web Radio & Livestream Directory
+│   ├── cog.py                  # Slash command: /radio (station directory & custom stream)
+│   ├── stations.json           # Curated web radio directory (lofi, synthwave, jazz, classical, news)
+│   └── watchdog.py             # Stream health monitor with bounded reconnect cap (MAX_RECONNECTS=10)
+│
+├── remaster/                   # Gen 5.0 Feature: Audio Clarity & Sub-Harmonic Remaster
+│   ├── cog.py                  # Slash commands: /remaster, /clarity (levels 1–5)
+│   └── filter.py               # crystalizer high-frequency recovery & 45Hz sub-bass punch
+│
+├── scheduler/                  # Gen 5.0 Feature: Server Music Scheduler & Alarm Clock
+│   ├── cog.py                  # Slash commands: /schedule add, list, remove
+│   └── service.py              # Time normalization & distributed worker task locking (locked_by)
 │
 ├── seek/                       # Feature: Hot-reload audio seeking
 │   ├── cog.py                  # Slash commands: /seek, /forward, /rewind, /replay, /restart
@@ -116,17 +136,13 @@ music-bot-v3/
 │   ├── router.py               # MultiSourceRouter (YouTube, Spotify, SoundCloud, Bandcamp)
 │   └── soundcloud.py           # Native SoundCloud track, set & search extractor
 │
-├── vocal/                      # Gen 5.0: Mid-Side Stereo Vocal Remover & Acapella Isolator
-│   ├── cog.py                  # Slash command: /vocal
-│   └── filter.py               # stereotools Mid-Side separation & bandpass filter
-│
-├── spatial/                    # Gen 5.0: Spatial 3D & Binaural Headphone Virtualizer
-│   ├── cog.py                  # Slash command: /spatial
+├── spatial/                    # Gen 5.0 Feature: Spatial 3D & Binaural Headphone Virtualizer
+│   ├── cog.py                  # Slash command: /spatial (binaural, hall, studio, club)
 │   └── filter.py               # earwax HRTF, hall, studio, club acoustic presets
 │
-├── remaster/                   # Gen 5.0: Audio Clarity & Sub-Harmonic Remaster
-│   ├── cog.py                  # Slash commands: /remaster, /clarity
-│   └── filter.py               # crystalizer high-frequency recovery & 45Hz sub-bass punch
+├── vocal/                      # Gen 5.0 Feature: Mid-Side Stereo Vocal Remover & Acapella Isolator
+│   ├── cog.py                  # Slash command: /vocal (remove, isolate, off)
+│   └── filter.py               # stereotools Mid-Side separation & bandpass filter
 │
 ├── cogs/                       # 14 Standard Discord Slash Cogs
 │   ├── music.py                # /play, /playnext, /search, /pause, /resume, /skip, /stop, /nowplaying
@@ -142,32 +158,33 @@ music-bot-v3/
 │   ├── analytics_cog.py        # /analytics heatmap, genre, peak, top, streak
 │   ├── health_cog.py           # /health, /cacheinfo (system diagnostics)
 │   ├── info.py                 # /history, /stats, /botstats, /help
-│   └── admin.py                # /djset, /requestchannel, /autoplaylist, /idletimeout
+│   └── admin.py                # /djset, /requestchannel, /autoresume, /autoplaylist, /idletimeout
 │
 ├── core/                       # Core Audio, Database & Stability Engine (18 modules)
-│   ├── audio.py                # AudioEffectsProcessor (9-stage FFmpeg filtergraph pipeline)
+│   ├── audio.py                # AudioEffectsProcessor (12-stage Studio DSP FFmpeg pipeline)
 │   ├── audio_backend.py        # FFmpegBackend (play/stop abstractions)
-│   ├── circuit_breaker.py      # 3-state circuit breaker (CLOSED / OPEN / HALF-OPEN)
-│   ├── database.py             # Enterprise MySQL 8.0+ pool (aiomysql) + self-healing + SQLite dual-write
+│   ├── circuit_breaker.py      # 3-state circuit breaker with Expected exception kind protection
+│   ├── database.py             # Enterprise MySQL 8.0+ pool (aiomysql) + self-healing + SQLite WAL dual-write
 │   ├── ffmpeg_pool.py          # Pre-warmed FFmpeg processes for instant playback start
+│   ├── gateway_monitor.py      # Gateway latency monitor with A–F grade classification & jitter detection
 │   ├── i18n.py                 # 9-Language localization engine with fallback resolution
 │   ├── lru_cache.py            # LRU caches with automatic memory pressure eviction
 │   ├── media_cache.py          # Background thumbnail prewarming & metadata refresh
 │   ├── metrics.py              # Runtime metrics collector (5-minute snapshots)
-│   ├── nlu.py                  # Regex NLU engine (EN + TH, 10 intents, zero API cost)
-│   ├── player.py               # GuildPlayer — queue, loop, volume, prefetch, audio filters
+│   ├── nlu.py                  # Regex NLU engine (EN + TH with boundary marks, 10 intents)
+│   ├── player.py               # GuildPlayer — queue, fair-share, loop, volume, filters, undo stack
 │   ├── self_test.py            # Startup self-test suite (database, audio, dependencies)
-│   ├── spotify.py              # Spotify parallel track/album resolver
+│   ├── spotify.py              # Spotify parallel track/album resolver with robust token refresh
 │   ├── stability.py            # 3-tier Exception taxonomy, DeadTaskWatchdog, MemoryLeakDetector
 │   ├── startup_validator.py    # Pre-login environment and dependency validator
 │   ├── validator.py            # 7-stage URL and query safety validator
 │   └── youtube.py              # yt-dlp wrapper with stream caching and pre-fetching
 │
-├── locales/                    # 9-Language Parity (249 keys each)
+├── locales/                    # 9-Language Parity (294 keys each)
 │   └── de/ en/ es/ fr/ ja/ ko/ ru/ th/ zh_cn/
 ├── models/                     # Enums, Track, and ServerConfig dataclasses
-├── tests/                      # 679 Automated tests (test_autoplay, test_dashboard, test_seek, etc.)
-└── utils/                      # Embed factories, Voice voting views, ColorThief, formatters
+├── tests/                      # 863 Automated tests (100% pass rate in ~8.5s)
+└── utils/                      # Embed factories, CleanBoardControlView, Voice voting views, ColorThief
 ```
 
 ---
@@ -189,7 +206,7 @@ music-bot-v3/
 ▶️ [──────●](url)────────────────────── [0:58/3:31] 🔉
 
 ──────────────────────────────────────────────────────────
-[bot avatar]  Music Bot Gen 4.0  •  Now Playing
+[bot avatar]  Music Bot Gen 5.0  •  Now Playing
 ```
 
 > **Two-Tone Accent Progress Bar (Width=32):**  
@@ -211,7 +228,17 @@ Underneath the now-playing embed, the bot displays a full 10-button interactive 
 
 ---
 
-### 3. Voice Democracy (Democratic Voting)
+### 3. Clean Board Channel Mode (`CleanBoardControlView`)
+
+Transform any designated text channel into a clutter-free, single-message music control station:
+- Enabled via `/requestchannel set channel:#music-request clean_mode:True` or `/requestchannel clean_mode enabled:True`.
+- Displays an interactive pinned embed showing live now-playing info, queue overview, volume, and playback controls.
+- Automatically deletes user query messages after processing to prevent channel spam.
+- Re-binds dynamically if the bot restarts or moves voice channels.
+
+---
+
+### 4. Voice Democracy (Democratic Voting)
 
 When non-DJ users request destructive actions, the bot initiates democratic voice voting:
 
@@ -230,28 +257,32 @@ Threshold: 3 votes required (50% of listeners)
 
 ---
 
-### 4. Interactive Components (Chapters & Synced Lyrics)
+### 5. Interactive Components (Chapters & Synced Lyrics)
 
-- **Video Chapters Navigator (`/chapters`):** A select menu dropdown displaying all chapters detected from YouTube metadata or video descriptions. Selecting a chapter triggers a hot-reload seek directly to that section.
-- **Synced Lyrics Display (`/lyrics`):** A paginated interactive embed displaying synchronized lyrics. The currently playing line is highlighted with `▶ [MM:SS] **Text**`, completed lines are dimmed, and a `🔄 Sync` button auto-scrolls to the current playback position.
+- **Video Chapters Navigator (`/chapters`):** Select menu dropdown displaying all chapters detected from YouTube metadata or video descriptions. Selecting a chapter triggers a hot-reload seek directly to that section.
+- **Synced Lyrics Display (`/lyrics`):** Paginated interactive embed displaying synchronized lyrics. Currently playing line is highlighted with `▶ [MM:SS] **Text**`, completed lines are dimmed, and a `🔄 Sync` button auto-scrolls to the current playback position.
 
 ---
 
 ## 🎧 Multi-Source Audio Engine
 
-Music Bot Gen 4.0 features a unified, zero-Lavalink audio routing architecture supporting four major platforms:
+Music Bot Gen 5.0 features a unified, zero-Lavalink audio routing architecture supporting six major platforms:
 
 ```mermaid
 graph LR
-    User["/play query"] --> Router["MultiSourceRouter"]
+    User["/play query / /radio / /podcast"] --> Router["MultiSourceRouter"]
     Router -->|YouTube URL / Search| YTDLP["YouTube Engine (yt-dlp)"]
     Router -->|Spotify Track / Album / Playlist| Spotify["Spotify Resolver"]
     Router -->|SoundCloud URL / /scsearch| Soundcloud["SoundCloud Engine"]
     Router -->|Bandcamp URL| Bandcamp["Bandcamp Engine"]
+    Router -->|24/7 Web Radio / /radio| Radio["Radio Engine & Watchdog"]
+    Router -->|Audio Podcast RSS / /podcast| Podcast["Podcast RSS Parser"]
     Spotify -->|Parallel Metadata Match| YTDLP
-    YTDLP --> Audio["FFmpeg DSP Pipeline"]
+    YTDLP --> Audio["Studio DSP Pipeline"]
     Soundcloud --> Audio
     Bandcamp --> Audio
+    Radio --> Audio
+    Podcast --> Audio
     Audio --> Discord["Discord Voice Channel"]
 ```
 
@@ -261,9 +292,11 @@ graph LR
 | **Spotify** | Tracks, Albums, Playlists | Parallel batch metadata resolver matching title and artist to highest-quality streams. |
 | **SoundCloud** | Tracks, Sets, Search (`/scsearch`) | Native extractor streaming directly with interactive dropdown selection. |
 | **Bandcamp** | Tracks, Full Discographies | Native stream extraction with metadata and album artwork retention. |
+| **24/7 Web Radio** | Curated Stations, Icecast/Shoutcast Streams | 24/7 continuous livestream playback with `RadioWatchdog` stall recovery. |
+| **Audio Podcasts** | RSS 2.0 Feeds, iTunes Enclosures | RSS feed parser with 10MB bounds, episode picker dropdown, and direct MP3 streaming. |
 
 ### 🛡️ VPS Anti-Bot & 429 Bypass (Feature 1.6)
-Running a Discord music bot on a VPS or cloud provider often triggers YouTube IP blocks (HTTP 429) or bot verification prompts. Gen 4.0 includes built-in countermeasures:
+Running a Discord music bot on a VPS or cloud provider often triggers YouTube IP blocks (HTTP 429) or bot verification prompts. Gen 5.0 includes built-in countermeasures:
 1. **Cookie File (`YTDL_COOKIE_FILE`):** Point to a standard Netscape-format `cookies.txt` exported from a web browser to authenticate stream requests. Safe to leave default; loaded only if the file exists on disk.
 2. **Proof-of-Origin Token (`YTDL_PO_TOKEN`):** Provide a YouTube PO-Token to authenticate playback sessions and bypass anti-bot challenges entirely.
 
@@ -271,34 +304,59 @@ Running a Discord music bot on a VPS or cloud provider often triggers YouTube IP
 
 ## 🎛 Studio DSP Audio Filtergraph Pipeline
 
-Every audio stream passes through `AudioEffectsProcessor` which compiles a single, seamless FFmpeg filtergraph:
+Every audio stream passes through `AudioEffectsProcessor` which compiles a single, seamless 12-stage FFmpeg filtergraph:
 
 ```text
-Raw Stream
+Raw Audio Stream
     │
     ▼ [1. Silence Trim]          silenceremove (intro/outro silence strip)
     │
-    ▼ [2. Equalizer]             equalizer (4-band or 10-band custom / presets)
+    ▼ [2. 4-Band Equalizer]      equalizer (bass, mid-low, mid-high, treble)
     │
     ▼ [3. Pan & Soundstage]      pan (L-R balance) & extrastereo (widening)
     │
-    ▼ [4. Speed Control]         atempo chain (0.1× to 10.0× speed preservation)
+    ▼ [4. Speed Control]         atempo chain (0.5× to 2.0× speed preservation)
     │
     ▼ [5. Pitch Shift]           asetrate + aresample + atempo (semitone shifting)
     │
-    ▼ [6. 18 DSP Audio FX]       bass, nightcore, 8D, vaporwave, reverb, chorus...
+    ▼ [6. Vocal Remover/Isolate] stereotools Mid-Side separation & bandpass
     │
-    ▼ [7. Volume Scaling]        volume=X.XX (0% to 200% linear control)
+    ▼ [7. Spatial 3D Virtualizer]earwax HRTF, hall, studio, club acoustic presets
     │
-    ▼ [8. Loudness Normalizer]   dynaudnorm (ReplayGain) OR loudnorm (EBU R128)
+    ▼ [8. Remaster & Clarity]    crystalizer harmonic restoration & 45Hz sub-bass punch
     │
-    ▼ [9. Seamless Crossfade]    afade (smooth track-to-track fade transitions)
+    ▼ [9. 18 DSP Audio FX]       bass, nightcore, 8D, vaporwave, reverb, chorus...
+    │
+    ▼ [10. Volume Scaling]       volume=X.XX (0% to 200% linear control)
+    │
+    ▼ [11. Loudness Normalizer]  dynaudnorm (ReplayGain) OR loudnorm (EBU R128)
+    │
+    ▼ [12. Gapless / Crossfade]  afade / continuous buffer transition
     │
     ▼
 PCM Output (48 kHz, 16-bit Stereo) ➔ Discord Voice Gateway
 ```
 
-### 1. 18 Built-in Audio Effects (`/effects <name>`)
+### 1. Mid-Side Stereo Vocal Remover & Acapella Isolator (`/vocal`)
+- `/vocal mode:remove suppression:1-100`: Removes center-panned vocal frequencies for karaoke sing-along.
+- `/vocal mode:isolate`: Isolates center lead vocals by subtracting side stereo components.
+- `/vocal mode:off`: Restores standard stereo mix.
+
+### 2. Spatial 3D & Binaural Virtualizer (`/spatial`)
+- `binaural`: Uses HRTF (Head-Related Transfer Function) `earwax` filter designed for immersive headphone listening.
+- `hall`: Simulates large concert hall acoustics with extended reverberation.
+- `studio`: Intimate studio acoustics with tight early reflections.
+- `club`: Nightclub acoustic profile with punchy low-frequency resonance.
+
+### 3. Studio Audio Remaster & Clarity (`/remaster`, `/clarity`)
+- `/remaster enabled:True`: Engages high-frequency harmonic restoration (`crystalizer`) coupled with a 45Hz sub-bass punch.
+- `/clarity level:1-5`: Adjusts harmonic clarity intensity (capped <= 3.0 to prevent listening fatigue).
+
+### 4. Seamless Gapless Mixing & Synthetic Chimes (`/gapless`, `/chimes`)
+- `/gapless enabled:True`: Strips input/output buffer dead air between consecutive songs for continuous party or DJ transitions.
+- `/chimes enabled:True`: Generates fileless synthesized sine-wave chimes on track completion or skip without disk assets.
+
+### 5. 18 Built-in Audio Effects (`/effects <name>`)
 Apply and stack real-time audio transformations on the fly:
 - **Bass Boost:** `bass=g=15,dynaudnorm`
 - **Nightcore:** `asetrate=48000*1.25,aresample=48000,atempo=1.06`
@@ -308,7 +366,7 @@ Apply and stack real-time audio transformations on the fly:
 - **Karaoke:** `pan=mono|c0=0.5*c0+-0.5*c1` (center vocal phase inversion)
 - **Echo / Reverb / Chorus / Vibrato / Tremolo / Distortion / Treble Boost / Mono / Stereo Enhance / Compressor / Limiter / Noise Gate**
 
-### 2. 4-Band Studio Equalizer (`/equalizer`, `/eq`)
+### 6. 4-Band Studio Equalizer (`/equalizer`, `/eq`)
 Control frequency bands independently (-10.0 dB to +10.0 dB):
 - **Bass:** Low-shelf at 100 Hz
 - **Mid-Low:** Peaking filter at 500 Hz
@@ -316,29 +374,25 @@ Control frequency bands independently (-10.0 dB to +10.0 dB):
 - **Treble:** High-shelf at 8000 Hz
 - **8 Built-in Presets:** `flat`, `bass_boost`, `vocal`, `treble_boost`, `rock`, `electronic`, `rnb`, `classical`.
 
-### 3. EBU R128 Smart Loudness Normalization (`/loudnorm`)
-Broadcast-standard loudness normalization (`loudnorm=I=-16:TP=-1.5:LRA=11`) eliminating volume jumps between quiet acoustic tracks and compressed modern masters without clipping or distortion.
-
-### 4. Pan Balance & Stereo Soundstage (`/pan`, `/stereowide`)
-- `/pan <balance>`: Shift audio weight from full left (`-1.0`) to center (`0.0`) to full right (`+1.0`).
-- `/stereowide <width>`: Expand acoustic soundstage from Mono (`0.0x`), Narrow (`0.5x`), Normal (`1.0x`), Wide (`1.5x`), to Ultra-Wide (`2.0x`).
-
-### 5. Loop A-B Segment Repeat (`/loopab`)
-Loop any specific segment within a song with millisecond accuracy (e.g., `/loopab 1:15 2:05`). Playback repeats seamlessly between timestamps until toggled off via `/loopab off` or when the track finishes.
+### 7. EBU R128 Smart Loudness Normalization (`/loudnorm`)
+Broadcast-standard loudness normalization (`loudnorm=I=-16:TP=-1.5:LRA=11`) eliminating volume jumps between quiet acoustic tracks and compressed modern masters without clipping:
+- Profiles: `broadcast`, `podcast`, `background`, `party`.
 
 ---
 
-## 🌐 Local Offline Web Dashboard & REST API v1
+## 🌐 Local Offline Web Dashboard v2 & REST API v1
 
-Music Bot Gen 4.0 provides a self-contained local web dashboard served directly on `WEB_HOST:WEB_PORT` (default `http://localhost:8080`).
+Music Bot Gen 5.0 provides a self-contained local web dashboard served directly on `WEB_HOST:WEB_PORT` (default `http://localhost:8080`).
 
 ### ⚡ 100% Offline Architecture
-The web player requires **zero external network requests or third-party CDNs**. CSS fonts and JavaScript controllers are embedded directly into the application, ensuring full operation in isolated intranets, air-gapped networks, or private home labs.
+The web player requires **zero external network requests or third-party CDNs**. CSS fonts, Canvas Spectrum visualizers, and JavaScript controllers are embedded directly into the application, ensuring full operation in isolated intranets, air-gapped networks, or private home labs.
 
 ### 🎛 Interactive Web Features
 - **Live Player Controls:** Play, pause, skip, interactive seekbar, and volume slider (0–200%).
+- **HTML5 Canvas Spectrum Visualizer:** Real-time animated audio frequency bar visualization.
 - **Drag-and-Drop Queue:** Reorder pending songs in real time using native HTML5 drag-and-drop.
-- **Search & Add:** Search tracks and add them directly to the active queue from your browser.
+- **Preset Manager:** Save and load equalizer and effect configurations directly from the browser.
+- **Click-to-Seek Synced Lyrics:** Click any line in synced lyrics to jump directly to that timestamp.
 - **Real-Time WebSockets:** Bi-directional state synchronization via `/ws/dashboard` ensuring instantaneous UI updates when Discord users execute commands.
 
 ### 📡 REST API Endpoints
@@ -347,7 +401,7 @@ All endpoints support optional authentication via `API_SECRET` (`Authorization: 
 
 | Method | Endpoint | Description |
 |:---:|---|---|
-| `GET` | `/` or `/dashboard` | Self-contained HTML/CSS/JS dashboard UI |
+| `GET` | `/` or `/dashboard` | Self-contained HTML/CSS/JS dashboard v2 UI |
 | `GET` | `/health` | Bot health status check (`{"status":"ok"}`) |
 | `GET` | `/status` | Full bot JSON status snapshot (players, uptime, circuits) |
 | `GET` | `/ready` | Kubernetes/Docker readiness probe (200 OK or 503) |
@@ -373,7 +427,7 @@ All endpoints support optional authentication via `API_SECRET` (`Authorization: 
 
 ## 🎛 Comprehensive Slash Command Reference
 
-Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specialized domains:
+Music Bot Gen 5.0 provides over **50 slash commands** organized into 11 specialized domains:
 
 ### 1. 🎵 Core Playback
 | Command | Arguments | Description |
@@ -390,6 +444,7 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/leave` | — | Disconnect the bot from voice and clear the queue. |
 | `/clip` | `[duration: 10-30s]` | Cut a 10–30s audio segment from currently playing track and send as MP3 file. |
 | `/grab` | — | Send current playing track details, URL, and high-res cover art directly to your DMs. |
+| `/playfile` | `file: Attachment` | Stream an uploaded MP3, FLAC, WAV, or OGG file directly. |
 
 ### 2. 🗳️ Democratic Voice Voting
 | Command | Description |
@@ -398,7 +453,7 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/voteshuffle` | Start a democratic vote to shuffle the server queue. |
 | `/voteclear` | Start a democratic vote to clear all songs from the queue. |
 
-### 3. 📋 Queue Operations & Control
+### 3. 📋 Queue Operations, Fairness & Bookmarks
 | Command | Arguments | Description |
 |---|---|---|
 | `/queue` | `[page: int] [mode: fifo\|fair] [per_user_limit: int]` | View server queue, toggle fair-share round-robin scheduling, or configure per-user limit. |
@@ -416,6 +471,10 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/duplicates` | `mode: str` | Configure duplicate track handling (`allow`, `warn`, `block`). |
 | `/qexport` | `[fmt: json\|csv\|txt]` | Export the current server queue to a downloadable file. |
 | `/qimport` | `[mode: append\|replace]` | Import a previously saved queue file. |
+| `/bookmark save` | `name: str` | Create a named snapshot of the current queue. |
+| `/bookmark load` | `name: str`, `[mode: append\|replace]` | Restore a queue snapshot. |
+| `/bookmark list` | — | List all saved bookmarks for this server. |
+| `/bookmark delete`| `name: str` | Delete a saved queue bookmark. |
 
 ### 4. ⏩ Seeking & Looping
 | Command | Arguments | Description |
@@ -435,12 +494,14 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/lyrics` | `[sync: bool]` | Display synchronized lyrics with interactive paginator and live line tracking. |
 | `/autoplay` | `mode: on\|off\|status` | Toggle Smart Autoplay (YouTube Radio Mix recommendations). |
 
-### 6. 🔊 Multi-Source Search
+### 6. 📻 Multi-Source Streaming, Web Radio & Podcasts
 | Command | Arguments | Description |
 |---|---|---|
 | `/scsearch` | `query: str` | Search SoundCloud and select tracks via interactive dropdown. |
+| `/radio` | `[station: str] [custom_url: str] [custom_name: str]` | Stream 24/7 curated web radio (Lofi, Synthwave, Classical, etc.) or custom Icecast URL. |
+| `/podcast` | `[feed_url: str] [search: str]` | Parse podcast RSS XML feed, browse episodes, and stream directly. |
 
-### 7. 🎚 Audio DSP, Equalizer & Soundstage
+### 7. 🎚 Studio DSP Audio Engine & Filtergraph
 | Command | Arguments | Description |
 |---|---|---|
 | `/volume` | `volume: 0–200` | Adjust playback volume percentage. |
@@ -452,8 +513,8 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/loudnorm` | `[profile: str] [enabled: bool]` | EBU R128 Smart Loudnorm: `broadcast`, `podcast`, `background`, `party`. |
 | `/pan` | `balance: float` | Adjust audio balance from full left (`-1.0`) to full right (`+1.0`). |
 | `/stereowide` | `width: float` | Set stereo soundstage width: Mono (`0.0x`) to Ultra-Wide (`2.0x`). |
-| `/speed` | `rate: float` | Set playback speed (0.75× to 2.0×) without pitch changes. |
-| `/pitch` | `semitones: int` | Shift pitch (-2 to +2 semitones) without tempo changes. |
+| `/speed` | `rate: float` | Set playback speed (0.5× to 2.0×) without pitch changes. |
+| `/pitch` | `semitones: int` | Shift pitch (-6 to +6 semitones) without tempo changes. |
 | `/crossfade` | `duration: int` | Set track crossfade duration (0s, 3s, 5s, 8s). |
 | `/silencetrim` | — | Toggle automatic silence trimming from track intro and outro. |
 | `/replaygain` | — | Toggle dynamic audio loudness normalization (`dynaudnorm`). |
@@ -465,7 +526,7 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/chimes` | `[enabled: bool]` | Toggle fileless synthesized notification chimes on track skip / completion. |
 | `/playbackinfo` | — | Display all active audio enhancement and DSP settings. |
 
-### 8. 🎨 Customization, Favorites & Playlists
+### 8. 🎨 Customization, Favorites, Multi-Playlists & Presets
 | Command | Arguments | Description |
 |---|---|---|
 | `/playlist create` | `name: str [public: bool]` | Create a personal or guild-shared playlist. |
@@ -479,10 +540,6 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/favorite list` | `[user: member]` | Browse your (or another user's) saved favorite tracks. |
 | `/favorite play` | `name: str` | Enqueue a saved favorite with fuzzy title matching. |
 | `/favorite remove`| `name: str` | Delete a saved track from your favorites. |
-| `/bookmark save` | `name: str` | Create a named snapshot of the current queue. |
-| `/bookmark load` | `name: str`, `[mode]` | Restore a queue snapshot (`append` or `replace`). |
-| `/bookmark list` | — | List all saved bookmarks for this server. |
-| `/bookmark delete`| `name: str` | Delete a saved queue bookmark. |
 | `/preset load` | `name: str` | Load a bundled audio preset (Gaming, Study, Anime, Chill, or custom). |
 | `/preset save` | `name: str` | Save current audio/effects settings as a guild preset. |
 | `/preset list` | — | List all available built-in and guild presets. |
@@ -494,21 +551,20 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/language` | `locale: str` | Switch UI language across 9 supported languages. |
 | `/languageinfo` | — | Display current language and list all supported locales. |
 
-### 9. ⚙️ Administration & Diagnostics
+### 9. ⏰ Server Governance, Automation & Scheduler
 | Command | Arguments | Description |
 |---|---|---|
+| `/schedule add` | `time: str query: str [voice_channel: Voice] [repeat: str]` | Schedule automatic music playback at a specific time (Daily, Weekdays, Weekends, Once). |
+| `/schedule list` | — | List all active scheduled playback tasks for this server. |
+| `/schedule remove` | `task_id: int` | Cancel and delete a scheduled playback alarm. |
+| `/requestchannel set` | `channel: Text [clean_mode: bool]` | Designate a dedicated request channel with optional Clean Board Mode. |
+| `/requestchannel clean_mode`| `enabled: bool` | Toggle single-message Clean Player Board mode with auto-deleting queries. |
+| `/requestchannel clear`| — | Remove dedicated request channel. |
+| `/autoresume` | `state: on\|off` | Configure automatic voice reconnection and playback resumption on reboot. |
 | `/djset role` | `role: Role` | Restrict control commands to a specific DJ role. |
 | `/djset clear` | — | Remove DJ role requirement (allow all members to control). |
-| `/requestchannel set` | `channel: Text` | Designate a text channel for NLU-powered song requests. |
-| `/requestchannel clear`| — | Remove dedicated request channel. |
 | `/autoplaylist` | `mode: on\|off` | Toggle auto-enqueue from history when queue empties. |
 | `/idletimeout` | `seconds: int` | Configure idle auto-disconnect timeout (60–3600 seconds). |
-| `/history` | `[user: member]` | Show recent play history for the server or a member. |
-| `/stats` | `[user: member]` | Show listening statistics: tracks requested and listening time. |
-| `/botstats` | — | Display bot metrics: guilds, active players, memory, and circuits. |
-| `/health` | — | Full diagnostic report: caches, memory, self-test status, and circuit breakers. |
-| `/cacheinfo` | — | Detailed statistics on LRU caches, hit rates, and evictions. |
-| `/help` | — | Interactive command guide and documentation. |
 
 ### 10. 🎮 Community & Gamification
 | Command | Arguments | Description |
@@ -516,11 +572,23 @@ Music Bot Gen 4.0 provides over **40 slash commands** organized into 9 specializ
 | `/quiz start` | `[rounds: int] [source: history\|favorites\|playlist]` | Launch interactive blind music quiz with 4-choice buttons and chat guesses. |
 | `/quiz leaderboard`| — | View server music quiz top score leaderboard. |
 
+### 11. ⚙️ Administration, Diagnostics & Telemetry
+| Command | Arguments | Description |
+|---|---|---|
+| `/analytics` | `subcommand: heatmap\|genre\|peak\|top\|streak` | Server listening habits, peak listening hours, and favorite genres. |
+| `/history` | `[user: member]` | Show recent play history for the server or a member. |
+| `/stats` | `[user: member]` | Show listening statistics: tracks requested and listening time. |
+| `/botstats` | — | Display bot metrics: guilds, active players, memory, and circuits. |
+| `/health` | — | Full diagnostic report: caches, memory, self-test status, and circuit breakers. |
+| `/cacheinfo` | — | Detailed statistics on LRU caches, hit rates, and evictions. |
+| `/help` | — | Interactive command guide and documentation. |
+| `/dashboard` | — | Get the direct link to the local offline web dashboard. |
+
 ---
 
 ## 🌍 Universal 9-Language Localization (i18n)
 
-Music Bot Gen 4.0 achieves **100% translation parity across 9 major global languages**. Every language catalogue contains an identical set of **294 localized keys** with matching string formatting placeholders:
+Music Bot Gen 5.0 achieves **100% translation parity across 9 major global languages**. Every language catalogue contains an identical set of **294 localized keys** with matching string formatting placeholders:
 
 | Flag | Language | Locale Code | Aliases | Key Count | Parity Status |
 |:---:|---|:---:|---|:---:|:---:|
@@ -568,7 +636,7 @@ Copy `.env.example` to `.env` and configure your settings:
 | `DB_CONNECT_TIMEOUT` | `10.0` | Socket connect timeout in seconds. |
 | `DB_DEADLOCK_RETRIES`| `3` | Maximum automatic retries for Error 1213 / 1205 with jittered backoff. |
 | `DB_MIGRATION_MODE` | `mysql` | Mode: `mysql` (cutover), `dual_write` (sync write), or `sqlite_fallback`. |
-| `DATABASE_PATH` | `data/musicbot.db` | Legacy SQLite database path (used during migration and fallback). |
+| `DATABASE_PATH` | `data/musicbot.db` | SQLite database path (WAL mode enabled with 5000ms busy timeout). |
 | `ANALYTICS_RETENTION_DAYS` | `90` | Automatic retention policy for listening analytics. |
 | `WORKER_ID` | `worker-1` | Unique instance ID for distributed task locking (`locked_by`). |
 | `DASHBOARD_STANDALONE_POOL` | `false` | Enable independent connection pool for Dashboard process. |
@@ -580,7 +648,6 @@ Copy `.env.example` to `.env` and configure your settings:
 |---|---|---|
 | `SPOTIFY_CLIENT_ID` | *(empty)* | Spotify Developer Client ID (leave empty to disable Spotify). |
 | `SPOTIFY_CLIENT_SECRET` | *(empty)* | Spotify Developer Client Secret. |
-| `DATABASE_PATH` | `data/musicbot.db` | SQLite database file location (WAL mode enabled automatically). |
 | `SYNC_COMMANDS` | `false` | Sync slash commands on startup (set to `true` once after command edits). |
 | `AUTO_RESUME` | `false` | Restore queue, loop mode, volume, and playback state after restart. |
 | `IDLE_TIMEOUT` | `300` | Seconds before auto-disconnecting from empty voice channels. |
@@ -659,7 +726,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env and fill in DISCORD_TOKEN and APP_ID
 
-# 5. Launch Music Bot Gen 4.0
+# 5. Launch Music Bot Gen 5.0
 python main.py
 ```
 
@@ -695,12 +762,12 @@ The repository includes a ready-to-deploy [`render.yaml`](render.yaml) blueprint
 
 ## 🏛️ Enterprise MySQL 8.0+ Database Architecture & Migration
 
-Music Bot Gen 4.0/5.0 transitions from SQLite single-writer serialization to an enterprise async MySQL 8.0+ engine powered by pure asyncio `aiomysql`.
+Music Bot Gen 5.0 transitions from SQLite single-writer serialization to an enterprise async MySQL 8.0+ engine powered by pure asyncio `aiomysql` alongside SQLite WAL dual-write.
 
 ### 1. Architectural Highlights
 - **High-Performance Async Pool**: `aiomysql.create_pool` with min 5 / max 25 warm connections, `utf8mb4` charset, and strict transaction demarcation (`autocommit=False`).
 - **Self-Healing Connection Pool**: Automatic health checks (`conn.ping(reconnect=True)`), transparent auto-reconnect on MySQL Server has gone away (Error 2006/2013), and automatic InnoDB deadlock retry (Error 1213/1205) with exponential backoff and jitter.
-- **Enterprise Normalized Schema (9 Table Groups)**:
+- **Enterprise Normalized Schema (10 Table Groups)**:
   - `server_configs`: 20 normalized columns replacing generic blobs.
   - `queue`: Guild queue ordered by position with composite indexes.
   - `history`: Partitioned by range using `TO_DAYS(played_at)` with `PRIMARY KEY (id, played_at)`.
@@ -723,24 +790,19 @@ python scripts/migrate_sqlite_to_mysql.py --sqlite-path data/musicbot.db --dry-r
 python scripts/migrate_sqlite_to_mysql.py --sqlite-path data/musicbot.db --batch-size 1000 --verify
 ```
 
-### 3. Evolutionary Roadmap
-- **Phase 1 (Centralized)**: Single MySQL 8.0+ primary instance with connection pooling.
-- **Phase 2 (Decoupled Dashboard & Worker)**: Standalone connection pool separation (`DASHBOARD_STANDALONE_POOL=true`) and distributed task locking (`locked_by`).
-- **Phase 3 (High-Availability Scale)**: Master-Replica read/write splitting (`DB_REPLICA_HOST`) and guild modulo sharding (`DB_SHARDS_JSON`).
-
 ---
 
-## 🛡️ Enterprise Stability & 679-Test Suite
+## 🛡️ Enterprise Stability & 863-Test Suite
 
 ### 1. 11 Background Loop Watchdogs
-Music Bot Gen 4.0 runs 11 background tasks that continuously maintain bot health and recover from anomalies:
+Music Bot Gen 5.0 runs 11 background tasks that continuously maintain bot health and recover from anomalies:
 
 | Task Loop | Interval | Architectural Purpose |
 |---|:---:|---|
 | `_idle_check` | 30 s | Automatically disconnects idle voice channels and prunes inactive players. |
-| `_queue_save` | 5 min | Persists server queues to database (MySQL or SQLite fallback). |
+| `_queue_save` | 5 min | Persists server queues to database (MySQL or SQLite WAL fallback). |
 | `_scheduled_playback` | 30 s | Evaluates due scheduled playback alarms with distributed task locking (`locked_by`). |
-| `_np_refresh` | 7 s | Smoothly updates the now-playing embed's two-tone progress bar. |
+| `_np_refresh` | 7 s | Smoothly updates the now-playing embed's two-tone 32-segment progress bar. |
 | `_cache_prune` | 30 min | Evicts expired yt-dlp stream URLs, search results, and media caches. |
 | `_analytics_prune` | 24 h | Prunes listening analytics records older than 90 days and maintains history partitions. |
 | `_session_heartbeat` | 60 s | Saves full player states (queue, volume, loop, effects, position) to disk. |
@@ -751,8 +813,21 @@ Music Bot Gen 4.0 runs 11 background tasks that continuously maintain bot health
 
 ---
 
-### 2. Automated Test Suite (679 Tests Passed)
-The codebase includes a comprehensive automated test suite covering unit tests, property-based tests (Hypothesis), concurrency simulations, and 100% translation parity verification:
+### 2. Gateway Latency & Resilience Telemetry
+The `GatewayLatencyMonitor` tracks Discord WebSocket heartbeats in real time:
+- **Rolling Window**: Computes running average, minimum, maximum, and packet jitter across a 60-sample window.
+- **Network Quality Grading**: Categorizes connection quality into letter grades:
+  - **Grade A**: `< 60ms` (Ideal)
+  - **Grade B**: `60–120ms` (Good)
+  - **Grade C**: `120–250ms` (Acceptable)
+  - **Grade D**: `250–500ms` (Degraded)
+  - **Grade F**: `> 500ms` (Severe Lag / Packet Loss)
+- **Spike Detection**: Alerts developers on latency spikes exceeding 2.5x normal baseline with throttle controls.
+
+---
+
+### 3. Automated Test Suite (863 Tests Passed)
+The codebase includes a comprehensive automated test suite covering unit tests, property-based tests (Hypothesis), concurrency stress simulations, and 100% translation parity verification:
 
 ```bash
 # Run complete test suite
@@ -765,24 +840,29 @@ python -m pytest --durations=10
 ```text
 ============================= test session starts =============================
 platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
-collected 679 items
+collected 863 items
 
-tests/test_autoplay.py ............................                      [  4%]
+tests/test_autoplay.py ............................                      [  3%]
+tests/test_backup_manager.py .....                                       [  4%]
 tests/test_bugfixes.py ............                                      [  5%]
 tests/test_bugfixes_round2.py ............                               [  7%]
-tests/test_bugfixes_round3.py ..............                             [  9%]
-tests/test_chapters.py .                                                 [  9%]
-tests/test_dashboard.py .......................                          [ 13%]
-tests/test_filtergraph_round2.py .....................                   [ 16%]
-tests/test_i18n.py ..................................................... [ 24%]
-........................................................................ [ 79%]
-tests/test_perf_stability_i18n.py ...................................... [ 86%]
-tests/test_playnext.py ........                                          [ 87%]
-tests/test_seek.py ..................................................... [ 96%]
-tests/test_shuffle.py ......                                             [ 97%]
-tests/test_voice_voting.py ....................                          [100%]
+tests/test_bugfixes_round3.py ..............                             [  8%]
+tests/test_chapters.py .                                                 [  8%]
+tests/test_concurrency_stress.py .................                       [ 10%]
+tests/test_dashboard.py ................................................ [ 16%]
+tests/test_database_migration.py .................                       [ 18%]
+tests/test_filtergraph_round2.py .....................                   [ 20%]
+tests/test_i18n.py ..................................................... [ 27%]
+........................................................................ [ 81%]
+tests/test_perf_stability_i18n.py ...................................... [ 85%]
+tests/test_phase2_stability.py ......................................... [ 90%]
+tests/test_playnext.py ........                                          [ 91%]
+tests/test_seek.py ..................................................... [ 97%]
+tests/test_shuffle.py ......                                             [ 98%]
+tests/test_slash_commands.py ..........                                  [ 99%]
+tests/test_studio_dsp.py ......................................          [100%]
 
-====================== 679 passed, 10 warnings in 6.59s =======================
+====================== 863 passed, 19 warnings in 8.56s =======================
 ```
 
 ---
