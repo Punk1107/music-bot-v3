@@ -123,9 +123,14 @@ class SpotifyExtractor:
         self, item: dict, youtube: "YouTubeExtractor"
     ) -> Optional["Track"]:
         """Convert one Spotify track dict to a Track via YouTube search."""
-        name    = item.get("name", "")
-        artists = ", ".join(a["name"] for a in item.get("artists", []))
-        query   = f"{name} {artists}".strip()
+        if not isinstance(item, dict):
+            return None
+        name = item.get("name", "")
+        raw_artists = item.get("artists")
+        artists = ", ".join(
+            a.get("name", "") for a in raw_artists if isinstance(a, dict) and a.get("name")
+        ) if isinstance(raw_artists, list) else ""
+        query = f"{name} {artists}".strip()
         if not query:
             return None
         async with self._sem:
