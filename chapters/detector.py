@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 import re
 from dataclasses import dataclass
 from typing import Optional
 
 import yt_dlp
+
+import config
 
 logger = logging.getLogger(__name__)
 
@@ -151,10 +154,15 @@ _CHAPTER_OPTS: dict = {
     "skip_download":      True,
     "extract_flat":       False,
     "noplaylist":         True,
+    "socket_timeout":     15,
     "extractor_args": {
         "youtube": {"player_client": ["android", "mweb", "web"]},
     },
 }
+
+_cookie_path = Path(config.YTDL_COOKIE_FILE)
+if _cookie_path.is_file():
+    _CHAPTER_OPTS["cookiefile"] = str(_cookie_path)
 
 
 def _fetch_chapter_metadata(video_url: str) -> dict:

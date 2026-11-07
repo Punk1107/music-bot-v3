@@ -78,6 +78,7 @@ def mock_bot(dummy_track):
     bot.seek = MagicMock()
     bot.seek.seek_to = AsyncMock(return_value=True)
     bot.seek.hot_reload = AsyncMock(return_value=True)
+    bot.sources_router = None
 
     # Mock youtube on bot
     bot.youtube = MagicMock()
@@ -959,7 +960,7 @@ class TestDashboardNextGenV2:
 
         # set_equalizer triggers update_clean_board
         mock_bot.update_clean_board.reset_mock()
-        res_eq = await svc.set_equalizer(111, preset="bass_boost")
+        res_eq = await svc.set_equalizer(111, preset="rock")
         assert res_eq["success"] is True
         mock_bot.update_clean_board.assert_called_with(111)
 

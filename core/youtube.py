@@ -17,6 +17,7 @@ Provides:
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import re
 import time
@@ -230,7 +231,12 @@ class YouTubeExtractor:
     @classmethod
     def _entry_to_track(cls, entry: dict) -> Track | None:
         title = entry.get("title")
-        url   = entry.get("webpage_url") or entry.get("url")
+        raw_url = entry.get("webpage_url") or entry.get("url")
+        video_id = entry.get("id")
+        if raw_url and not raw_url.startswith(("http://", "https://")):
+            url = f"https://www.youtube.com/watch?v={raw_url}"
+        else:
+            url = raw_url or (f"https://www.youtube.com/watch?v={video_id}" if video_id else None)
         if not title or not url:
             return None
         duration = entry.get("duration") or 0
@@ -439,7 +445,6 @@ class YouTubeExtractor:
                 cached_tracks, ts = entry
                 if now - ts < config.SEARCH_CACHE_TTL:
                     logger.debug("Search cache hit for '%s'", query)
-                    import copy
                     cloned: list[Track] = []
                     for t_item in cached_tracks:
                         c = copy.copy(t_item)
@@ -451,7 +456,7 @@ class YouTubeExtractor:
 
         info = await self._extract(
             f"ytsearch{max_results}:{query.strip()}",
-            opts={**_META_OPTS, "extract_flat": False},
+            opts={**_META_OPTS, "extract_flat": max_results > 1},
         )
         if not info or "entries" not in info:
             return []

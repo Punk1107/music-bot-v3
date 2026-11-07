@@ -58,6 +58,7 @@ class CircuitBreaker:
         self._state:         BreakerState = BreakerState.CLOSED
         self._failure_count: int          = 0
         self._last_failure:  float        = 0.0
+        self._probe_in_progress: bool     = False
         self._lock:          asyncio.Lock = asyncio.Lock()
 
         # V3 metrics
@@ -93,6 +94,7 @@ class CircuitBreaker:
         self._state         = BreakerState.CLOSED
         self._failure_count = 0
         self._last_failure  = 0.0
+        self._probe_in_progress = False
         logger.info("CircuitBreaker '%s' manually reset to CLOSED.", self.name)
 
     # ── Core call logic ───────────────────────────────────────────────────────
@@ -104,6 +106,7 @@ class CircuitBreaker:
         Raises CircuitBreakerOpen if the breaker is OPEN and the recovery window
         has not elapsed. Raises the original exception on actual function failure.
         """
+        is_probe = False
         async with self._lock:
             self.total_calls += 1
 
@@ -113,6 +116,13 @@ class CircuitBreaker:
                     logger.info("CircuitBreaker '%s' → HALF_OPEN (probe).", self.name)
                 else:
                     raise CircuitBreakerOpen(self.name)
+
+            if self._state == BreakerState.HALF_OPEN:
+                if self._probe_in_progress:
+                    # A probe is already in flight; reject subsequent callers until probe completes
+                    raise CircuitBreakerOpen(self.name)
+                self._probe_in_progress = True
+                is_probe = True
 
         # ── Execute the actual call (outside lock to avoid blocking other calls)
         try:
@@ -124,6 +134,10 @@ class CircuitBreaker:
             async with self._lock:
                 self._on_failure(exc)
             raise
+        finally:
+            if is_probe:
+                async with self._lock:
+                    self._probe_in_progress = False
 
     def _on_success(self) -> None:
         if self._state in (BreakerState.HALF_OPEN, BreakerState.OPEN):
@@ -133,11 +147,13 @@ class CircuitBreaker:
         # Bug 8: also reset _last_failure timestamp so the recovery window
         # calculation is correct if the breaker opens again later.
         self._last_failure  = 0.0
+        self._probe_in_progress = False
 
     def _on_failure(self, exc: Exception) -> None:
         self.total_failures += 1
         self._failure_count += 1
         self._last_failure   = time.monotonic()
+        self._probe_in_progress = False
 
         if self._state == BreakerState.HALF_OPEN or self._failure_count >= self.failure_threshold:
             if self._state != BreakerState.OPEN:
