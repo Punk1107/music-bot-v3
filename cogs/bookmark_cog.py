@@ -263,6 +263,10 @@ class BookmarkCog(commands.Cog, name="Bookmark"):
 
         if mode == "replace" and was_active and vc:
             vc.stop()
+        elif vc and not vc.is_playing() and not vc.is_paused():
+            music_cog = self.bot.get_cog("Music")
+            if music_cog and hasattr(music_cog, "_play_next"):
+                self.bot.track_task(music_cog._play_next(interaction.guild_id))
 
         if vc:
             self.bot.track_task(

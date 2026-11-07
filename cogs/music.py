@@ -280,6 +280,11 @@ class MusicCog(commands.Cog, name="Music"):
 
         # Not connected — join the user's channel
         try:
+            if vc:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    pass
             vc = await user_channel.connect(timeout=10.0, reconnect=True)
             player = self.bot.get_player(interaction.guild_id)
             player.last_channel_id        = user_channel.id
@@ -329,6 +334,12 @@ class MusicCog(commands.Cog, name="Music"):
                         attempt, config.RECONNECT_ATTEMPTS, guild_id, delay)
             await asyncio.sleep(delay)
             try:
+                old_vc = guild.voice_client
+                if old_vc:
+                    try:
+                        await old_vc.disconnect(force=True)
+                    except Exception:
+                        pass
                 vc = await channel.connect(timeout=10.0, reconnect=True)
                 # Bug 2: update last_channel_id so future reconnects use correct channel
                 player.last_channel_id = channel.id
@@ -760,7 +771,11 @@ class MusicCog(commands.Cog, name="Music"):
             return
 
         next_track = queue[0]
-        if next_track.stream_url_cache and next_track.stream_url_expires is None:
+        import time as _time
+        if next_track.stream_url_cache and (
+            next_track.stream_url_expires is None
+            or _time.monotonic() < next_track.stream_url_expires - 60
+        ):
             return
         dur = current_track.duration or 60
 

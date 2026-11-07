@@ -735,6 +735,7 @@ class QueueCog(commands.Cog, name="Queue"):
             )
         if vc:
             if vc.is_playing() or vc.is_paused():
+                player._was_skipped = True
                 vc.stop()  # after_play fires _play_next which picks up the jumped-to track
             else:
                 music_cog = self.bot.get_cog("Music")
