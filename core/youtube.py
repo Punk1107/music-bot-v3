@@ -398,7 +398,11 @@ class YouTubeExtractor:
         entry = (result.get("entries") or [result])[0]
         if not entry:
             return None
-        return self._extract_stream_url(entry)
+        stream_url = self._extract_stream_url(entry)
+        if stream_url and track:
+            track.stream_url_cache = stream_url
+            track.stream_url_expires = time.monotonic() + config.STREAM_URL_TTL
+        return stream_url
 
     async def prefetch_stream_url(self, track: Track) -> None:
         """

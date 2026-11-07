@@ -2553,6 +2553,91 @@ class TestPhase5ServerAutomationAndGovernance:
         assert stats["status"] == "online"
         assert stats["active_players"] == 0
 
+    @pytest.mark.asyncio
+    async def test_phase12_performance_and_stability(self):
+        # 1. Player rollback_transaction resets _transaction and marks _queue_dirty
+        player = GuildPlayer(12345)
+        t1 = Track(title="T1", url="http://1")
+        t2 = Track(title="T2", url="http://2")
+        await player.enqueue(t1)
+        assert player.begin_transaction() is True
+        await player.enqueue(t2)
+        assert len(player) == 2
+        assert await player.rollback_transaction() is True
+        assert len(player) == 1
+        assert player._transaction is None
+        assert player._queue_dirty is True
+        # Can open transaction again immediately
+        assert player.begin_transaction() is True
+
+        # 2. Jump command sets _was_skipped flag before vc.stop()
+        from cogs.queue_cog import QueueCog
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(dj_role_id=None))
+        bot.get_player.return_value = player
+        cog = QueueCog(bot)
+        interaction = MagicMock()
+        interaction.guild_id = 12345
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+        vc = MagicMock()
+        vc.is_playing.return_value = True
+        vc.is_paused.return_value = False
+        interaction.guild.voice_client = vc
+
+        player._was_skipped = False
+        player._queue = deque([t1, t2])
+        await cog.jump.callback(cog, interaction, 2)
+        assert player._was_skipped is True
+        vc.stop.assert_called_once()
+
+        # 3. Bookmark load triggers _play_next when voice client is idle
+        from cogs.bookmark_cog import BookmarkCog
+        bm_cog = BookmarkCog(bot)
+        music_cog = MagicMock()
+        music_cog._play_next = AsyncMock()
+        bot.get_cog.return_value = music_cog
+        tasks = []
+        bot.track_task = MagicMock(side_effect=lambda coro: tasks.append(asyncio.create_task(coro)) if asyncio.iscoroutine(coro) else None)
+        bot.db.load_bookmark = AsyncMock(return_value=[t1, t2])
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        chan_mock = MagicMock()
+        vc.channel = chan_mock
+        interaction.user.voice = MagicMock(channel=chan_mock)
+
+        await bm_cog._load(interaction, "my_bm", mode="append")
+        music_cog._play_next.assert_called_with(12345)
+        if tasks:
+            await asyncio.gather(*tasks)
+
+        # 4. _schedule_prefetch skips if track already has unexpired stream URL
+        from cogs.music import MusicCog
+        music_cog_real = MusicCog(bot)
+        t_cached = Track(
+            title="Cached Track",
+            url="https://youtube.com/watch?v=cached_stream",
+            stream_url_cache="https://cdn.example.com/audio",
+            stream_url_expires=time.monotonic() + 300,
+        )
+        player._queue = deque([t_cached])
+        player.cancel_prefetch()
+        music_cog_real._schedule_prefetch(12345, t1)
+        assert player._prefetch_task is None
+
+        # 5. YouTubeExtractor.get_stream_url assigns cache on track
+        from core.youtube import YouTubeExtractor
+        yt = YouTubeExtractor()
+        mock_result = {"entries": [{"url": "https://cdn.example.com/stream1"}]}
+        with patch.object(yt, "_run_ytdl", return_value=mock_result):
+            track_to_resolve = Track(title="Uncached", url="https://youtube.com/watch?v=resolve1")
+            url = await yt.get_stream_url(track_to_resolve.url, track_to_resolve)
+            assert url == "https://cdn.example.com/stream1"
+            assert track_to_resolve.stream_url_cache == "https://cdn.example.com/stream1"
+            assert track_to_resolve.stream_url_expires is not None
+
+
 
 
 
