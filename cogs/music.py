@@ -432,6 +432,26 @@ class MusicCog(commands.Cog, name="Music"):
             return None
 
         old_np_msg = getattr(player, "now_playing_msg", None)
+        if player.now_playing:
+            old_track = player.now_playing
+            duration = 0
+            if player.play_start_time:
+                duration = int(max(0, (discord.utils.utcnow() - player.play_start_time).total_seconds() - getattr(player, "total_paused_duration", 0.0)))
+            is_completed = bool(old_track.duration > 0 and duration >= int(old_track.duration * 0.8))
+            is_skipped = getattr(player, "_was_skipped", False)
+            if hasattr(self.bot, "db") and hasattr(self.bot.db, "record_track_played"):
+                self.bot.track_task(
+                    self.bot.db.record_track_played(
+                        guild_id,
+                        old_track.requested_by_id or 0,
+                        old_track,
+                        duration_played=duration,
+                        skipped=is_skipped,
+                        completed=is_completed,
+                    )
+                )
+            player._was_skipped = False
+
         await player.finish_track()
 
         next_track = await player.dequeue()
@@ -1351,6 +1371,7 @@ class MusicCog(commands.Cog, name="Music"):
                 rw = getattr(self.bot, "radio_watchdog", None)
                 if rw:
                     rw.unregister(interaction.guild_id)
+            player._was_skipped = True
             vc.stop()
             label = "DJ Skip ⏭" if is_dj else "Skipped (Your Track) ⏭"
             await interaction.followup.send(
@@ -1388,6 +1409,7 @@ class MusicCog(commands.Cog, name="Music"):
                 rw = getattr(self.bot, "radio_watchdog", None)
                 if rw:
                     rw.unregister(interaction.guild_id)
+            player._was_skipped = True
             vc.stop()
             await interaction.followup.send(
                 embed=success_embed(

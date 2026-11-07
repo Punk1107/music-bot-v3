@@ -278,10 +278,7 @@ class DashboardWebSocketManager:
                     continue
 
                 # Collect unique active subscribed guild IDs
-                active_gids = set()
-                for ws, gid in self._client_guilds.items():
-                    if gid:
-                        active_gids.add(gid)
+                active_gids = {gid for gid in list(self._client_guilds.values()) if gid}
 
                 for gid in active_gids:
                     state = self.service.get_guild_state(gid)

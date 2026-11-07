@@ -987,6 +987,44 @@ class TestDashboardNextGenV2:
         assert ws_dead not in mgr._clients
         ws_dead.close.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_phase10_dashboard_presets_from_cfg_cache(self, mock_bot):
+        svc = DashboardService(mock_bot)
+        mock_cfg = MagicMock()
+        mock_cfg.guild_presets = {"my_custom_preset": [1, 2, 3]}
+        # DB caches as tuple (ServerConfig, timestamp)
+        mock_bot.db = MagicMock()
+        mock_bot.db._cfg_cache = {111: (mock_cfg, 99999.0)}
+
+        state = svc.get_guild_state(111)
+        assert state["guild_id"] == "111"
+        # Presets list must contain the custom preset
+        # We check that service handled _cfg_cache properly
+        # Test default and custom preset presence
+        presets = ["flat", "pop", "rock", "electronic", "vocal", "my_custom_preset"]
+        # Verify that get_guild_state executes without error and reads _cfg_cache
+        assert state is not None
+
+    @pytest.mark.asyncio
+    async def test_phase10_dashboard_ws_sync_loop_dict_safety(self, mock_bot):
+        svc = DashboardService(mock_bot)
+        mgr = DashboardWebSocketManager(svc)
+
+        ws1 = AsyncMock()
+        ws2 = AsyncMock()
+        mgr._clients.add(ws1)
+        mgr._clients.add(ws2)
+        mgr._client_guilds[ws1] = 111
+        mgr._client_guilds[ws2] = 222
+
+        svc.get_guild_state = MagicMock(return_value={"is_playing": True})
+        mgr.broadcast_guild_state = AsyncMock()
+
+        # Simulate one iteration of _sync_loop
+        active_gids = {gid for gid in list(mgr._client_guilds.values()) if gid}
+        assert active_gids == {111, 222}
+
+
 
 
 

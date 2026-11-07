@@ -2416,6 +2416,76 @@ class TestPhase5ServerAutomationAndGovernance:
         limiter.cleanup()
         assert (123, 9999) not in limiter._windows
 
+    @pytest.mark.asyncio
+    async def test_phase10_performance_and_stability(self):
+        # 1. Crossfade in options include reconnect network & http error flags
+        from core.audio import AudioEffectsProcessor
+        proc = AudioEffectsProcessor()
+        opts = proc.build_crossfade_in_options(5)
+        assert "-reconnect_on_network_error 1" in opts["before_options"]
+        assert "-reconnect_on_http_error 4xx,5xx" in opts["before_options"]
+
+        # 2. DatabaseManager._server_configs_cache compatibility and locked close
+        db = DatabaseManager(db_path=":memory:")
+        assert db._server_configs_cache is db._cfg_cache
+        mock_sqlite = AsyncMock()
+        mock_sqlite.commit = AsyncMock()
+        mock_sqlite.close = AsyncMock()
+        db._sqlite_conn = mock_sqlite
+        await db.close()
+        mock_sqlite.close.assert_awaited_once()
+        assert db._sqlite_conn is None
+
+        # 3. FFmpegWarmPool kills orphaned process on QueueFull
+        from core.ffmpeg_pool import FFmpegWarmPool
+        pool = FFmpegWarmPool(pool_size=1)
+        mock_src = MagicMock()
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_src._process = mock_proc
+        pool._ready = MagicMock()
+        pool._ready.qsize.return_value = 0
+        pool._ready.put_nowait.side_effect = asyncio.QueueFull
+        with patch.object(pool, "_create_null_source", return_value=mock_src):
+            await pool._fill_pool()
+        mock_proc.kill.assert_called_once()
+        mock_proc.wait.assert_called_once()
+
+        # 4. Music player records history when track finishes or is skipped
+        from cogs.music import MusicCog
+        bot = MagicMock()
+        bot.db = AsyncMock()
+        bot.db.get_server_config = AsyncMock(return_value=MagicMock(auto_playlist=False))
+        bot.update_clean_board = AsyncMock()
+        tasks = []
+        bot.track_task = MagicMock(
+            side_effect=lambda coro: tasks.append(asyncio.create_task(coro)) if asyncio.iscoroutine(coro) else None
+        )
+        guild = MagicMock()
+        bot.get_guild.return_value = guild
+        vc = MagicMock()
+        vc.is_connected.return_value = True
+        vc.is_playing.return_value = False
+        vc.is_paused.return_value = False
+        guild.voice_client = vc
+
+        player = GuildPlayer(12345)
+        player.smart_autoplay = False
+        player.now_playing = Track(title="Played Track", url="https://youtube.com/watch?v=abc", duration=200)
+        player.play_start_time = discord.utils.utcnow()
+        player._was_skipped = True
+        bot.get_player.return_value = player
+
+        cog = MusicCog(bot)
+        await cog._play_next_locked(12345)
+        if tasks:
+            await asyncio.gather(*tasks)
+        bot.db.record_track_played.assert_called_once()
+        _, kwargs = bot.db.record_track_played.call_args
+        assert kwargs["skipped"] is True
+        assert player._was_skipped is False
+
+
 
 
 

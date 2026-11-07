@@ -166,7 +166,7 @@ class FFmpegWarmPool:
         needed = self._pool_size - self._ready.qsize()
         for _ in range(needed):
             try:
-                src = await asyncio.get_event_loop().run_in_executor(
+                src = await asyncio.get_running_loop().run_in_executor(
                     None, self._create_null_source
                 )
                 if src:
@@ -177,6 +177,15 @@ class FFmpegWarmPool:
                             src.cleanup()
                         except Exception:
                             pass
+                        proc = getattr(src, "_process", None)
+                        if proc and proc.poll() is None:
+                            try:
+                                proc.kill()
+                                if getattr(proc, "stdout", None):
+                                    proc.stdout.close()
+                                proc.wait(timeout=1.0)
+                            except Exception:
+                                pass
             except Exception as exc:
                 logger.debug("FFmpegWarmPool: warm source creation failed: %s", exc)
 

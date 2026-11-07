@@ -259,6 +259,6 @@ class AudioEffectsProcessor:
         ]
         # Note: no -b:a here for the same reason as build_ffmpeg_options.
         return {
-            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -probesize 65536 -analyzeduration 0",
+            "before_options": "-nostdin -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -reconnect_on_network_error 1 -reconnect_on_http_error 4xx,5xx -probesize 65536 -analyzeduration 0",
             "options": f"-vn -af {','.join(filters)}",
         }

@@ -795,8 +795,9 @@ class DatabaseManager:
         # Close SQLite fallback if open
         if self._sqlite_conn:
             try:
-                await self._sqlite_conn.commit()
-                await self._sqlite_conn.close()
+                async with self._sqlite_lock:
+                    await self._sqlite_conn.commit()
+                    await self._sqlite_conn.close()
             except Exception as exc:
                 logger.warning("SQLite close warning: %s", exc)
             finally:
@@ -1215,6 +1216,11 @@ class DatabaseManager:
             pass
 
         return cfg
+
+    @property
+    def _server_configs_cache(self) -> dict:
+        """Backward compatibility property returning server config cache."""
+        return self._cfg_cache
 
     def invalidate_config_cache(self, guild_id: int) -> None:
         """Invalidate cached config for a guild after a save."""

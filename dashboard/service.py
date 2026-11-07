@@ -135,12 +135,17 @@ class DashboardService:
         eq_preset = getattr(player, "equalizer_preset", None) or ("flat" if not eq_bands else "custom")
 
         presets_list = ["flat", "pop", "rock", "electronic", "vocal"]
-        if hasattr(self.bot, "db") and hasattr(self.bot.db, "_server_configs_cache"):
-            cached = self.bot.db._server_configs_cache.get(guild_id)
-            if cached and cached[1] and cached[1].guild_presets:
-                for k in cached[1].guild_presets:
-                    if k not in presets_list:
-                        presets_list.append(k)
+        db = getattr(self.bot, "db", None)
+        if db:
+            cache = getattr(db, "_cfg_cache", None) or getattr(db, "_server_configs_cache", None)
+            if cache:
+                cached = cache.get(guild_id)
+                if cached:
+                    cfg_obj = cached[0] if isinstance(cached, tuple) else cached
+                    if hasattr(cfg_obj, "guild_presets") and cfg_obj.guild_presets:
+                        for k in cfg_obj.guild_presets:
+                            if k not in presets_list:
+                                presets_list.append(k)
 
         return {
             "guild_id": str(guild_id),

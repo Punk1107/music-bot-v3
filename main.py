@@ -363,7 +363,7 @@ class MusicBot(commands.Bot):
             await asyncio.gather(*floating_tasks, return_exceptions=True)
 
         # Tier-S+ F11: Persist FULL session state (including now_playing position)
-        for guild_id, player in self._players.items():
+        for guild_id, player in list(self._players.items()):
             if player.now_playing or player.queue:
                 guild = self.get_guild(guild_id)
                 vc    = guild.voice_client if guild else None
@@ -1087,7 +1087,7 @@ class MusicBot(commands.Bot):
     @tasks.loop(seconds=config.QUEUE_SAVE_INTERVAL)
     async def _queue_save(self) -> None:
         """Periodic queue persistence (skips unmodified queues to save DB IOPS)."""
-        for guild_id, player in self._players.items():
+        for guild_id, player in list(self._players.items()):
             if not getattr(player, "_queue_dirty", False):
                 continue
             q = player.queue
@@ -1110,7 +1110,7 @@ class MusicBot(commands.Bot):
     @tasks.loop(seconds=7)
     async def _np_refresh(self) -> None:
         """Refresh now-playing embed progress bar every 7 seconds."""
-        for guild_id, player in self._players.items():
+        for guild_id, player in list(self._players.items()):
             if not player.now_playing or not player.now_playing_msg:
                 continue
             try:
@@ -1295,11 +1295,36 @@ class MusicBot(commands.Bot):
                 if isinstance(text_ch, discord.TextChannel):
                     player.text_channel = text_ch
 
-                if self.youtube.is_youtube_url(query):
+                sources_router = getattr(self, "sources_router", None)
+                spotify = getattr(self, "spotify", None)
+                if spotify and getattr(spotify, "available", False) and spotify.is_spotify_url(query):
+                    sp_breaker = getattr(self, "sp_breaker", None)
+                    if sp_breaker:
+                        sp_tracks = await sp_breaker.call(
+                            spotify.resolve,
+                            query,
+                            self.http_session,
+                            self.youtube,
+                            50,
+                        )
+                    else:
+                        sp_tracks = await spotify.resolve(
+                            query,
+                            self.http_session,
+                            self.youtube,
+                            50,
+                        )
+                    track = sp_tracks[0] if sp_tracks else None
+                elif sources_router and sources_router.is_supported(query):
+                    sr_tracks, _ = await sources_router.resolve(query)
+                    track = sr_tracks[0] if sr_tracks else None
+                elif hasattr(self, "youtube") and self.youtube.is_youtube_url(query):
                     track = await self.yt_breaker.call(self.youtube.get_track, query)
-                else:
+                elif hasattr(self, "youtube"):
                     results = await self.yt_breaker.call(self.youtube.search, query, 1)
                     track = results[0] if results else None
+                else:
+                    track = None
 
                 if track:
                     track.requested_by_id = user_id
