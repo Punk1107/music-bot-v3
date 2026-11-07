@@ -778,7 +778,7 @@ class DashboardService:
             return {"success": False, "error": "No track currently playing"}
 
         track = player.now_playing
-        if not any(d in track.url for d in ("youtube.com", "youtu.be")):
+        if not any(d in track.url for d in ("youtube.com", "youtu.be")) and not track.url.endswith("/song"):
             return {
                 "success": False,
                 "error": "Lyrics are only available for YouTube tracks",
