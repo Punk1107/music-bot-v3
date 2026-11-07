@@ -1024,6 +1024,45 @@ class TestDashboardNextGenV2:
         active_gids = {gid for gid in list(mgr._client_guilds.values()) if gid}
         assert active_gids == {111, 222}
 
+    @pytest.mark.asyncio
+    async def test_phase13_dashboard_seek_and_volume_validation(self, app, mock_bot):
+        async with TestClient(TestServer(app)) as client:
+            player = mock_bot.get_player(111)
+            player.now_playing = Track(title="Test Song", url="https://yt.com/watch?v=123", duration=100)
+
+            mock_seek = AsyncMock(return_value=True)
+            mock_bot.seek = MagicMock()
+            mock_bot.seek.seek_to = mock_seek
+
+            # 1. Float string in seek: "25.5" should be converted to int (25)
+            resp = await client.post("/api/v1/guild/111/seek", json={"position": "25.5"})
+            assert resp.status == 200
+            data = await resp.json()
+            assert data.get("success") is True
+
+            # 2. Negative seek clamped to 0
+            resp_neg = await client.post("/api/v1/guild/111/seek", json={"position": -10})
+            assert resp_neg.status == 200
+
+            # 3. Invalid / NaN seek returns 400
+            resp_bad = await client.post("/api/v1/guild/111/seek", json={"position": "not_a_number"})
+            assert resp_bad.status == 400
+
+            # 4. Valid volume
+            resp_vol = await client.post("/api/v1/guild/111/volume", json={"volume": 120})
+            assert resp_vol.status == 200
+
+            # 5. Invalid / NaN volume returns 400
+            resp_vol_bad = await client.post("/api/v1/guild/111/volume", json={"volume": "invalid_vol"})
+            assert resp_vol_bad.status == 400
+
+            # 6. DashboardService.seek clamps exceeding target_seconds to dur - 1
+            svc = DashboardService(mock_bot)
+            mock_seek.reset_mock()
+            await svc.seek(111, 150)  # duration is 100
+            mock_seek.assert_awaited_once_with(111, 99)
+
+
 
 
 

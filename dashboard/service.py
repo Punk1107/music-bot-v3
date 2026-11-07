@@ -281,6 +281,13 @@ class DashboardService:
         if not player.now_playing:
             return {"success": False, "error": "No track currently playing"}
 
+        # Clamp target_seconds to valid range
+        dur = player.now_playing.duration or 0
+        if dur > 0:
+            target_seconds = max(0, min(int(target_seconds), dur - 1))
+        else:
+            target_seconds = max(0, int(target_seconds))
+
         # Use SeekService if available
         seek_svc = getattr(self.bot, "seek", None)
         if not seek_svc:

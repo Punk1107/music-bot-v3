@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 cogs/analytics_cog.py — Tier Analytics Dashboard for Music Bot V3.
 
@@ -59,6 +59,10 @@ def _hour_fmt(h: int) -> str:
     return f"{h:02d}:00"
 
 
+def _guild_name(interaction: discord.Interaction) -> str:
+    return interaction.guild.name if interaction.guild else "Server"
+
+
 # ── Analytics Cog ──────────────────────────────────────────────────────────────
 
 class AnalyticsCog(commands.Cog, name="Analytics"):
@@ -70,6 +74,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
     analytics = app_commands.Group(
         name        = "analytics",
         description = "📊 Tier Analytics — listening insights for your server",
+        guild_only  = True,
     )
 
     # ── /analytics heatmap ────────────────────────────────────────────────────
@@ -85,6 +90,9 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         days: int = 30,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
 
         days = max(1, min(days, 365))
         heatmap = await self.bot.db.get_analytics_heatmap(interaction.guild_id, days)
@@ -119,7 +127,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
             ),
             color = 0xFF6B6B,
         )
-        embed.set_footer(text=f"📊 Tier Analytics · {interaction.guild.name}")
+        embed.set_footer(text=f"📊 Tier Analytics · {_guild_name(interaction)}")
         await interaction.followup.send(embed=embed)
 
     # ── /analytics genre ──────────────────────────────────────────────────────
@@ -135,6 +143,9 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         days: int = 30,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
 
         days   = max(1, min(days, 365))
         genres = await self.bot.db.get_analytics_genre(interaction.guild_id, days)
@@ -178,7 +189,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
             ),
             color = 0xA29BFE,
         )
-        embed.set_footer(text=f"📊 Tier Analytics · {interaction.guild.name}")
+        embed.set_footer(text=f"📊 Tier Analytics · {_guild_name(interaction)}")
         await interaction.followup.send(embed=embed)
 
     # ── /analytics peak ───────────────────────────────────────────────────────
@@ -194,6 +205,9 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         days: int = 30,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
 
         days  = max(1, min(days, 365))
         hours = await self.bot.db.get_analytics_peak_hours(interaction.guild_id, days)
@@ -243,7 +257,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
             ),
             color = 0xFD79A8,
         )
-        embed.set_footer(text=f"📊 Tier Analytics · {interaction.guild.name}")
+        embed.set_footer(text=f"📊 Tier Analytics · {_guild_name(interaction)}")
         await interaction.followup.send(embed=embed)
 
     # ── /analytics top ────────────────────────────────────────────────────────
@@ -263,6 +277,9 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         limit: int = 10,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
 
         days  = max(1, min(days, 365))
         limit = max(1, min(limit, 15))
@@ -315,7 +332,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
             value  = "\n".join(ch_lines) or "*No data*",
             inline = False,
         )
-        embed.set_footer(text=f"📊 Tier Analytics · {interaction.guild.name}")
+        embed.set_footer(text=f"📊 Tier Analytics · {_guild_name(interaction)}")
         await interaction.followup.send(embed=embed)
 
     # ── /analytics streak ─────────────────────────────────────────────────────
@@ -331,6 +348,9 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         user: discord.Member | None = None,
     ) -> None:
         await interaction.response.defer()
+        if not interaction.guild_id:
+            await interaction.followup.send("This command can only be used in a server.", ephemeral=True)
+            return
 
         uid  = user.id if user else None
         data = await self.bot.db.get_analytics_streak(interaction.guild_id, uid)
@@ -390,7 +410,7 @@ class AnalyticsCog(commands.Cog, name="Analytics"):
         )
         if user:
             embed.set_thumbnail(url=user.display_avatar.url)
-        embed.set_footer(text=f"📊 Tier Analytics · {interaction.guild.name}")
+        embed.set_footer(text=f"📊 Tier Analytics · {_guild_name(interaction)}")
         await interaction.followup.send(embed=embed)
 
 

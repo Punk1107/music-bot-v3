@@ -83,33 +83,38 @@ class GatewayLatencyMonitor:
     @property
     def current_latency_ms(self) -> float:
         """Most recent latency measurement in ms (or 0.0 if no samples)."""
-        return self._samples[-1] if self._samples else 0.0
+        samples = list(self._samples)
+        return samples[-1] if samples else 0.0
 
     @property
     def avg_latency_ms(self) -> float:
         """Rolling average latency in ms."""
-        if not self._samples:
+        samples = list(self._samples)
+        if not samples:
             return 0.0
-        return sum(self._samples) / len(self._samples)
+        return sum(samples) / len(samples)
 
     @property
     def min_latency_ms(self) -> float:
         """Minimum latency in the current window in ms."""
-        return min(self._samples) if self._samples else 0.0
+        samples = list(self._samples)
+        return min(samples) if samples else 0.0
 
     @property
     def max_latency_ms(self) -> float:
         """Maximum latency in the current window in ms."""
-        return max(self._samples) if self._samples else 0.0
+        samples = list(self._samples)
+        return max(samples) if samples else 0.0
 
     @property
     def jitter_ms(self) -> float:
         """Standard deviation of latency in the current window (jitter)."""
-        n = len(self._samples)
+        samples = list(self._samples)
+        n = len(samples)
         if n < 2:
             return 0.0
-        avg = self.avg_latency_ms
-        variance = sum((x - avg) ** 2 for x in self._samples) / (n - 1)
+        avg = sum(samples) / n
+        variance = sum((x - avg) ** 2 for x in samples) / (n - 1)
         return math.sqrt(variance)
 
     @property

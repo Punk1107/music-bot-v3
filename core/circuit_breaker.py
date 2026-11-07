@@ -131,8 +131,15 @@ class CircuitBreaker:
                 self._on_success()
             return result
         except Exception as exc:
-            async with self._lock:
-                self._on_failure(exc)
+            from core.stability import classify_exception, ExceptionKind
+            if classify_exception(exc) == ExceptionKind.EXPECTED:
+                logger.debug("CircuitBreaker '%s': ignoring expected user error: %s", self.name, exc)
+                if is_probe:
+                    async with self._lock:
+                        self._on_success()
+            else:
+                async with self._lock:
+                    self._on_failure(exc)
             raise
         finally:
             if is_probe:

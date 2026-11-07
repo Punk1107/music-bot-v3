@@ -2637,6 +2637,114 @@ class TestPhase5ServerAutomationAndGovernance:
             assert track_to_resolve.stream_url_cache == "https://cdn.example.com/stream1"
             assert track_to_resolve.stream_url_expires is not None
 
+    @pytest.mark.asyncio
+    async def test_phase13_stability_and_performance_improvements(self):
+        from datetime import datetime, timezone
+        from core.circuit_breaker import CircuitBreaker, BreakerState
+        from core.stability import classify_exception, ExceptionKind
+        from core.gateway_monitor import GatewayLatencyMonitor
+        from utils.error_handler import forward_to_dev_channel
+        from cogs.info import InfoCog
+        from cogs.analytics_cog import AnalyticsCog, _guild_name
+
+        # 1. CircuitBreaker ignores EXPECTED exceptions
+        cb = CircuitBreaker("test_breaker", failure_threshold=2)
+        async def fail_expected():
+            raise Exception("Video unavailable")
+
+        async def fail_recoverable():
+            raise Exception("Connection reset by peer")
+
+        with pytest.raises(Exception, match="Video unavailable"):
+            await cb.call(fail_expected)
+        assert cb._failure_count == 0
+        assert cb.state == BreakerState.CLOSED
+
+        with pytest.raises(Exception, match="Connection reset"):
+            await cb.call(fail_recoverable)
+        assert cb._failure_count == 1
+        assert cb.state == BreakerState.CLOSED
+
+        # 2. forward_to_dev_channel suppresses CancelledError and Expected errors
+        mock_bot = MagicMock()
+        mock_channel = AsyncMock()
+        mock_bot.get_channel.return_value = mock_channel
+
+        with patch("config.DEV_LOG_CHANNEL_IDS", [999]):
+            # CancelledError -> suppressed
+            await forward_to_dev_channel(mock_bot, asyncio.CancelledError())
+            mock_channel.send.assert_not_called()
+
+            # Expected error -> suppressed
+            await forward_to_dev_channel(mock_bot, Exception("age-restricted content"))
+            mock_channel.send.assert_not_called()
+
+        # 3. GatewayLatencyMonitor rolling window thread-safety
+        gw = GatewayLatencyMonitor(window_size=5)
+        for s in [0.05, 0.06, 0.07, 0.08, 0.09]:
+            gw.record_latency(s)
+        assert gw.current_latency_ms == pytest.approx(90.0, 0.1)
+        assert gw.avg_latency_ms == pytest.approx(70.0, 0.1)
+        assert gw.min_latency_ms == pytest.approx(50.0, 0.1)
+        assert gw.max_latency_ms == pytest.approx(90.0, 0.1)
+        assert gw.jitter_ms > 0
+
+        # 4. InfoCog botstats snapshot
+        info_bot = MagicMock()
+        p1 = GuildPlayer(1)
+        p1.now_playing = Track(title="Song 1", url="http://1", duration=100)
+        p2 = GuildPlayer(2)
+        p2.now_playing = None
+        info_bot._players = {1: p1, 2: p2}
+        info_bot.guilds = [MagicMock(), MagicMock()]
+        info_bot.start_time = datetime.now(timezone.utc)
+        info_bot.yt_breaker = MagicMock(state=BreakerState.CLOSED)
+        info_bot.sp_breaker = MagicMock(state=BreakerState.CLOSED)
+
+        info_cog = InfoCog(info_bot)
+        interaction = MagicMock()
+        interaction.response.defer = AsyncMock()
+        interaction.followup.send = AsyncMock()
+        await info_cog.botstats.callback(info_cog, interaction)
+        interaction.followup.send.assert_awaited_once()
+
+        # 5. AnalyticsCog guild guard
+        analytics_cog = AnalyticsCog(info_bot)
+        assert getattr(analytics_cog.analytics, "guild_only", False) is True
+
+        dm_interaction = MagicMock()
+        dm_interaction.guild = None
+        dm_interaction.guild_id = None
+        dm_interaction.response.defer = AsyncMock()
+        dm_interaction.followup.send = AsyncMock()
+        assert _guild_name(dm_interaction) == "Server"
+        await analytics_cog.analytics_heatmap.callback(analytics_cog, dm_interaction)
+        dm_interaction.followup.send.assert_awaited_once_with(
+            "This command can only be used in a server.", ephemeral=True
+        )
+
+        # 6. Player eta_seconds with position <= 0 and playback_speed scaling
+        player = GuildPlayer(123)
+        player.now_playing = Track(title="Current", url="http://curr", duration=100)
+        player.play_start_time = datetime.now(timezone.utc)
+        player._playback_speed = 1.0
+        t_queued = Track(title="Queued", url="http://q", duration=60)
+        await player.enqueue(t_queued)
+
+        # position <= 0
+        assert player.eta_seconds(0) == 0
+        assert player.eta_seconds(-1) == 0
+
+        # 1.0x speed
+        eta_1 = player.eta_seconds(2)  # remaining (approx 100) + 60 = approx 160
+        assert 150 <= eta_1 <= 160
+
+        # 2.0x speed
+        player._playback_speed = 2.0
+        eta_2 = player.eta_seconds(2)  # remaining halved (~50) + 30 = ~80
+        assert 70 <= eta_2 <= 85
+
+
 
 
 

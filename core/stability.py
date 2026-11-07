@@ -72,6 +72,14 @@ _EXPECTED_PATTERNS: list[str] = [
     "duplicate entry",
     "already exists",
     "integrityerror",
+    "unknown interaction",
+    "unknown message",
+    "interactionresponded",
+    "cancellederror",
+    "sign in to confirm your age",
+    "only available to music premium members",
+    "members-only",
+    "track not found",
 ]
 
 _RECOVERABLE_PATTERNS: list[str] = [
@@ -99,6 +107,10 @@ _RECOVERABLE_PATTERNS: list[str] = [
     "databasepoolexhausted",
     "poolexhausted",
     "connection pool is not initialised",
+    "clientpayloaderror",
+    "serverdisconnectederror",
+    "clientoserror",
+    "clientconnecterror",
 ]
 
 _FATAL_TYPES: tuple[type, ...] = (
@@ -106,6 +118,10 @@ _FATAL_TYPES: tuple[type, ...] = (
     KeyboardInterrupt,
     MemoryError,
     RecursionError,
+)
+
+_EXPECTED_TYPES: tuple[type, ...] = (
+    asyncio.CancelledError,
 )
 
 _FATAL_PATTERNS: list[str] = [
@@ -120,11 +136,14 @@ def classify_exception(exc: BaseException) -> ExceptionKind:
     """
     Classify *exc* into EXPECTED / RECOVERABLE / FATAL.
 
-    Priority: type-based FATAL check > keyword match.
+    Priority: type-based FATAL check > type-based EXPECTED check > keyword match.
     Falls back to RECOVERABLE for any unrecognised generic Exception.
     """
     if isinstance(exc, _FATAL_TYPES):
         return ExceptionKind.FATAL
+
+    if isinstance(exc, _EXPECTED_TYPES):
+        return ExceptionKind.EXPECTED
 
     exc_str = str(exc).lower()
     exc_type = type(exc).__name__.lower()
